@@ -1,0 +1,16 @@
+# conda environment file for python 3, includes packages needed for testing
+# create a conda virtual env using:
+#   conda env create -n myenv --file py3_conda_environment.yml
+#   source activate myenv (use 'activate myenv' on windows)
+#   python setup.py develop
+#
+# optionally run tests:
+#   python setup.py test
+
+name: uit
+
+dependencies:
+  - flask
+  - jupyter
+  - pyyaml
+  - requests
