@@ -26,10 +26,11 @@ DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 _auth_code = None
 
 class Client:
-    def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT'):
+    def __init__(self, token=None, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT'):
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
-        
+
+        self.token = token
         self.config_file = config_file
         self.client_id = client_id
         self.client_secret = client_secret
@@ -48,6 +49,10 @@ class Client:
                 self.config = yaml.load(f)
                 self.client_id = self.config.get('client_id')
                 self.client_secret = self.config.get('client_secret')
+
+        if self.token is None:
+            raise ValueError(
+                'Client token is missing, Please provide a valid token')
 
         if self.client_id is None or self.client_secret is None:
             raise ValueError('client_id and client_secret missing, Please provide as kwargs, environment vars (UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file )
@@ -173,6 +178,8 @@ class Client:
         self.save_token(token)
 
     def load_token(self):
+        if self.token is not None:
+            return self.token
         with open(self.config_file, 'r') as f:
             config = yaml.load(f)
             tokens = config.get('tokens')
@@ -380,6 +387,34 @@ class Client:
         outfile.write(' \n')
         outfile.write('END \n')
         outfile.write(' \n')
+
+    def submit(self, pbs_script, working_dir):
+        """Method  is to submit the given pbs script and return response.
+
+                Parameters
+                ----------
+                pbs_script - PbsScript
+                    A PbsScript instance
+                working_dir - str
+                     Path to the working directory to execute script in
+
+        Returns
+        -------
+        response from the script
+        """
+        # Connect to the system designated by the PbsScript.system
+
+        # Write out PbsScript tempfile
+
+        # Transfer script to supercomputer using put_file()
+
+        # Submit the script using call() with qsub command
+
+        # Verify script submitted with additional calls
+
+        # Clean up (remove temp files)
+
+
 
 
 
