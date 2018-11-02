@@ -50,12 +50,12 @@ class Client:
                 self.client_id = self.config.get('client_id')
                 self.client_secret = self.config.get('client_secret')
 
-        if self.token is None:
-            raise ValueError(
-                'Client token is missing, Please provide a valid token')
-
         if self.client_id is None or self.client_secret is None:
-            raise ValueError('client_id and client_secret missing, Please provide as kwargs, environment vars (UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file )
+            if self.token is None:
+                raise ValueError(
+                    'Client token is missing, Please provide a valid token')
+            else:
+                raise ValueError('client_id and client_secret missing, Please provide as kwargs, environment vars (UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file )
 
         if session_id is None:
             self.session_id = os.urandom(16).hex()
@@ -403,6 +403,7 @@ class Client:
         response from the script
         """
         # Connect to the system designated by the PbsScript.system
+
 
         # Write out PbsScript tempfile
 
