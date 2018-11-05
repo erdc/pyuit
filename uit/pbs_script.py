@@ -4,10 +4,11 @@ import io
 
 
 class PbsScript(object):
-    def __init__(self, job_name, project_id, num_nodes, processes_per_node, max_time, queue='debug',
-                 node_type='compute', system='topaz', **kwargs):
+    def __init__(self, job_name, project_id, num_nodes, processes_per_node, max_time,
+                 ncpus=36, queue='debug', node_type='compute', system='topaz', **kwargs):
         self.job_name = job_name
         self.project_id = project_id
+        self.ncpus = ncpus
         self.num_nodes = num_nodes
         self.processes_per_node = processes_per_node
         self.max_time = max_time
@@ -16,54 +17,11 @@ class PbsScript(object):
         self.system = system
         self._optional_directives = []
         self._modules = {}
+        self.execution_block = " "
         if kwargs:
             self.directive_options = collections.namedtuple('directive', ['directive', 'options'])
             for directive, options in kwargs.items():
                 self._optional_directives.append(self.directive_options("-" + directive, options))
-    # @property
-    # def _job_name(self):
-    #     return self.job_name
-    #
-    # @property
-    # def _project_id(self):
-    #     return self._project_id
-    #
-    # @property
-    # def num_nodes(self):
-    #     return self._num_nodes
-    #
-    # @property
-    # def processes_per_node(self):
-    #     return self._processes_per_node
-    #
-    # @property
-    # def max_time(self):
-    #     return self._max_time
-    #
-    # @property
-    # def queue(self):
-    #     return self._queue
-    #
-    # @property
-    # def node_type(self):
-    #     return self._node_type
-    #
-    # @property
-    # def system(self):
-    #     return self._system
-    #
-    # @property
-    # def execution_block(self):
-    #     return self._execution_block
-    #
-    # @property
-    # def modules(self):
-    #     return self._modules
-    # @property
-    # def optional_directives(self):
-    #     return self._optional_directives
-
-    #TODO: check execution_block
 
     def set_directive(self, directive, value):
         """
@@ -113,8 +71,8 @@ class PbsScript(object):
         job_name = "#PBS -N " + self.job_name
         project_id = "#PBS -A " + self.project_id
         queue = "#PBS -q " + self.queue
-        # TODO: Standard compute nodes on Topaz will require ncpus=36
-        no_nodes_process = "#PBS -l select={}:ncpus=36:mpiprocs={}".format(self.num_nodes, self.processes_per_node)
+        no_nodes_process = "#PBS -l select={}:ncpus={}:mpiprocs={}".format(self.num_nodes, self.ncpus,
+                                                                           self.processes_per_node)
         time_to_run = "#PBS -l walltime={}".format(self.max_time)
         directive_block = pbs_dir_start + "\n" + \
                           job_name + "\n" + \
@@ -163,7 +121,7 @@ class PbsScript(object):
                 self._modules[k] = module2
 
         swap_modules = module1 + "," + module2
-
+        # TODO: check with Nathan: adding swap modules to _modules_update
         self._modules.update({"swap": swap_modules})
 
     def get_modules(self):
@@ -185,6 +143,12 @@ class PbsScript(object):
 
         return render_modules_block
 
+    # TODO: Check with Nathan. Do we need this?
+    def exe_block(self):
+        if self.execution_block is not None:
+            return self.execution_block
+        return None
+
     def render(self):
         """
         Return string of fully rendered PBS Script.
@@ -193,12 +157,13 @@ class PbsScript(object):
         render_required_directives = self.render_required_directives_block()
         render_optional_directives = self.render_optional_directives_block()
         render_modules_block = self.render_modules_block()
-        # TODO: need to check this out
-        render_execution_block = ""
+        # TODO:  check with Nathan: about render execution block
+        render_execution_block = self.exe_block()
         render_string = shebang + "\n" + \
                         render_required_directives + "\n" + \
                         render_optional_directives + "\n" + \
-                        render_modules_block + "\n"
+                        render_modules_block + "\n" + \
+                        render_execution_block + "\n"
         return render_string
 
     def write(self, path):
