@@ -2,30 +2,43 @@ import collections
 import os
 import io
 
+PbsDirective = collections.namedtuple('directive', ['directive', 'options'])
+
 
 class PbsScript(object):
     def __init__(self, job_name, project_id, num_nodes, processes_per_node, max_time,
-                 ncpus=36, queue='debug', node_type='compute', system='topaz', **kwargs):
+                 queue='debug', node_type='compute', system='topaz', **kwargs):
         self.job_name = job_name
         self.project_id = project_id
-        self.ncpus = ncpus
         self.num_nodes = num_nodes
         self.processes_per_node = processes_per_node
         self.max_time = max_time
         self.queue = queue
         self.node_type = node_type
-        self.system = system
+
+        node_types = ['compute', 'gpu', 'bigmen', 'transfer', 'knl']
+        # TODO: check with Nathan about KNL node: https://www.erdc.hpc.mil/docs/onyxPbsGuide.html#required
+
+        if node_type.lower() not in node_types:
+            raise ValueError('Please specify a valid node type')
+        self.node_type = node_type.lower()
+
+        systems = ['topaz', 'onyx']
+        if system.lower() not in systems:
+            raise ValueError('Please specify a valid system')
+        self.system = system.lower()
+
         self._optional_directives = []
         self._modules = {}
-        self.execution_block = " "
+        self.execution_block = ""
+
         if kwargs:
-            self.directive_options = collections.namedtuple('directive', ['directive', 'options'])
             for directive, options in kwargs.items():
-                self._optional_directives.append(self.directive_options("-" + directive, options))
+                self._optional_directives.append(PbsDirective("-" + directive, options))
 
     def set_directive(self, directive, value):
         """
-        Append new directive to _optional_directives list and save
+        Append new directive to _optional_directives list
 
         Parameters
         ----------
@@ -34,8 +47,7 @@ class PbsScript(object):
         value:  str
             value of directive
         """
-        # append the directive to the _optional_directive
-        self._optional_directives.append(self.directive_options(directive, value))
+        self._optional_directives.append(PbsDirective(directive, value))
 
     def get_directive(self, directive):
         """
@@ -71,16 +83,85 @@ class PbsScript(object):
         job_name = "#PBS -N " + self.job_name
         project_id = "#PBS -A " + self.project_id
         queue = "#PBS -q " + self.queue
-        no_nodes_process = "#PBS -l select={}:ncpus={}:mpiprocs={}".format(self.num_nodes, self.ncpus,
-                                                                           self.processes_per_node)
+
+        no_nodes_process = self.get_no_nodes_process_str(self.system, self.node_type, self.num_nodes,
+                                                         self.processes_per_node)
         time_to_run = "#PBS -l walltime={}".format(self.max_time)
         directive_block = pbs_dir_start + "\n" + \
                           job_name + "\n" + \
                           project_id + "\n" + \
                           queue + "\n" + \
                           no_nodes_process + "\n" + \
-                          time_to_run
+                          time_to_run + "\n \n"
         return directive_block
+
+    def get_no_nodes_process_str(self, system, node_type, n1, n2):
+        """
+        param
+            system: either Topaz or Onyx
+            node_type: ['compute', 'gpu', 'bigmen', 'transfer', 'knl']
+            n1: num_nodes
+            n2: processes_per_node
+        Returns
+        -------
+        return a block of string for directives_block
+        """
+        no_nodes_process_str = ""
+        if system == 'onyx':
+            if node_type == 'compute':
+                processes_per_node = [1, 2, 4, 11, 22, 44]
+                if n2 in processes_per_node:
+                    ncpus = 44
+                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}'.format(n1, ncpus, n2)
+                    return no_nodes_process_str
+                else:
+                    raise ValueError('Please specify valid N2 for the given system [Onyx]')
+            if node_type == 'gpu':
+                processes_per_node = [1, 2, 11, 22]
+                if n2 in processes_per_node:
+                    ncpus = 22
+                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}2:ngpus=1'.format(n1, ncpus, n2)
+                    return no_nodes_process_str
+                else:
+                    raise ValueError('Please specify valid N2 for the given node type [GPU] and System [Onyx]')
+            if node_type == 'bigmen':
+                processes_per_node = [1, 2, 4, 11, 22, 44]
+                if n2 in processes_per_node:
+                    ncpus = 44
+                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:bigmem=1'.format(n1, ncpus, n2)
+                    return no_nodes_process_str
+                else:
+                    raise ValueError('Please specify valid N2 for the given node type [Bigmen] and System [Onyx]')
+            if node_type == "transfer":
+                no_nodes_process_str = '#PBS -l select=1:ncpus=1'
+                return no_nodes_process_str
+            if node_type == 'knl':
+                processes_per_node = [1, 2, 4, 8, 16, 32, 64]
+                if n2 in processes_per_node:
+                    ncpus = 64
+                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:nmics=1'.format(n1, ncpus, n2)
+                    return no_nodes_process_str
+                else:
+                    raise ValueError('Please specify valid N2 for the given node type [knl] and System [Onyx]')
+        elif system == 'topaz':
+            if node_type == 'compute':
+                ncpus = 36
+                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}'.format(n1, ncpus, n2)
+                return no_nodes_process_str
+            if node_type == 'gpu':
+                ncpus = 28
+                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:ngpus=1'.format(n1, ncpus, n2)
+                return no_nodes_process_str
+            if node_type == 'bigmen':
+                ncpus = 32
+                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:bigmem=1'.format(n1, ncpus, n2)
+                return no_nodes_process_str
+            if node_type == "transfer":
+                no_nodes_process_str = '#PBS -l select=1:ncpus=1'
+                return no_nodes_process_str
+            if node_type == "knl":
+                raise ValueError('Please specify valid node type for system [topaz]')
+
 
     def render_optional_directives_block(self):
         """
@@ -98,31 +179,25 @@ class PbsScript(object):
 
         render_opt_dir_block = '\n'.join(str(e) for e in opt_list)
 
-        return render_opt_dir_block
+        return render_opt_dir_block + "\n \n"
 
     def load_module(self, module):
         """
         Adds module to _modules with value of “load”
         """
-        self._modules.update({"load": module})
+        self._modules.update({module: "load"})
 
     def unload_module(self, module):
         """
         Adds module to _modules with value of “unload”
         """
-        self._modules.update({"unload": module})
+        self._modules.update({module: "unload"})
 
     def swap_module(self, module1, module2):
         """
         Adds module1 to _modules with value of module2.
         """
-        for k, v in self._modules.items():
-            if v == module1:
-                self._modules[k] = module2
-
-        swap_modules = module1 + "," + module2
-        # TODO: check with Nathan: adding swap modules to _modules_update
-        self._modules.update({"swap": swap_modules})
+        self._modules.update({module1: module2})
 
     def get_modules(self):
         """
@@ -137,33 +212,30 @@ class PbsScript(object):
         opt_list = []
         opt_list.append('## Modules --------------------------------------')
         for key, value in self._modules.items():
-            opt_list.append("module " + key + " " + value)
+            if value != 'load' and value != 'unload':
+                str_module = "module swap " + value + " " + key
+            else:
+                str_module = "module " + value + " " + key
+            opt_list.append(str_module)
 
-        render_modules_block = '\n'.join(str(e) for e in opt_list)
+        str_render_modules_block = '\n'.join(map(str, opt_list))
 
-        return render_modules_block
-
-    # TODO: Check with Nathan. Do we need this?
-    def exe_block(self):
-        if self.execution_block is not None:
-            return self.execution_block
-        return None
+        return str_render_modules_block + "\n \n"
 
     def render(self):
         """
-        Return string of fully rendered PBS Script.
+          Return string of fully rendered PBS Script.
         """
         shebang = "#!/bin/bash"
         render_required_directives = self.render_required_directives_block()
         render_optional_directives = self.render_optional_directives_block()
         render_modules_block = self.render_modules_block()
-        # TODO:  check with Nathan: about render execution block
-        render_execution_block = self.exe_block()
-        render_string = shebang + "\n" + \
-                        render_required_directives + "\n" + \
-                        render_optional_directives + "\n" + \
-                        render_modules_block + "\n" + \
-                        render_execution_block + "\n"
+        render_execution_block = self.execution_block
+        render_string = shebang + "\n \n" + \
+                        render_required_directives + "\n \n" + \
+                        render_optional_directives + "\n \n" + \
+                        render_modules_block + "\n \n" + \
+                        render_execution_block + "\n \n"
         return render_string
 
     def write(self, path):
