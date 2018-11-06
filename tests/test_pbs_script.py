@@ -53,9 +53,9 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn('#PBS -l select={}:ncpus=28:mpiprocs={}'.format(pbs_gpu.num_nodes, pbs_gpu.processes_per_node),
                       res)
 
-    def test_get_render_required_directives_block_for_topaz_bigmen_node(self):
+    def test_get_render_required_directives_block_for_topaz_bigmem_node(self):
         pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
-                            node_type='bigmen', A='ADH')
+                            node_type='bigmem', A='ADH')
         res = pbs_gpu.render_required_directives_block()
         self.assertIn('#PBS -l select={}:ncpus=32:mpiprocs={}'.format(pbs_gpu.num_nodes, pbs_gpu.processes_per_node),
                       res)
@@ -65,12 +65,6 @@ class TestPBSScript(unittest.TestCase):
                             node_type='transfer', A='ADH')
         res = pbs_gpu.render_required_directives_block()
         self.assertIn('#PBS -l select=1:ncpus=1', res)
-
-    def test_get_render_required_directives_block_for_topaz_knl_node_value_error(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
-                            node_type='knl', system='topaz', A='ADH')
-
-        self.assertRaises(ValueError, pbs_gpu.render_required_directives_block)
 
     def test_get_render_required_directives_block_for_onyx_compute_node(self):
         pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
@@ -100,18 +94,18 @@ class TestPBSScript(unittest.TestCase):
 
         self.assertRaises(ValueError, pbs_gpu.render_required_directives_block)
 
-    def test_get_render_required_directives_block_for_onyx_bigmen_node(self):
+    def test_get_render_required_directives_block_for_onyx_bigmem_node(self):
         pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
-                            node_type='bigmen', system='onyx', A='ADH')
+                            node_type='bigmem', system='onyx', A='ADH')
         expected = '#PBS -l select={}:ncpus={}:mpiprocs={}:bigmem=1'.format(pbs_gpu.num_nodes, 44,
                                                                             pbs_gpu.processes_per_node)
 
         res = pbs_gpu.render_required_directives_block()
         self.assertIn(expected, res)
 
-    def test_get_render_required_directives_block_for_onyx_bigmen_node_value_error(self):
+    def test_get_render_required_directives_block_for_onyx_bigmem_node_value_error(self):
         pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
-                            node_type='bigmen', system='onyx', A='ADH')
+                            node_type='bigmem', system='onyx', A='ADH')
 
         self.assertRaises(ValueError, pbs_gpu.render_required_directives_block)
 
@@ -154,7 +148,7 @@ class TestPBSScript(unittest.TestCase):
         self.assertEqual('load', ret['anaconda'])
 
     def test_unload_module(self):
-        # unload C++ module
+        # unload anaconda module
         self.pbs.unload_module('anaconda')
 
         # get all the modules
@@ -182,7 +176,7 @@ class TestPBSScript(unittest.TestCase):
 
         self.assertIn('module load C++', ret)
         self.assertIn('module unload OpenGL', ret)
-        self.assertIn('module swap OpenMP Anaconda', ret)
+        self.assertIn('module swap Anaconda OpenMP', ret)
 
     def test_render(self):
 
@@ -203,7 +197,7 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn("#PBS -l walltime=20", render_str)
         self.assertIn('module load C++', render_str)
         self.assertIn('module unload OpenGL', render_str)
-        self.assertIn('module swap OpenMP Anaconda', render_str)
+        self.assertIn('module swap Anaconda OpenMP', render_str)
 
     @mock.patch('uit.pbs_script.PbsScript.render')
     @mock.patch('io.open', new_callable=mock.mock_open)
@@ -221,15 +215,23 @@ class TestPBSScript(unittest.TestCase):
 
         mock_file.assert_called_with(path, 'w', newline='\n')
 
+        call_args = mock_write.write.call_args_list
+
         mock_write.write.assert_called()
 
-    def test_init_nody_type_value_error(self):
+        self.assertEqual('render string', call_args[0][0][0])
+
+    def test_init_node_type_value_error(self):
         self.assertRaises(ValueError, PbsScript, job_name='test1', project_id='P001', num_nodes=5,
                           processes_per_node=10, max_time=20, node_type='test_node', A='ADH')
 
     def test_init_system_value_error(self):
         self.assertRaises(ValueError, PbsScript, job_name='test1', project_id='P001', num_nodes=5,
                           processes_per_node=10, max_time=20, system='test_node', A='ADH')
+
+    def test_init_topaz_system_knl_node_value_error(self):
+        self.assertRaises(ValueError, PbsScript, job_name='test1', project_id='P001', num_nodes=5,
+                          processes_per_node=10, max_time=20, node_type='knl', system='topaz', A='ADH')
 
 
 if __name__ == '__main__':
