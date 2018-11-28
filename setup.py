@@ -1,7 +1,7 @@
 from setuptools import setup
 
 requirements = [
-    # package requirements go here
+    'flask'
 ]
 
 setup(
