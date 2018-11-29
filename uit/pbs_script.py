@@ -2,13 +2,14 @@ import collections
 import os
 import io
 
+
 PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
 
 class PbsScript(object):
     def __init__(self, job_name, project_id, num_nodes, processes_per_node, max_time,
                  queue='debug', node_type='compute', system='topaz'):
-        self.job_name = job_name
+        self.name = job_name
         self.project_id = project_id
         self.num_nodes = num_nodes
         self.processes_per_node = processes_per_node

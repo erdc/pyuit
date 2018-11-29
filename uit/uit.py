@@ -248,15 +248,13 @@ class Client:
     def call(self, command, work_dir):
         """
         Method to use the exec function call to UIT to execute commands on the HPC.
-     
         """
-
         # construct the base options dictionary
         data = {'command': command, 'workingdir': work_dir}
         data = {'options': json.dumps(data)}     
         r = requests.post(urljoin(self.uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
         resp = r.json()
-        success = bool(resp.get('success'))
+        success = resp.get('success') == 'true'
         if success:
             return resp.get('stdout')
         else:

@@ -7,8 +7,7 @@ from uit.pbs_script import PbsScript
 class TestPBSScript(unittest.TestCase):
 
     def setUp(self):
-        self.pbs = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
-                             A='ADH')
+        self.pbs = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20)
 
     def tearDown(self):
         pass
@@ -40,34 +39,34 @@ class TestPBSScript(unittest.TestCase):
 
     def test_get_render_required_directives_block_for_topaz_compute_node(self):
         res = self.pbs.render_required_directives_block()
-        self.assertIn('#PBS -N ' + self.pbs.job_name, res)
+        self.assertIn('#PBS -N ' + self.pbs.name, res)
         self.assertIn('#PBS -A ' + self.pbs.project_id, res)
         self.assertIn("#PBS -q " + self.pbs.queue, res)
         self.assertIn('#PBS -l select={}:ncpus=36:mpiprocs={}'.format(self.pbs.num_nodes, self.pbs.processes_per_node),
                       res)
 
     def test_get_render_required_directives_block_for_topaz_gpu_node(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
                             node_type='gpu', A='ADH')
         res = pbs_gpu.render_required_directives_block()
         self.assertIn('#PBS -l select={}:ncpus=28:mpiprocs={}'.format(pbs_gpu.num_nodes, pbs_gpu.processes_per_node),
                       res)
 
     def test_get_render_required_directives_block_for_topaz_bigmem_node(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
                             node_type='bigmem', A='ADH')
         res = pbs_gpu.render_required_directives_block()
         self.assertIn('#PBS -l select={}:ncpus=32:mpiprocs={}'.format(pbs_gpu.num_nodes, pbs_gpu.processes_per_node),
                       res)
 
     def test_get_render_required_directives_block_for_topaz_transfer_node(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
                             node_type='transfer', A='ADH')
         res = pbs_gpu.render_required_directives_block()
         self.assertIn('#PBS -l select=1:ncpus=1', res)
 
     def test_get_render_required_directives_block_for_onyx_compute_node(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
                             node_type='compute', system='onyx', A='ADH')
         expected = '#PBS -l select={}:ncpus={}:mpiprocs={}'.format(pbs_gpu.num_nodes, 44, pbs_gpu.processes_per_node)
 
@@ -75,13 +74,13 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn(expected, res)
 
     def test_get_render_required_directives_block_for_onyx_compute_node_value_error(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
                             node_type='compute', system='onyx', A='ADH')
 
         self.assertRaises(ValueError, pbs_gpu.render_required_directives_block)
 
     def test_get_render_required_directives_block_for_onyx_gpu_node(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
                             node_type='gpu', system='onyx', A='ADH')
         expected = '#PBS -l select={}:ncpus={}:mpiprocs={}2:ngpus=1'.format(pbs_gpu.num_nodes, 22, pbs_gpu.processes_per_node)
 
@@ -89,13 +88,13 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn(expected, res)
 
     def test_get_render_required_directives_block_for_onyx_gpu_node_value_error(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
                             node_type='gpu', system='onyx', A='ADH')
 
         self.assertRaises(ValueError, pbs_gpu.render_required_directives_block)
 
     def test_get_render_required_directives_block_for_onyx_bigmem_node(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
                             node_type='bigmem', system='onyx', A='ADH')
         expected = '#PBS -l select={}:ncpus={}:mpiprocs={}:bigmem=1'.format(pbs_gpu.num_nodes, 44,
                                                                             pbs_gpu.processes_per_node)
@@ -104,19 +103,19 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn(expected, res)
 
     def test_get_render_required_directives_block_for_onyx_bigmem_node_value_error(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
                             node_type='bigmem', system='onyx', A='ADH')
 
         self.assertRaises(ValueError, pbs_gpu.render_required_directives_block)
 
     def test_get_render_required_directives_block_for_onyx_transfer_node(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
                             node_type='transfer', system='onyx', A='ADH')
         res = pbs_gpu.render_required_directives_block()
         self.assertIn('PBS -l select=1:ncpus=1', res)
 
     def test_get_render_required_directives_block_for_onyx_knl_node(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=16, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=16, max_time=20,
                             node_type='knl', system='onyx', A='ADH')
         expected = '#PBS -l select={}:ncpus={}:mpiprocs={}:nmics=1'.format(pbs_gpu.num_nodes, 64,
                                                                            pbs_gpu.processes_per_node)
@@ -125,7 +124,7 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn(expected, res)
 
     def test_get_render_required_directives_block_for_onyx_knl_node_value_error(self):
-        pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
+        pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=15, max_time=20,
                             node_type='knl', system='onyx', A='ADH')
 
         self.assertRaises(ValueError, pbs_gpu.render_required_directives_block)
