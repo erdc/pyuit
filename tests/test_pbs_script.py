@@ -83,7 +83,9 @@ class TestPBSScript(unittest.TestCase):
     def test_get_render_required_directives_block_for_onyx_gpu_node(self):
         pbs_gpu = PbsScript(job_name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time=20,
                             node_type='gpu', system='onyx', A='ADH')
-        expected = '#PBS -l select={}:ncpus={}:mpiprocs={}2:ngpus=1'.format(pbs_gpu.num_nodes, 22, pbs_gpu.processes_per_node)
+        expected = '#PBS -l select={}:ncpus={}:mpiprocs={}2:ngpus=1'.format(
+            pbs_gpu.num_nodes, 22, pbs_gpu.processes_per_node
+        )
 
         res = pbs_gpu.render_required_directives_block()
         self.assertIn(expected, res)
@@ -236,4 +238,3 @@ class TestPBSScript(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

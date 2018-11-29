@@ -84,12 +84,8 @@ class PbsScript(object):
 
         no_nodes_process = self.get_no_nodes_process_str()
         time_to_run = "#PBS -l walltime={}".format(self.max_time)
-        directive_block = pbs_dir_start + "\n" + \
-                          job_name + "\n" + \
-                          project_id + "\n" + \
-                          queue + "\n" + \
-                          no_nodes_process + "\n" + \
-                          time_to_run
+        directive_block = pbs_dir_start + "\n" + job_name + "\n" + project_id + "\n" + \
+                          queue + "\n" + no_nodes_process + "\n" + time_to_run
         return directive_block
 
     def get_no_nodes_process_str(self):
@@ -98,7 +94,7 @@ class PbsScript(object):
         Returns
         -------
         return a block of string for directives_block
-        """
+        """     # noqa: E501
         if self.system == 'onyx':
             if self.node_type == 'compute':
                 processes_per_node = [1, 2, 4, 11, 22, 44]
@@ -235,11 +231,8 @@ class PbsScript(object):
         render_optional_directives = self.render_optional_directives_block()
         render_modules_block = self.render_modules_block()
         render_execution_block = self.execution_block
-        render_string = shebang + "\n \n" + \
-                        render_required_directives + "\n \n" + \
-                        render_optional_directives + "\n \n" + \
-                        render_modules_block + "\n \n" + \
-                        render_execution_block
+        render_string = shebang + "\n \n" + render_required_directives + "\n \n" + render_optional_directives + \
+                        "\n \n" + render_modules_block + "\n \n" + render_execution_block
         return render_string
 
     def write(self, path):
