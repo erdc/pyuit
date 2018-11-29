@@ -26,7 +26,8 @@ DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 _auth_code = None
 
 class Client:
-    def __init__(self, token=None, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT'):
+    def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
+                 token=None):
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
 
@@ -44,18 +45,16 @@ class Client:
         if self.client_secret is None:  # todo is this necessary?
             self.client_secret = os.environ.get('UIT_SECRET')
 
-        if self.client_id is None or self.client_secret is None:
+        if (self.client_id is None or self.client_secret is None) and self.token is None:
             with open(self.config_file, 'r') as f:
                 self.config = yaml.load(f)
                 self.client_id = self.config.get('client_id')
                 self.client_secret = self.config.get('client_secret')
 
-        if self.client_id is None or self.client_secret is None:
-            if self.token is None:
-                raise ValueError(
-                    'Client token is missing, Please provide a valid token')
-            else:
-                raise ValueError('client_id and client_secret missing, Please provide as kwargs, environment vars (UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file )
+        if self.client_id is None and self.client_secret is None and self.token is None:
+            raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
+                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file + ' OR provide an '
+                             'access token as a kwarg.' )
 
         if session_id is None:
             self.session_id = os.urandom(16).hex()
@@ -84,7 +83,7 @@ class Client:
         import webbrowser
         webbrowser.open(auth_url)
 
-    def connect(self, system=None, login_node=None, exclude_login_nodes=None):
+    def connect(self, system=None, login_node=None, exclude_login_nodes=()):
         # get access token from file
         # populate userinfo and header info
         token = self.load_token()
@@ -97,7 +96,7 @@ class Client:
         
         if all([system, login_node]) or not any([system, login_node]):
             raise ValueError('Please specify at one of system or login_node and not both')
-        
+
         if login_node is None:
             # pick random login node for system
             login_node = random.choice(list(set(self.login_nodes[system]) - set(exclude_login_nodes)))

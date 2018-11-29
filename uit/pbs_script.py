@@ -2,12 +2,12 @@ import collections
 import os
 import io
 
-PbsDirective = collections.namedtuple('directive', ['directive', 'options'])
+PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
 
 class PbsScript(object):
     def __init__(self, job_name, project_id, num_nodes, processes_per_node, max_time,
-                 queue='debug', node_type='compute', system='topaz', **kwargs):
+                 queue='debug', node_type='compute', system='topaz'):
         self.job_name = job_name
         self.project_id = project_id
         self.num_nodes = num_nodes
@@ -33,10 +33,6 @@ class PbsScript(object):
         self._optional_directives = []
         self._modules = {}
         self.execution_block = ""
-
-        if kwargs:
-            for directive, options in kwargs.items():
-                self._optional_directives.append(PbsDirective("-" + directive, options))
 
     def set_directive(self, directive, value):
         """
