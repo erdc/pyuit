@@ -2,13 +2,24 @@ import collections
 import os
 import io
 
+
 PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
 
 class PbsScript(object):
-    def __init__(self, job_name, project_id, num_nodes, processes_per_node, max_time,
+    def __init__(self, name=None, project_id=None, num_nodes=1, processes_per_node=1, max_time=None,
                  queue='debug', node_type='compute', system='topaz'):
-        self.job_name = job_name
+
+        if name is None:
+            raise ValueError('Parameter "name" is required.')
+
+        if project_id is None:
+            raise ValueError('Parameter "project_id" is required.')
+
+        if max_time is None:
+            raise ValueError('Paramater "max_time" is required.')
+
+        self.name = name
         self.project_id = project_id
         self.num_nodes = num_nodes
         self.processes_per_node = processes_per_node
@@ -58,16 +69,39 @@ class PbsScript(object):
         -------
         value of the given directory
         """
-        directives = self._optional_directives
-        for i in range(len(directives)):
-            if directives[i].directive == directive:
-                return directives[i].options
+        for d in self._optional_directives:
+            if d.directive == directive:
+                return d.options
 
     def get_directives(self):
         """
         Returns _optional_directives list
         """
         return self._optional_directives
+
+    def load_module(self, module):
+        """
+        Adds module to _modules with value of “load”
+        """
+        self._modules.update({module: "load"})
+
+    def unload_module(self, module):
+        """
+        Adds module to _modules with value of “unload”
+        """
+        self._modules.update({module: "unload"})
+
+    def swap_module(self, module1, module2):
+        """
+        Adds module1 to _modules with value of module2.
+        """
+        self._modules.update({module1: module2})
+
+    def get_modules(self):
+        """
+        Returns the _modules dictionary.
+        """
+        return self._modules
 
     def render_required_directives_block(self):
         """
@@ -181,30 +215,6 @@ class PbsScript(object):
         render_opt_dir_block = '\n'.join(map(str, opt_list))
 
         return render_opt_dir_block
-
-    def load_module(self, module):
-        """
-        Adds module to _modules with value of “load”
-        """
-        self._modules.update({module: "load"})
-
-    def unload_module(self, module):
-        """
-        Adds module to _modules with value of “unload”
-        """
-        self._modules.update({module: "unload"})
-
-    def swap_module(self, module1, module2):
-        """
-        Adds module1 to _modules with value of module2.
-        """
-        self._modules.update({module1: module2})
-
-    def get_modules(self):
-        """
-        Returns the _modules dictionary.
-        """
-        return self._modules
 
     def render_modules_block(self):
         """
