@@ -7,7 +7,7 @@ PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
 
 class PbsScript(object):
-    def __init__(self, name=None, project_id=None, num_nodes=1, processes_per_node=1, max_time=None,
+    def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
                  queue='debug', node_type='compute', system='topaz'):
 
         if name is None:
