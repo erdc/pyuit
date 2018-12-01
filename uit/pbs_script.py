@@ -112,7 +112,7 @@ class PbsScript(object):
         string of directive_block
         """
         pbs_dir_start = "## Required PBS Directives --------------------------------"
-        job_name = "#PBS -N " + self.job_name
+        job_name = "#PBS -N " + self.name
         project_id = "#PBS -A " + self.project_id
         queue = "#PBS -q " + self.queue
 
@@ -259,5 +259,5 @@ class PbsScript(object):
         render_string = self.render()
         # Open the file
         full_path = os.path.join(path)
-        outfile = io.open(full_path, 'w', newline='\n')
-        outfile.write(render_string)
+        with io.open(full_path, 'w', newline='\n') as outfile:
+            outfile.write(render_string)

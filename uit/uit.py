@@ -1,13 +1,20 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
-import os, json, requests, io
-from datetime import datetime, timedelta
+import uuid
+import os
+import json
+import requests
+import io
 import yaml
-from flask import Flask, request, render_template_string
+from datetime import datetime
 import threading
 import random
-from time import sleep
+import tempfile
+from flask import Flask, request, render_template_string
+from uit.pbs_script import PbsScript
+from uit.util import robust
+
 
 try:
     # Python 3
@@ -24,6 +31,7 @@ DEFAULT_CA_FILE = os.path.join(pkg_dir, "data", "DoD_CAs.pem")
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 
 _auth_code = None
+
 
 class Client:
     def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
@@ -64,6 +72,7 @@ class Client:
         self.available_login_nodes = None
         self.scope = scope
         self.headers = None
+        self.connected = False
 
     def authenticate(self, notebook=None, width=800, height=800):
         # check if we have available tokens/refresh tokens
@@ -110,6 +119,7 @@ class Client:
         self.system = system
         self.username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']
         self.uit_url = self.uit_urls[login_node]
+        self.connected = True
 
         print('Connected successfully to {} on {}'.format(login_node, system))
 
@@ -245,6 +255,7 @@ class Client:
         username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']        
         return uit_url, username 
 
+    @robust()
     def call(self, command, work_dir):
         """
         Method to use the exec function call to UIT to execute commands on the HPC.
@@ -254,12 +265,12 @@ class Client:
         data = {'options': json.dumps(data)}     
         r = requests.post(urljoin(self.uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
         resp = r.json()
-        success = resp.get('success') == 'true'
-        if success:
+        if resp.get('success') == 'true':
             return resp.get('stdout')
         else:
             raise RuntimeError('UIT Command failed with response: ', resp)
 
+    @robust()
     def put_file(self, local_path, remote_path):
         """
         Method to use the putfile function call to UIT to put files on the HPC.
@@ -271,6 +282,7 @@ class Client:
         r = requests.post(urljoin(self.uit_url, 'putfile'), headers=self.headers, data=data, files=files, verify=self.ca_file)
         return r.json()
 
+    @robust()
     def get_file(self, remote_path, local_path):
         """
         Method to use the putfile function call to UIT to put files on the HPC.
@@ -285,6 +297,7 @@ class Client:
                     f.write(chunk)
         return local_path
 
+    @robust()
     def list_dir(self, path=None, system=None, login_node=None):
         """
         Method to use the listdirectory function call to UIT to get detailed
@@ -385,32 +398,51 @@ class Client:
         outfile.write('END \n')
         outfile.write(' \n')
 
-    def submit(self, pbs_script, working_dir):
-        """Method  is to submit the given pbs script and return response.
-
-                Parameters
-                ----------
-                pbs_script - PbsScript
-                    A PbsScript instance
-                working_dir - str
-                     Path to the working directory to execute script in
-
-        Returns
-        -------
-        response from the script
+    def submit(self, pbs_script, working_dir, remote_name='run.pbs', local_temp_dir=''):
         """
-        # Connect to the system designated by the PbsScript.system
+        Method  is to submit the given pbs script and return response.
 
+        Args:
+            pbs_script(PbsScript or str): PbsScript instance or string containing PBS script.
+            working_dir(str): Path to working dir on supercomputer in which to run pbs script.
+            remote_name(str): Custom name for pbs script on supercomputer. Defaults to "run.pbs".
+            local_temp_dir(str): Path to local temporary directory if unable to write to os temp dir.
+
+        Returns:
+            bool: True if job submitted successfully.
+        """
+        if not self.connected:
+            raise RuntimeError('Must connect to system before submitting.')
+
+        if not local_temp_dir:
+            pbs_script_path = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        else:
+            pbs_script_path = os.path.join(local_temp_dir, str(uuid.uuid4()))
 
         # Write out PbsScript tempfile
+        if isinstance(pbs_script, PbsScript):
+            pbs_script.write(pbs_script_path)
+        else:
+            pbs_script_text = pbs_script
+            with open(pbs_script_path, 'w') as f:
+                f.write(pbs_script_text)
 
         # Transfer script to supercomputer using put_file()
+        ret = self.put_file(pbs_script_path, os.path.join(working_dir, remote_name))
+
+        if 'success' in ret and ret['success'] == 'false':
+            raise RuntimeError('An exception occurred while submitting job script: {}'.format(ret['error']))
 
         # Submit the script using call() with qsub command
-
-        # Verify script submitted with additional calls
+        try:
+            job_id = self.call('qsub run.pbs', working_dir)
+        except RuntimeError as e:
+            raise RuntimeError('An exception occurred while submitting job script: {}'.format(str(e)))
 
         # Clean up (remove temp files)
+        os.remove(pbs_script_path)
+
+        return job_id.strip()
 
 
 
