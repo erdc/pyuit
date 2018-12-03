@@ -1,16 +1,20 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
+import uuid
 import os
 import json
 import requests
 import io
-from datetime import datetime, timedelta
 import yaml
-from flask import Flask, request, render_template_string
+from datetime import datetime
 import threading
 import random
-from time import sleep
+import tempfile
+from flask import Flask, request, render_template_string
+from uit.pbs_script import PbsScript
+from uit.util import robust
+
 
 try:
     # Python 3
@@ -30,8 +34,8 @@ _auth_code = None
 
 
 class Client:
-    def __init__(self, token=None, ca_file=None, config_file=None, client_id=None, client_secret=None,
-                 session_id=None, scope='UIT'):
+    def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
+                 token=None):
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
 
@@ -45,23 +49,21 @@ class Client:
 
         if self.client_id is None:  # todo is this necessary?
             self.client_id = os.environ.get('UIT_ID')
-
+        
         if self.client_secret is None:  # todo is this necessary?
             self.client_secret = os.environ.get('UIT_SECRET')
 
-        if self.client_id is None or self.client_secret is None:
+        if (self.client_id is None or self.client_secret is None) and self.token is None:
             with open(self.config_file, 'r') as f:
                 self.config = yaml.load(f)
                 self.client_id = self.config.get('client_id')
                 self.client_secret = self.config.get('client_secret')
 
-        if self.client_id is None or self.client_secret is None:
-            if self.token is None:
-                raise ValueError(
-                    'Client token is missing, Please provide a valid token')
-            else:
-                raise ValueError('client_id and client_secret missing, Please provide as kwargs, environment vars '
-                                 '(UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file)
+        if self.client_id is None and self.client_secret is None and self.token is None:
+            raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
+                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file + ' OR provide an '
+                             'access token as a kwarg.' )
+
         if session_id is None:
             self.session_id = os.urandom(16).hex()
 
@@ -70,6 +72,7 @@ class Client:
         self.available_login_nodes = None
         self.scope = scope
         self.headers = None
+        self.connected = False
 
     def authenticate(self, notebook=None, width=800, height=800):
         # check if we have available tokens/refresh tokens
@@ -78,18 +81,18 @@ class Client:
             print('access token available, no auth needed')
             return
 
-        # start flask server
+        # start flask server 
         start_server(self.get_token, self.config_file)
 
         auth_url = self.get_auth_url()
         if notebook:
             import IPython
             return IPython.display.IFrame(auth_url, width, height)
-
+       
         import webbrowser
         webbrowser.open(auth_url)
 
-    def connect(self, system=None, login_node=None, exclude_login_nodes=None):
+    def connect(self, system=None, login_node=None, exclude_login_nodes=()):
         # get access token from file
         # populate userinfo and header info
         token = self.load_token()
@@ -99,14 +102,14 @@ class Client:
 
         # retrieve user info
         self.get_userinfo()
-
+        
         if all([system, login_node]) or not any([system, login_node]):
             raise ValueError('Please specify at one of system or login_node and not both')
 
         if login_node is None:
             # pick random login node for system
             login_node = random.choice(list(set(self.login_nodes[system]) - set(exclude_login_nodes)))
-
+            
         try:
             system = [sys for sys, nodes in self.login_nodes.items() if login_node in nodes][0]
         except:
@@ -116,6 +119,7 @@ class Client:
         self.system = system
         self.username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']
         self.uit_url = self.uit_urls[login_node]
+        self.connected = True
 
         print('Connected successfully to {} on {}'.format(login_node, system))
 
@@ -152,10 +156,9 @@ class Client:
                 self.auth_code = _auth_code
                 stop_server()
             else:
-                raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
-                                   'Then set the auth_code')
+                raise RuntimeError('You must first authenticate to the UIT server and get a auth code. Then set the auth_code')
 
-        # Get a token from the UIT server
+        ### Get a token from the UIT server
         # set up the data dictionary
         data = {
             'client_id': self.client_id,
@@ -175,6 +178,7 @@ class Client:
             raise IOError('Token request failed.')
 
         token = token.json()
+        
         # python does not appear to like the trailing 'Z' on the ISO formatted
         #  expiration dates.  we slice the last char off.
         token['access_token_expires_on'] = token['access_token_expires_on'][:-1]
@@ -233,10 +237,10 @@ class Client:
 
         self.uit_urls = [
             [{node['HOSTNAME'].split('.')[0]: node['URLS']['UIT']}
-             for node in self.userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
-            for system in self.systems
-        ]
-        self.uit_urls = {k: v for l in self.uit_urls for d in l for k, v in d.items()}
+                for node in self.userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
+                    for system in self.systems
+            ]
+        self.uit_urls = { k: v for l in self.uit_urls for d in l for k, v in d.items() }
 
     def get_uit_url(self, login_node=None):
         if login_node is None:
@@ -248,24 +252,25 @@ class Client:
         uit_url = self.uit_urls[login_node]
         # if login name provided find system
         system = [system for system, nodes in self.login_nodes.items() if login_node in nodes][0]
-        username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']
-        return uit_url, username
+        username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']        
+        return uit_url, username 
 
+    @robust()
     def call(self, command, work_dir):
         """
         Method to use the exec function call to UIT to execute commands on the HPC.
         """
         # construct the base options dictionary
         data = {'command': command, 'workingdir': work_dir}
-        data = {'options': json.dumps(data)}
+        data = {'options': json.dumps(data)}     
         r = requests.post(urljoin(self.uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
         resp = r.json()
-        success = resp.get('success') == 'true'
-        if success:
+        if resp.get('success') == 'true':
             return resp.get('stdout')
         else:
             raise RuntimeError('UIT Command failed with response: ', resp)
 
+    @robust()
     def put_file(self, local_path, remote_path):
         """
         Method to use the putfile function call to UIT to put files on the HPC.
@@ -273,11 +278,11 @@ class Client:
         """
         data = {'file': remote_path}
         data = {'options': json.dumps(data)}
-        files = {'file': open(local_path, 'rb')}
-        r = requests.post(urljoin(self.uit_url, 'putfile'), headers=self.headers, data=data, files=files,
-                          verify=self.ca_file)
+        files = {'file': open(local_path,'rb')}
+        r = requests.post(urljoin(self.uit_url, 'putfile'), headers=self.headers, data=data, files=files, verify=self.ca_file)
         return r.json()
 
+    @robust()
     def get_file(self, remote_path, local_path):
         """
         Method to use the putfile function call to UIT to put files on the HPC.
@@ -285,25 +290,26 @@ class Client:
         """
         data = {'file': remote_path}
         data = {'options': json.dumps(data)}
-        r = requests.post(urljoin(self.uit_url, 'getfile'), headers=self.headers, data=data,
-                          verify=self.ca_file, stream=True)
+        r = requests.post(urljoin(self.uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file, stream=True)
         with open(local_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=1024):
-                if chunk:  # filter out keep-alive new chunks
+            for chunk in r.iter_content(chunk_size=1024): 
+                if chunk: # filter out keep-alive new chunks
                     f.write(chunk)
         return local_path
 
+    @robust()
     def list_dir(self, path=None, system=None, login_node=None):
         """
         Method to use the listdirectory function call to UIT to get detailed
         directory listings on the HPC.
+
         """
         uit_url, username = self.get_uit_url(login_node=login_node)
         if path is None:
             path = os.path.join('/p/home', username)
 
         data = {'directory': path}
-        data = {'options': json.dumps(data)}
+        data = {'options': json.dumps(data)}     
         r = requests.post(urljoin(self.uit_url, 'listdirectory'), headers=self.headers, data=data, verify=self.ca_file)
         return r.json()
 
@@ -358,8 +364,7 @@ class Client:
                 # set the path to the executable
                 exe_path = '$PROJECTS_HOME/AdH_SW/adh_V5_BETA'
                 # create the run string
-                launch_string = 'mpiexec_mpt -np ' + str(procs) + ' ' + exe_path + ' ' +\
-                                project_name + ' > ' + output_file
+                launch_string = 'mpiexec_mpt -np ' + str(procs) + ' ' + exe_path + ' ' + project_name + ' > ' + output_file
             else:
                 raise IOError('Job type other than AdH is not supported.')
 
@@ -393,40 +398,61 @@ class Client:
         outfile.write('END \n')
         outfile.write(' \n')
 
-    def submit(self, pbs_script, working_dir):
-        """Method  is to submit the given pbs script and return response.
-
-                Parameters
-                ----------
-                pbs_script - PbsScript
-                    A PbsScript instance
-                working_dir - str
-                     Path to the working directory to execute script in
-
-        Returns
-        -------
-        response from the script
+    def submit(self, pbs_script, working_dir, remote_name='run.pbs', local_temp_dir=''):
         """
-        # Connect to the system designated by the PbsScript.system
+        Method  is to submit the given pbs script and return response.
+
+        Args:
+            pbs_script(PbsScript or str): PbsScript instance or string containing PBS script.
+            working_dir(str): Path to working dir on supercomputer in which to run pbs script.
+            remote_name(str): Custom name for pbs script on supercomputer. Defaults to "run.pbs".
+            local_temp_dir(str): Path to local temporary directory if unable to write to os temp dir.
+
+        Returns:
+            bool: True if job submitted successfully.
+        """
+        if not self.connected:
+            raise RuntimeError('Must connect to system before submitting.')
+
+        if not local_temp_dir:
+            pbs_script_path = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        else:
+            pbs_script_path = os.path.join(local_temp_dir, str(uuid.uuid4()))
 
         # Write out PbsScript tempfile
+        if isinstance(pbs_script, PbsScript):
+            pbs_script.write(pbs_script_path)
+        else:
+            pbs_script_text = pbs_script
+            with open(pbs_script_path, 'w') as f:
+                f.write(pbs_script_text)
 
         # Transfer script to supercomputer using put_file()
+        ret = self.put_file(pbs_script_path, os.path.join(working_dir, remote_name))
+
+        if 'success' in ret and ret['success'] == 'false':
+            raise RuntimeError('An exception occurred while submitting job script: {}'.format(ret['error']))
 
         # Submit the script using call() with qsub command
-
-        # Verify script submitted with additional calls
+        try:
+            job_id = self.call('qsub run.pbs', working_dir)
+        except RuntimeError as e:
+            raise RuntimeError('An exception occurred while submitting job script: {}'.format(str(e)))
 
         # Clean up (remove temp files)
+        os.remove(pbs_script_path)
+
+        return job_id.strip()
+
+
+
 
 
 ############################################################
 # Simple Flask Server to retrieve auth_code & access_token #
 ############################################################
 
-
 class ServerThread(threading.Thread):
-
     def __init__(self, app):
         threading.Thread.__init__(self)
         self.srv = make_server('127.0.0.1', 5000, app)
@@ -454,8 +480,7 @@ def start_server(auth_func, config_file):
     @app.route('/save_token', methods=['GET'])
     def save_token():
         """
-        WebHook to parse auth_code from url and retrieve access_token
-
+        WebHook to parse auth_code from url and retrieve access_token 
         """
         global _auth_code, _auth_url
         _auth_code = request.args.get('code')

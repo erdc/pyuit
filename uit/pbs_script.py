@@ -7,7 +7,7 @@ PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
 
 class PbsScript(object):
-    def __init__(self, name=None, project_id=None, num_nodes=1, processes_per_node=1, max_time=None,
+    def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
                  queue='debug', node_type='compute', system='topaz'):
 
         if name is None:
@@ -112,7 +112,7 @@ class PbsScript(object):
         string of directive_block
         """
         pbs_dir_start = "## Required PBS Directives --------------------------------"
-        job_name = "#PBS -N " + self.job_name
+        job_name = "#PBS -N " + self.name
         project_id = "#PBS -A " + self.project_id
         queue = "#PBS -q " + self.queue
 
@@ -252,5 +252,5 @@ class PbsScript(object):
         render_string = self.render()
         # Open the file
         full_path = os.path.join(path)
-        outfile = io.open(full_path, 'w', newline='\n')
-        outfile.write(render_string)
+        with io.open(full_path, 'w', newline='\n') as outfile:
+            outfile.write(render_string)
