@@ -12,6 +12,18 @@ class TestPBSScript(unittest.TestCase):
     def tearDown(self):
         pass
 
+    def test_init_name_value_error(self):
+        self.assertRaises(ValueError, PbsScript, name=None, project_id='P001', num_nodes=5, processes_per_node=10,
+                          max_time=20)
+
+    def test_init_project_id_value_error(self):
+        self.assertRaises(ValueError, PbsScript, name='test1', project_id=None, num_nodes=5, processes_per_node=10,
+                          max_time=20)
+
+    def test_init_max_time_value_error(self):
+        self.assertRaises(ValueError, PbsScript, name='test2', project_id='P001', num_nodes=5, processes_per_node=10,
+                          max_time=None)
+
     def test_set_directive(self):
         # Call the method
         self.pbs.set_directive('-J', 'OepnGL')
@@ -187,12 +199,15 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn('module swap Anaconda OpenMP', ret)
 
     def test_render(self):
-
         self.pbs.load_module('C++')
 
         self.pbs.unload_module('OpenGL')
 
         self.pbs.swap_module('Anaconda', 'OpenMP')
+
+        self.pbs.set_directive('-J', 'OpenMP')
+
+        self.pbs.set_directive('-T', 'OpenGL')
 
         # call the testing method
         render_str = self.pbs.render()
@@ -206,6 +221,8 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn('module load C++', render_str)
         self.assertIn('module unload OpenGL', render_str)
         self.assertIn('module swap Anaconda OpenMP', render_str)
+        self.assertIn('#PBS -J OpenMP', render_str)
+        self.assertIn('#PBS -T OpenGL', render_str)
 
     @mock.patch('uit.pbs_script.PbsScript.render')
     @mock.patch('io.open', new_callable=mock.mock_open)
@@ -223,10 +240,8 @@ class TestPBSScript(unittest.TestCase):
 
         mock_file.assert_called_with(path, 'w', newline='\n')
 
-        #TODO: check the file write mock
-
-        # call_args = mock_write.write.call_args_list
-        #
+        # TODO: check the file write mock
+        # call_args = mock_write.write.call_args_list        #
         # self.assertEqual('render string', call_args[0][0][0])
 
     def test_init_node_type_value_error(self):
