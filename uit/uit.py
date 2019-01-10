@@ -156,7 +156,8 @@ class Client:
                 self.auth_code = _auth_code
                 stop_server()
             else:
-                raise RuntimeError('You must first authenticate to the UIT server and get a auth code. Then set the auth_code')
+                raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
+                                   'Then set the auth_code')
 
         ### Get a token from the UIT server
         # set up the data dictionary
@@ -240,7 +241,7 @@ class Client:
                 for node in self.userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
                     for system in self.systems
             ]
-        self.uit_urls = { k: v for l in self.uit_urls for d in l for k, v in d.items() }
+        self.uit_urls = {k: v for l in self.uit_urls for d in l for k, v in d.items()}
 
     def get_uit_url(self, login_node=None):
         if login_node is None:
@@ -252,8 +253,8 @@ class Client:
         uit_url = self.uit_urls[login_node]
         # if login name provided find system
         system = [system for system, nodes in self.login_nodes.items() if login_node in nodes][0]
-        username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']        
-        return uit_url, username 
+        username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']
+        return uit_url, username
 
     @robust()
     def call(self, command, work_dir):
@@ -262,7 +263,7 @@ class Client:
         """
         # construct the base options dictionary
         data = {'command': command, 'workingdir': work_dir}
-        data = {'options': json.dumps(data)}     
+        data = {'options': json.dumps(data)}
         r = requests.post(urljoin(self.uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
         resp = r.json()
         if resp.get('success') == 'true':
@@ -278,8 +279,9 @@ class Client:
         """
         data = {'file': remote_path}
         data = {'options': json.dumps(data)}
-        files = {'file': open(local_path,'rb')}
-        r = requests.post(urljoin(self.uit_url, 'putfile'), headers=self.headers, data=data, files=files, verify=self.ca_file)
+        files = {'file': open(local_path, 'rb')}
+        r = requests.post(urljoin(self.uit_url, 'putfile'), headers=self.headers, data=data, files=files,
+                          verify=self.ca_file)
         return r.json()
 
     @robust()
@@ -290,10 +292,11 @@ class Client:
         """
         data = {'file': remote_path}
         data = {'options': json.dumps(data)}
-        r = requests.post(urljoin(self.uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file, stream=True)
+        r = requests.post(urljoin(self.uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
+                          stream=True)
         with open(local_path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=1024): 
-                if chunk: # filter out keep-alive new chunks
+                if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
         return local_path
 
@@ -309,7 +312,7 @@ class Client:
             path = os.path.join('/p/home', username)
 
         data = {'directory': path}
-        data = {'options': json.dumps(data)}     
+        data = {'options': json.dumps(data)}
         r = requests.post(urljoin(self.uit_url, 'listdirectory'), headers=self.headers, data=data, verify=self.ca_file)
         return r.json()
 
@@ -364,7 +367,8 @@ class Client:
                 # set the path to the executable
                 exe_path = '$PROJECTS_HOME/AdH_SW/adh_V5_BETA'
                 # create the run string
-                launch_string = 'mpiexec_mpt -np ' + str(procs) + ' ' + exe_path + ' ' + project_name + ' > ' + output_file
+                launch_string = 'mpiexec_mpt -np ' + str(procs) + ' ' + \
+                                exe_path + ' ' + project_name + ' > ' + output_file
             else:
                 raise IOError('Job type other than AdH is not supported.')
 
@@ -444,13 +448,10 @@ class Client:
 
         return job_id.strip()
 
-
-
-
-
 ############################################################
 # Simple Flask Server to retrieve auth_code & access_token #
 ############################################################
+
 
 class ServerThread(threading.Thread):
     def __init__(self, app):
@@ -480,8 +481,9 @@ def start_server(auth_func, config_file):
     @app.route('/save_token', methods=['GET'])
     def save_token():
         """
-        WebHook to parse auth_code from url and retrieve access_token 
+        WebHook to parse auth_code from url and retrieve access_token
         """
+
         global _auth_code, _auth_url
         _auth_code = request.args.get('code')
         token = auth_func(auth_code=_auth_code)
