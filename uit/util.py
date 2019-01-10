@@ -6,6 +6,9 @@
 * Copyright: (c) Aquaveo 2018
 ********************************************************************************
 """
+from .exceptions import DpRouteError
+
+
 def robust(retries=3):
     """
     Robust wrapper for client methods. Will retry, reties times if failed due to DP routing error.
@@ -31,8 +34,14 @@ def robust(retries=3):
                         raise
 
             kwarg_str = ', '.join(['{}="{}"'.format(k, v) for k, v in kwargs.items()])
-            raise RuntimeError('Max number of retries reached without success for '
-                               'method: {}({}). Last exception encountered: {}'.format(func.__name__, kwarg_str,
-                                                                                       last_exception))
+            if 'DP Route error' in str(last_exception):
+                raise DpRouteError('Max number of retries reached without success for '
+                                   'method: {}({}). Last exception encountered: {}'.format(func.__name__, kwarg_str,
+                                                                                           last_exception))
+
+            else:
+                raise RuntimeError('Max number of retries reached without success for '
+                                   'method: {}({}). Last exception encountered: {}'.format(func.__name__, kwarg_str,
+                                                                                           last_exception))
         return wrap_f
     return wrap
