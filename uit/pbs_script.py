@@ -7,10 +7,13 @@ PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
 
 class PbsScript(object):
+    """
+    This class is to generate PBS scripts needed to submit jobs
+    """
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
                  queue='debug', node_type='compute', system='topaz'):
 
-        if name is None:
+        if name is None:  # TODO: Ask Nathan for name = ""
             raise ValueError('Parameter "name" is required.')
 
         if project_id is None:
@@ -82,18 +85,32 @@ class PbsScript(object):
     def load_module(self, module):
         """
         Adds module to _modules with value of “load”
+        Parameters
+        ----------
+        module: str
+            name of the module
         """
         self._modules.update({module: "load"})
 
     def unload_module(self, module):
         """
         Adds module to _modules with value of “unload”
+        Parameters
+        ----------
+        module: str
+            name of the module
         """
         self._modules.update({module: "unload"})
 
     def swap_module(self, module1, module2):
         """
         Adds module1 to _modules with value of module2.
+         Parameters
+        ----------
+        module1: str
+            name of the module
+        module2: str
+            name of the module
         """
         self._modules.update({module1: module2})
 
@@ -248,6 +265,10 @@ class PbsScript(object):
     def write(self, path):
         """
         Calls render() method and write resulting string to the file path given.
+        Parameters
+        ----------
+        path: str
+            path to write the result string
         """
         render_string = self.render()
         # Open the file
