@@ -439,7 +439,7 @@ class Client:
 
         # Submit the script using call() with qsub command
         try:
-            job_id = self.call('qsub run.pbs', working_dir)
+            job_id = self.call('qsub {}'.format(remote_name), working_dir)
         except RuntimeError as e:
             raise RuntimeError('An exception occurred while submitting job script: {}'.format(str(e)))
 
