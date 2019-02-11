@@ -1,7 +1,7 @@
 from setuptools import setup
 
 requirements = [
-    'flask'
+    'flask', 'PyYAML', 'requests'
 ]
 
 setup(

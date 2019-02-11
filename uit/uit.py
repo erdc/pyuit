@@ -18,6 +18,7 @@ from uit.util import robust
 
 try:
     # Python 3
+    # noinspection PyCompatibility
     from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 except ImportError:
     # Python 2
@@ -159,7 +160,6 @@ class Client:
                 raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
                                    'Then set the auth_code')
 
-        ### Get a token from the UIT server
         # set up the data dictionary
         data = {
             'client_id': self.client_id,
@@ -294,6 +294,9 @@ class Client:
         data = {'options': json.dumps(data)}
         r = requests.post(urljoin(self.uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
                           stream=True)
+        if r.status_code != 200:
+            raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
+                               "not have permission to access it.".format(r.status_code, remote_path))
         with open(local_path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=1024): 
                 if chunk:  # filter out keep-alive new chunks
