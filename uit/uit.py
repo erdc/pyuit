@@ -35,15 +35,45 @@ _auth_code = None
 
 
 class Client:
+    """Provides a python abstraction for interacting with the UIT API.
+
+    Attributes:
+        client_id (str): ID issued by UIT to authorize this client.
+        client_secret (str): Secret key associated with the client ID.
+        config_file (str): Location of a config file containing, among other things, the Client ID and Secret Key.
+        connected (bool): Flag indicating whether a connection has been made.
+        scope (str):
+        session_id (str): 16-digit Hexidecimal string identifying the current session. Auto-generated from urandom if
+            not provided.
+        token (str): Token from current UIT authorization.
+    """
     def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
                  token=None):
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
 
-        self.token = token
-        self.config_file = config_file
+        # Set arg-based attributes
         self.client_id = client_id
         self.client_secret = client_secret
+        self.config_file = config_file
+        self.scope = scope
+        self.token = token
+
+        # Set attribute defaults
+        self.connected = False
+
+        # Set private attribute defaults
+        self._auth_code = None
+        self._headers = None
+        self._login_node = None
+        self._login_nodes = None
+        self._system = None
+        self._systems = None
+        self._uit_url = None
+        self._uit_urls = None
+        self._user = None
+        self._userinfo = None
+        self._username = None
 
         if self.config_file is None:
             self.config_file = DEFAULT_CONFIG_FILE
@@ -63,19 +93,19 @@ class Client:
         if self.client_id is None and self.client_secret is None and self.token is None:
             raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
                              '(UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file + ' OR provide an '
-                             'access token as a kwarg.' )
+                             'access token as a kwarg.')
 
         if session_id is None:
             self.session_id = os.urandom(16).hex()
 
-        self.login_node = None
-        self.system = None
-        self.available_login_nodes = None
-        self.scope = scope
-        self.headers = None
-        self.connected = False
-
     def authenticate(self, notebook=None, width=800, height=800):
+        """Ensure we have an access token. Request one from the user if we do not.
+
+        Args:
+            notebook (bool): Flag to indicate we are running in a Jupyter Notebook.
+            width (int): Width to make the notebook widget.
+            height (int): Height to make the notebook widget.
+        """
         # check if we have available tokens/refresh tokens
         token = self.load_token()
         if token:
@@ -94,12 +124,20 @@ class Client:
         webbrowser.open(auth_url)
 
     def connect(self, system=None, login_node=None, exclude_login_nodes=()):
+        """Connect this client to the UIT servers.
+
+        Args:
+            system (str): Specific system name to connect to. Cannot be used with login_node arg.
+            login_node (str): Specific node name to connect to. Cannot be used with system arg.
+            exclude_login_nodes (list): Nodes to exclude when selecting a login node. Ignored if login_node is
+                specified.
+        """
         # get access token from file
         # populate userinfo and header info
         token = self.load_token()
         if token is None:
             raise RuntimeError('No Valid Access Tokens Found, Please run authenticate() function and try again')
-        self.headers = {'x-uit-auth-token': token}
+        self._headers = {'x-uit-auth-token': token}
 
         # retrieve user info
         self.get_userinfo()
@@ -109,25 +147,29 @@ class Client:
 
         if login_node is None:
             # pick random login node for system
-            login_node = random.choice(list(set(self.login_nodes[system]) - set(exclude_login_nodes)))
+            login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
             
         try:
-            system = [sys for sys, nodes in self.login_nodes.items() if login_node in nodes][0]
-        except:
+            system = [sys for sys, nodes in self._login_nodes.items() if login_node in nodes][0]
+        except Exception:
             raise ValueError('{} login node not found in available nodes'.format(login_node))
 
-        self.login_node = login_node
-        self.system = system
-        self.username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']
-        self.uit_url = self.uit_urls[login_node]
+        self._login_node = login_node
+        self._system = system
+        self._username = self._userinfo['SYSTEMS'][self._system.upper()]['USERNAME']
+        self._uit_url = self._uit_urls[login_node]
         self.connected = True
 
         print('Connected successfully to {} on {}'.format(login_node, system))
 
     def get_auth_url(self):
-        """
-        Generate Authorization URL  with UIT Server.
+        """Generate Authorization URL with UIT Server.
+
+        Example:
         https://uit.erdc.dren.mil/uapi/authorize?client_id=e01012b4-ab2c-4d95-83b3-26600a13ee0c&scope=UIT&state=2342342
+
+        Returns:
+            str: Authorization URL.
         """
         url = urljoin(UIT_API_URL, 'authorize')
 
@@ -141,21 +183,23 @@ class Client:
         return url + '?' + urlencode(data)
 
     def get_token(self, auth_code=None):
-        """
-        Method to get tokens from the UIT server
+        """Get tokens from the UIT server.
+
+        Args:
+            auth_code (str): The authentication code to use.
         """
 
         url = urljoin(UIT_API_URL, 'token')
 
         if auth_code:
-            self.auth_code = auth_code
+            self._auth_code = auth_code
 
         # check for auth_code
-        if self.auth_code is None:
+        if self._auth_code is None:
             global _auth_code
             if _auth_code:
-                self.auth_code = _auth_code
-                stop_server()
+                self._auth_code = _auth_code
+                stop_server() # TODO: Check if this is still needed
             else:
                 raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
                                    'Then set the auth_code')
@@ -166,7 +210,7 @@ class Client:
             'client_secret': self.client_secret,
             'state': self.session_id,
             'scope': self.scope,
-            'code': self.auth_code
+            'code': self._auth_code
         }
 
         # get the token
@@ -188,6 +232,11 @@ class Client:
         self.save_token(token)
 
     def load_token(self):
+        """Load a token from the config file.
+
+        Returns:
+            str: The access token.
+        """
         if self.token is not None:
             return self.token
         with open(self.config_file, 'r') as f:
@@ -203,6 +252,7 @@ class Client:
                     return token['access_token']
 
     def clear_tokens(self):
+        """Remove all tokens from config file."""
         # clear tokens saved in config file
         with open(self.config_file, 'r') as f:
             config = yaml.load(f)
@@ -212,6 +262,11 @@ class Client:
             yaml.dump(config, f)
 
     def save_token(self, token):
+        """Save a token to the config file.
+
+        Args:
+            token (str): Token to save.
+        """
         with open(self.config_file, 'r') as f:
             config = yaml.load(f)
 
@@ -223,48 +278,59 @@ class Client:
             yaml.dump(config, f)
 
     def get_userinfo(self):
-        """
-        Method to get User Info from the UIT server
-        """
+        """Get User Info from the UIT server."""
         # request user info from UIT site
-        data = requests.get(urljoin(UIT_API_URL, 'userinfo'), headers=self.headers, verify=self.ca_file).json()
-        self.userinfo = data.get('userinfo')
-        self.user = self.userinfo.get('USERNAME')
-        self.systems = [sys.lower() for sys in self.userinfo['SYSTEMS'].keys()]
-        self.login_nodes = {
-            system: [node['HOSTNAME'].split('.')[0] for node in self.userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
-            for system in self.systems
+        data = requests.get(urljoin(UIT_API_URL, 'userinfo'), headers=self._headers, verify=self.ca_file).json()
+        self._userinfo = data.get('userinfo')
+        self._user = self._userinfo.get('USERNAME')
+        self._systems = [sys.lower() for sys in self._userinfo['SYSTEMS'].keys()]
+        self._login_nodes = {
+            system: [node['HOSTNAME'].split('.')[0] for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
+            for system in self._systems
         }
 
-        self.uit_urls = [
+        self._uit_urls = [
             [{node['HOSTNAME'].split('.')[0]: node['URLS']['UIT']}
-                for node in self.userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
-                    for system in self.systems
-            ]
-        self.uit_urls = {k: v for l in self.uit_urls for d in l for k, v in d.items()}
+             for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']
+             ] for system in self._systems
+        ]
+        self._uit_urls = {k: v for l in self._uit_urls for d in l for k, v in d.items()}
 
     def get_uit_url(self, login_node=None):
-        if login_node is None:
-            if self.login_node is None:
-                login_node = random.choice(self.login_nodes)
-            else:
-                login_node = self.login_node
+        """Generate the URL for a given login node
 
-        uit_url = self.uit_urls[login_node]
+        Args:
+            login_node (str): The login node to generate a URL for. If unspecified, a random one is chosen.
+
+        Returns:
+
+        """
+        if login_node is None:
+            if self._login_node is None:
+                login_node = random.choice(self._login_nodes)
+            else:
+                login_node = self._login_node
+
+        uit_url = self._uit_urls[login_node]
         # if login name provided find system
-        system = [system for system, nodes in self.login_nodes.items() if login_node in nodes][0]
-        username = self.userinfo['SYSTEMS'][self.system.upper()]['USERNAME']
+        username = self._userinfo['SYSTEMS'][self._system.upper()]['USERNAME']
         return uit_url, username
 
     @robust()
     def call(self, command, work_dir):
-        """
-        Method to use the exec function call to UIT to execute commands on the HPC.
+        """Execute commands on the HPC via the exec endpoint.
+
+        Args:
+           command (str): The command to run.
+           work_dir (str): Working directory from which to run the command.
+
+        Returns:
+            str: stdout from the command.
         """
         # construct the base options dictionary
         data = {'command': command, 'workingdir': work_dir}
         data = {'options': json.dumps(data)}
-        r = requests.post(urljoin(self.uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
+        r = requests.post(urljoin(self._uit_url, 'exec'), headers=self._headers, data=data, verify=self.ca_file)
         resp = r.json()
         if resp.get('success') == 'true':
             return resp.get('stdout')
@@ -273,26 +339,36 @@ class Client:
 
     @robust()
     def put_file(self, local_path, remote_path):
-        """
-        Method to use the putfile function call to UIT to put files on the HPC.
+        """Put files on the HPC via the putfile endpoint.
 
+        Args:
+            local_path (str): Local file to upload.
+            remote_path (str): Remote file to upload to.
+
+        Returns:
+            str: API response as json
         """
         data = {'file': remote_path}
         data = {'options': json.dumps(data)}
         files = {'file': open(local_path, 'rb')}
-        r = requests.post(urljoin(self.uit_url, 'putfile'), headers=self.headers, data=data, files=files,
+        r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self._headers, data=data, files=files,
                           verify=self.ca_file)
         return r.json()
 
     @robust()
     def get_file(self, remote_path, local_path):
-        """
-        Method to use the putfile function call to UIT to put files on the HPC.
+        """Get a file from the HPC via the getfile endpoint.
 
+        Args:
+            remote_path (str): Remote file to download.
+            local_path (str): local file to download to.
+
+        Returns:
+            str: local_path
         """
         data = {'file': remote_path}
         data = {'options': json.dumps(data)}
-        r = requests.post(urljoin(self.uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
+        r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self._headers, data=data, verify=self.ca_file,
                           stream=True)
         if r.status_code != 200:
             raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
@@ -304,11 +380,16 @@ class Client:
         return local_path
 
     @robust()
-    def list_dir(self, path=None, system=None, login_node=None):
-        """
-        Method to use the listdirectory function call to UIT to get detailed
-        directory listings on the HPC.
+    def list_dir(self, path=None, system=None, login_node=None):  # TODO: Ensure we can remove unused 'system' arg
+        """Get a detailed directory listing from the HPC via the listdirectory endpoint.
 
+        Args:
+            path (str): Directory to list
+            system (str): System to connect to. (Unused)
+            login_node: Node to connect to. If None, a random one is chosen.
+
+        Returns:
+            str: The API response as JSON
         """
         uit_url, username = self.get_uit_url(login_node=login_node)
         if path is None:
@@ -316,43 +397,27 @@ class Client:
 
         data = {'directory': path}
         data = {'options': json.dumps(data)}
-        r = requests.post(urljoin(self.uit_url, 'listdirectory'), headers=self.headers, data=data, verify=self.ca_file)
+        r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self._headers, data=data, verify=self.ca_file)
         return r.json()
 
+    # TODO: Check if this can be removed now that we have the PBS_Script class
     def create_submit_script(self, hpc_subproject, nodes, project_name, job_type='adh', queue='standard',
                              walltime='01:00:00', path=None, filename='submit_pbs', job_name='default',
                              output_file='adh.out', email=None):
         """Method to create a simple PBS submit script for ERDC HPC systems (currently only supporting Topaz and AdH).
 
-        Parameters
-        ----------
-        hpc_subproject - str
-            HPC System subproject (e.g. ERDCV00898ADH)
-        nodes - int
-            Total number of nodes to run on (not processors)
-        project_name - str
-            Root filename for AdH simulation (without extension)
-        job_type - str
-            Type of job being submitted (default='adh'). AdH is the only type supported currently.
-        queue - str
-            Queue in which to submit (default='standard')
-        walltime - str
-            Walltime for this job (default='01:00:00')
-        path - str
-            Directory in which to save the submit script (default=cwd)
-        filename - str
-            Filename for the submit script (default='submit_pbs')
-        job_name - str
-            Job name in the PBS system (default='default')
-        output_file - str
-            Output filename for the run output (default='adh.out')
-        email - str
-            Email to send notifications to (default=None)
-
-        Returns
-        -------
-        output_file - file
-            Submit script
+        Args:
+            hpc_subproject (str): HPC System subproject (e.g. ERDCV00898ADH)
+            nodes (int): Total number of nodes to run on (not processors)
+            project_name (str): Root filename for AdH simulation (without extension)
+            job_type (str): Type of job being submitted (default='adh'). AdH is the only type supported currently.
+            queue (str): Queue in which to submit (default='standard')
+            walltime (str): Walltime for this job (default='01:00:00')
+            path (str): Directory in which to save the submit script (default=cwd)
+            filename (str): Filename for the submit script (default='submit_pbs')
+            job_name (str): Job name in the PBS system (default='default')
+            output_file (str): Output filename for the run output (default='adh.out')
+            email (str): Email to send notifications to (default=None)
         """
 
         # if no path given, use cwd
@@ -360,7 +425,7 @@ class Client:
             path = os.getcwd()
 
         # if TOPAZ
-        if self.system.upper() == 'TOPAZ':
+        if self._system.upper() == 'TOPAZ':
             # set the number of mpi procs per node
             mpiprocs = 36
             # calculate the number of procs
@@ -376,7 +441,7 @@ class Client:
                 raise IOError('Job type other than AdH is not supported.')
 
         else:
-            raise IOError('System {} not recognized. Cannot create submit script.'.format(self.system))
+            raise IOError('System {} not recognized. Cannot create submit script.'.format(self._system))
 
         # Open the file
         full_path = os.path.join(path, filename)
@@ -406,8 +471,7 @@ class Client:
         outfile.write(' \n')
 
     def submit(self, pbs_script, working_dir, remote_name='run.pbs', local_temp_dir=''):
-        """
-        Method  is to submit the given pbs script and return response.
+        """Submit a PBS Script.
 
         Args:
             pbs_script(PbsScript or str): PbsScript instance or string containing PBS script.
