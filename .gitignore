@@ -63,3 +63,9 @@ target/
 
 # Pycharm Projects
 .idea
+
+# Mac Files
+.DS_Store
+
+# ViM Files
+*.swp
