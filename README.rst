@@ -3,8 +3,8 @@ uit
 ===============================
 
 
-.. image:: https://img.shields.io/travis/dharhas/uit.svg
-        :target: https://travis-ci.org/dharhas/uit
+.. image:: https://img.shields.io/travis/erdc/uit.svg
+        :target: https://travis-ci.com/erdc/uit
 
 
 Python wrapper for DoD HPCMP UIT+ rest interface

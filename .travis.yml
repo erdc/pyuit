@@ -20,6 +20,7 @@ install:
   - conda install conda-build
   - conda install anaconda-client
   - conda install pytest-cov
+  - conda install mock
   - pip install coveralls
   - conda build .
   - conda install --use-local uit

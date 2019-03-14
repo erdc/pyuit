@@ -10,7 +10,7 @@ setup(
     description="Python wrapper for DoD HPCMP UIT+ rest interface",
     author="Dharhas Pothina",
     author_email='dharhas.pothina@erdc.dren.mil',
-    url='https://github.com/dharhas/uit',
+    url='https://github.com/erdc/uit',
     packages=['uit'],
     entry_points={
         'console_scripts': [
