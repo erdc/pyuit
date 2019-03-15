@@ -240,10 +240,6 @@ class TestPBSScript(unittest.TestCase):
 
         mock_file.assert_called_with(path, 'w', newline='\n')
 
-        # TODO: check the file write mock
-        # call_args = mock_write.write.call_args_list        #
-        # self.assertEqual('render string', call_args[0][0][0])
-
     def test_init_node_type_value_error(self):
         self.assertRaises(ValueError, PbsScript, name='test1', project_id='P001', num_nodes=5,
                           processes_per_node=10, max_time=20, node_type='test_node')

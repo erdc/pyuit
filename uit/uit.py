@@ -26,7 +26,7 @@ except ImportError:
 
 from werkzeug.serving import make_server
 
-UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'  # TODO: TRY THIS
+UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 pkg_dir, _ = os.path.split(__file__)
 DEFAULT_CA_FILE = os.path.join(pkg_dir, "data", "DoD_CAs.pem")
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
@@ -78,10 +78,10 @@ class Client:
         if self.config_file is None:
             self.config_file = DEFAULT_CONFIG_FILE
 
-        if self.client_id is None:  # todo is this necessary?
+        if self.client_id is None:
             self.client_id = os.environ.get('UIT_ID')
         
-        if self.client_secret is None:  # todo is this necessary?
+        if self.client_secret is None:
             self.client_secret = os.environ.get('UIT_SECRET')
 
         if (self.client_id is None or self.client_secret is None) and self.token is None:
@@ -400,7 +400,7 @@ class Client:
         r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self._headers, data=data, verify=self.ca_file)
         return r.json()
 
-    # TODO: Check if this can be removed now that we have the PBS_Script class
+    # TODO: Remove this and use the PbsScript class
     def create_submit_script(self, hpc_subproject, nodes, project_name, job_type='adh', queue='standard',
                              walltime='01:00:00', path=None, filename='submit_pbs', job_name='default',
                              output_file='adh.out', email=None):

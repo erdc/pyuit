@@ -24,13 +24,13 @@ class PbsScript(object):
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
                  queue='debug', node_type='compute', system='topaz'):
 
-        if name is None:  # TODO: Ask Nathan for name = ""
+        if not name:
             raise ValueError('Parameter "name" is required.')
 
-        if project_id is None:
+        if not project_id:
             raise ValueError('Parameter "project_id" is required.')
 
-        if max_time is None:
+        if not max_time:
             raise ValueError('Parameter "max_time" is required.')
 
         self.name = name
