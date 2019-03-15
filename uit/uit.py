@@ -19,10 +19,10 @@ from uit.util import robust
 try:
     # Python 3
     # noinspection PyCompatibility
-    from urllib.parse import urljoin, urlparse, parse_qs, urlencode
+    from urllib.parse import urljoin, urlparse, parse_qs, urlencode  # noqa: F401
 except ImportError:
     # Python 2
-    from urlparse import urljoin, urlparse, parse_qs, urlencode
+    from urlparse import urljoin, urlparse, parse_qs, urlencode  # noqa: F401
 
 from werkzeug.serving import make_server
 
@@ -80,7 +80,7 @@ class Client:
 
         if self.client_id is None:
             self.client_id = os.environ.get('UIT_ID')
-        
+
         if self.client_secret is None:
             self.client_secret = os.environ.get('UIT_SECRET')
 
@@ -112,14 +112,14 @@ class Client:
             print('access token available, no auth needed')
             return
 
-        # start flask server 
+        # start flask server
         start_server(self.get_token, self.config_file)
 
         auth_url = self.get_auth_url()
         if notebook:
             import IPython
             return IPython.display.IFrame(auth_url, width, height)
-       
+
         import webbrowser
         webbrowser.open(auth_url)
 
@@ -141,14 +141,14 @@ class Client:
 
         # retrieve user info
         self.get_userinfo()
-        
+
         if all([system, login_node]) or not any([system, login_node]):
             raise ValueError('Please specify at one of system or login_node and not both')
 
         if login_node is None:
             # pick random login node for system
             login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
-            
+
         try:
             system = [sys for sys, nodes in self._login_nodes.items() if login_node in nodes][0]
         except Exception:
@@ -199,7 +199,7 @@ class Client:
             global _auth_code
             if _auth_code:
                 self._auth_code = _auth_code
-                stop_server() # TODO: Check if this is still needed
+                # stop_server()  # TODO: Check if this is still needed
             else:
                 raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
                                    'Then set the auth_code')
@@ -223,7 +223,7 @@ class Client:
             raise IOError('Token request failed.')
 
         token = token.json()
-        
+
         # python does not appear to like the trailing 'Z' on the ISO formatted
         #  expiration dates.  we slice the last char off.
         token['access_token_expires_on'] = token['access_token_expires_on'][:-1]
@@ -285,8 +285,9 @@ class Client:
         self._user = self._userinfo.get('USERNAME')
         self._systems = [sys.lower() for sys in self._userinfo['SYSTEMS'].keys()]
         self._login_nodes = {
-            system: [node['HOSTNAME'].split('.')[0] for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
-            for system in self._systems
+            system:
+                [node['HOSTNAME'].split('.')[0] for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
+                for system in self._systems
         }
 
         self._uit_urls = [
@@ -374,7 +375,7 @@ class Client:
             raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
                                "not have permission to access it.".format(r.status_code, remote_path))
         with open(local_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=1024): 
+            for chunk in r.iter_content(chunk_size=1024):
                 if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
         return local_path
@@ -397,7 +398,8 @@ class Client:
 
         data = {'directory': path}
         data = {'options': json.dumps(data)}
-        r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self._headers, data=data, verify=self.ca_file)
+        r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self._headers, data=data,
+                          verify=self.ca_file)
         return r.json()
 
     # TODO: Remove this and use the PbsScript class
@@ -553,7 +555,7 @@ def start_server(auth_func, config_file):
 
         global _auth_code, _auth_url
         _auth_code = request.args.get('code')
-        token = auth_func(auth_code=_auth_code)
+        auth_func(auth_code=_auth_code)
 
         context = {'auth_code': _auth_code, 'config_file': config_file}
 

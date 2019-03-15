@@ -136,18 +136,18 @@ class PbsScript(object):
         no_nodes_process = self.get_no_nodes_process_str()
         time_to_run = "#PBS -l walltime={}".format(self.max_time)
         directive_block = pbs_dir_start + "\n" + job_name + "\n" + project_id + "\n" + \
-                          queue + "\n" + no_nodes_process + "\n" + time_to_run
+            queue + "\n" + no_nodes_process + "\n" + time_to_run
         return directive_block
 
     def get_no_nodes_process_str(self):
         """Generate a properly formatted CPU Request for use in PBS Headers
-        
+
         Generates string based on:
-        - Number of Nodes 
-        - Processors per Node 
+        - Number of Nodes
+        - Processors per Node
         - System
         - Node Type
-        
+
         Returns:
             str: Correctly formatted string for PBS header
         """
@@ -266,7 +266,7 @@ class PbsScript(object):
         render_modules_block = self.render_modules_block()
         render_execution_block = self.execution_block
         render_string = shebang + "\n \n" + render_required_directives + "\n \n" + render_optional_directives + \
-                        "\n \n" + render_modules_block + "\n \n" + render_execution_block
+            "\n \n" + render_modules_block + "\n \n" + render_execution_block
         return render_string
 
     def write(self, path):
