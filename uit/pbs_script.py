@@ -11,13 +11,13 @@ class PbsScript(object):
     Generates a PBS script needed to submit jobs.
 
     Attributes:
+        max_time (str): Maximum amount of time the job should be allowed to run.
         name (str): Name of the job to be passed in the PBS Header.
-        project_id (str): ID to be passed in the PBS Header.
+        node_type (str): Type of node on which the job should run.
         num_nodes (int): Number of nodes to request.
         processes_per_node (int): Number of processors per node to request.
-        max_time (str): Maximum amount of time the job should be allowed to run.
+        project_id (str): Project ID to be passed in the PBS Header.
         queue (str): Name of the queue into which to submit the job.
-        node_type (str): Type of node on which the job should run.
         system (str): Name of the system to run on.
     """
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
