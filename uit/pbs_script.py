@@ -11,15 +11,14 @@ class PbsScript(object):
     Generates a PBS script needed to submit jobs.
 
     Attributes:
-        execution_block (str): The script of the job to be run
-        max_time (str): Maximum amount of time the job should be allowed to run
-        name (str): Name of the job to be passed in the PBS Header
-        node_type (str): Type of node on which the job should run
-        num_nodes (int): Number of nodes to request
-        project_id (str): ID to be passed in the PBS Header
-        processes_per_node (int): Number of processors per node to request
-        queue (str): Name of the queue into which to submit the job
-        system (str): Name of the system to run on
+        name (str): Name of the job to be passed in the PBS Header.
+        project_id (str): ID to be passed in the PBS Header.
+        num_nodes (int): Number of nodes to request.
+        processes_per_node (int): Number of processors per node to request.
+        max_time (str): Maximum amount of time the job should be allowed to run.
+        queue (str): Name of the queue into which to submit the job.
+        node_type (str): Type of node on which the job should run.
+        system (str): Name of the system to run on.
     """
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
                  queue='debug', node_type='compute', system='topaz'):
@@ -60,57 +59,57 @@ class PbsScript(object):
         self.execution_block = ""
 
     def set_directive(self, directive, value):
-        """Append new directive to _optional_directives list.
+        """Add a new directive to the PBS script.
 
         Args:
-            directive (str): Name of the directive
-            value (str): Value of directive
+            directive (str): Name of the directive.
+            value (str): Value of directive.
         """
         self._optional_directives.append(PbsDirective(directive, value))
 
     def get_directive(self, directive):
-        """Get value of named directive from _optional_directives list.
+        """Get value of named directive.
 
         Args:
-            directive (str): Name of the directive
+            directive (str): Name of the directive.
 
         Returns:
-            str: Value of the given directive
+            str: Value of the given directive.
         """
         for d in self._optional_directives:
             if d.directive == directive:
                 return d.options
 
     def get_directives(self):
-        """Get all directives.
+        """Get a list of all defined directives.
 
         Returns:
-             list: All directives in self._optional_directives
+             list: All defined directives.
         """
         return self._optional_directives
 
     def load_module(self, module):
-        """Adds module to _modules with value of “load”.
+        """Add a load directive to the PBS script for the given module.
 
         Args:
-            module (str): Name of the module
+            module (str): Name of the module to load
         """
         self._modules.update({module: "load"})
 
     def unload_module(self, module):
-        """Adds module to _modules with value of “unload”.
+        """Add an unload directive to the PBS script for the given module.
 
         Args:
-            module (str): Name of the module
+            module (str): Name of the module to unload
         """
         self._modules.update({module: "unload"})
 
     def swap_module(self, module1, module2):
-        """Adds module1 to _modules with value of module2.
+        """Add a swap directive to the PBS script for the given modules.
 
         Args:
-            module1 (str): Name of the module to add
-            module2 (str): Name of the module to add as a value
+            module1 (str): Name of the module to be swapped out
+            module2 (str): Name of the module to be swapped in
         """
         self._modules.update({module1: module2})
 
@@ -118,29 +117,29 @@ class PbsScript(object):
         """Get a list of all modules.
 
         Returns:
-             dict: The _modules dictionary.
-        """
+             dict<module,command>: A dictionary of modules with module as the key and the command (load/unload) as the value. In the case of a swap, the value will be the module to replace the module listed as the key.
+        """  # noqa: E501
         return self._modules
 
     def render_required_directives_block(self):
-        """Render each required directive on a separate line
+        """Render each required directive on a separate line.
 
         Returns:
-            str: String of all directives
+            str: String of all required directives.
         """
         pbs_dir_start = "## Required PBS Directives --------------------------------"
         job_name = "#PBS -N " + self.name
         project_id = "#PBS -A " + self.project_id
         queue = "#PBS -q " + self.queue
 
-        no_nodes_process = self.get_no_nodes_process_str()
+        no_nodes_process = self.get_num_nodes_process_str()
         time_to_run = "#PBS -l walltime={}".format(self.max_time)
         directive_block = pbs_dir_start + "\n" + job_name + "\n" + project_id + "\n" + \
             queue + "\n" + no_nodes_process + "\n" + time_to_run
         return directive_block
 
-    def get_no_nodes_process_str(self):
-        """Generate a properly formatted CPU Request for use in PBS Headers
+    def get_num_nodes_process_str(self):
+        """Generate a properly formatted CPU Request for use in PBS Headers.
 
         Generates string based on:
         - Number of Nodes
@@ -225,7 +224,7 @@ class PbsScript(object):
         """Render each optional directive on a separate line.
 
         Returns:
-             str: All optional directives
+             str: All optional directives.
         """
         opt_list = ['## Optional Directives -----------------------------']
         directives = self._optional_directives
@@ -240,7 +239,7 @@ class PbsScript(object):
         """Render each module call on a separate line.
 
         Returns:
-            str: All module calls
+            str: All module calls.
         """
         opt_list = ['## Modules --------------------------------------']
         for key, value in self._modules.items():
@@ -258,7 +257,7 @@ class PbsScript(object):
         """Render the PBS Script.
 
         Returns:
-            str: A fully rendered PBS Script
+            str: A fully rendered PBS Script.
         """
         shebang = "#!/bin/bash"
         render_required_directives = self.render_required_directives_block()
@@ -270,10 +269,10 @@ class PbsScript(object):
         return render_string
 
     def write(self, path):
-        """Write a render()'d PBS Script to a file.
+        """Render the PBS Script and write to given file.
 
         Args:
-            path (str): File to write out
+            path (str): File to write out to.
         """
         render_string = self.render()
         # Open the file
