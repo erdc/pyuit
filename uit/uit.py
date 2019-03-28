@@ -166,7 +166,7 @@ class Client:
         """Generate Authorization URL with UIT Server.
 
         Example:
-        https://uit.erdc.dren.mil/uapi/authorize?client_id=e01012b4-ab2c-4d95-83b3-26600a13ee0c&scope=UIT&state=2342342
+        https://www.uitplus.hpc.mil/uapi/authorize?client_id=e01012b4-ab2c-4d95-83b3-26600a13ee0c&scope=UIT&state=2342342
 
         Returns:
             str: Authorization URL.
@@ -527,7 +527,7 @@ def start_server(auth_func, config_file):
 
         html_template = """
         <!doctype html>
-        <title>UIT Authentication Succeeded</title>
+        <title styles="margin: auto;">UIT Authentication Succeeded</title>
         """
         shutdown_server()
         return render_template_string(html_template)
