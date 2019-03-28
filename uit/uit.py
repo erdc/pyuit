@@ -32,7 +32,7 @@ DEFAULT_CA_FILE = os.path.join(pkg_dir, "data", "DoD_CAs.pem")
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 
 _auth_code = None
-
+_token = None
 
 class Client:
     """Provides a python abstraction for interacting with the UIT API.
@@ -86,7 +86,7 @@ class Client:
 
         if (self.client_id is None or self.client_secret is None) and self.token is None:
             with open(self.config_file, 'r') as f:
-                self.config = yaml.load(f)
+                self.config = yaml.safe_load(f)
                 self.client_id = self.config.get('client_id')
                 self.client_secret = self.config.get('client_secret')
 
@@ -183,7 +183,7 @@ class Client:
         return url + '?' + urlencode(data)
 
     def get_token(self, auth_code=None):
-        """Get tokens from the UIT server.
+        """Get token from the UIT server.
 
         Args:
             auth_code (str): The authentication code to use.
@@ -213,7 +213,6 @@ class Client:
             'code': self._auth_code
         }
 
-        # get the token
         token = requests.post(url, data=data, verify=self.ca_file)
 
         # check the response
@@ -222,60 +221,29 @@ class Client:
         else:
             raise IOError('Token request failed.')
 
-        token = token.json()
-
-        # python does not appear to like the trailing 'Z' on the ISO formatted
-        #  expiration dates.  we slice the last char off.
-        token['access_token_expires_on'] = token['access_token_expires_on'][:-1]
-        token['refresh_token_expires_on'] = token['refresh_token_expires_on'][:-1]
-        # save token to config file
-        self.save_token(token)
+        # assign token to global namespace
+        global _token
+        _token = token.json()['access_token']
 
     def load_token(self):
-        """Load a token from the config file.
+        """Load a token from the global namespace.
 
         Returns:
             str: The access token.
         """
+        
         if self.token is not None:
             return self.token
-        with open(self.config_file, 'r') as f:
-            config = yaml.load(f)
-            tokens = config.get('tokens')
-            if tokens is None:
-                return None
 
-            now = datetime.now()
-            for token in tokens:
-                expires_on = datetime.strptime(token['access_token_expires_on'], "%Y-%m-%dT%H:%M:%S.%f")
-                if expires_on > now:
-                    return token['access_token']
+        global _token
+        return _token
 
-    def clear_tokens(self):
-        """Remove all tokens from config file."""
+    def clear_token(self):
+        """Remove token from global namespace."""
         # clear tokens saved in config file
-        with open(self.config_file, 'r') as f:
-            config = yaml.load(f)
-
-        config.pop('tokens', None)
-        with open(self.config_file, 'w') as f:
-            yaml.dump(config, f)
-
-    def save_token(self, token):
-        """Save a token to the config file.
-
-        Args:
-            token (str): Token to save.
-        """
-        with open(self.config_file, 'r') as f:
-            config = yaml.load(f)
-
-        if config.get('tokens') is None:
-            config['tokens'] = []
-
-        config['tokens'].append(token)
-        with open(self.config_file, 'w') as f:
-            yaml.dump(config, f)
+        global _token
+        _token = None
+        self.token = None
 
     def get_userinfo(self):
         """Get User Info from the UIT server."""
@@ -557,14 +525,9 @@ def start_server(auth_func, config_file):
         _auth_code = request.args.get('code')
         auth_func(auth_code=_auth_code)
 
-        context = {'auth_code': _auth_code, 'config_file': config_file}
-
         html_template = """
         <!doctype html>
         <title>UIT Authentication Succeeded</title>
-        <h1>UIT Authentication Succeeded!</h1>
-        <h2>Successfully retrieved Authentication Code: {{ auth_code }}</h2>
-        <h2>Access Token Saved to {{ config_file }}</h2>
         """
         shutdown_server()
-        return render_template_string(html_template, **context)
+        return render_template_string(html_template)
