@@ -1,0 +1,14 @@
+#!/bin/bash
+ 
+## Required PBS Directives --------------------------------
+#PBS -N {job_name}
+#PBS -A {subproject}
+#PBS -q debug
+#PBS -l select=1:ncpus=36:mpiprocs=1
+#PBS -l walltime=1
+ 
+## Optional Directives -----------------------------
+ 
+## Modules --------------------------------------
+ 
+echo Hello World!
