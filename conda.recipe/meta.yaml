@@ -1,6 +1,8 @@
+{% set data = load_setup_py_data() %}
+
 package:
-  name: uit
-  version: 0.1.0
+  name: {{ data['name'] }}
+  version: {{ data['version'] }}
 
 source:
   path: ..
@@ -18,6 +20,17 @@ requirements:
     - setuptools
   run:
     - python
+      # dependencies are defined in setup.py
+      {% for dep in data['install_requires'] %}
+      - {{ dep.lower() }}
+      {% endfor %}
+      {% for dep in data['extras_requires']['recommended'] %}
+      - {{ dep.lower() }}
+      {% endfor %}
+
+test:
+  imports:
+    - uit
 
 about:
   home: https://github.com/dharhas/uit

@@ -1,5 +1,5 @@
 import unittest
-import mock
+from unittest import mock
 
 from uit.pbs_script import PbsScript
 

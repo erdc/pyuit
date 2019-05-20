@@ -1,8 +1,7 @@
 linters:
   flake8:
-    ignore: 'E501'
-    max-line-length: 120
-    # fixer: true
+    python: 3
+    config: ./tox.ini
   pep8:
     max-line-length: 120
     # fixer: true

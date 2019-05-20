@@ -6,6 +6,7 @@
 * Copyright: (c) Aquaveo 2018
 ********************************************************************************
 """
+from functools import wraps
 from .exceptions import DpRouteError
 
 
@@ -14,6 +15,7 @@ def robust(retries=3):
     Robust wrapper for client methods. Will retry, reties times if failed due to DP routing error.
     """  # noqa: E501
     def wrap(func):
+        @wraps(func)
         def wrap_f(*args, **kwargs):
             attempts = 1
 
@@ -45,3 +47,42 @@ def robust(retries=3):
                                                                                            last_exception))
         return wrap_f
     return wrap
+
+
+class HpcEnv:
+    """
+    A dictionary-like object that stores environmental variables from an HPC system.
+    """
+
+    def __init__(self, client):
+        self.client = client
+        self._env = dict()
+
+    def __getitem__(self, item):
+        return self.get(item)
+
+    def __getattr__(self, item):
+        return self.get(item)
+
+    def __str__(self):
+        return self._env.__str__()
+
+    def __repr__(self):
+        return self._env.__repr__()
+
+    def get(self, item, default=None):
+        if self._env.get(item) is None:
+            self._env[item] = self.get_environmental_variable(item)
+        return self._env.get(item) or default
+
+    def get_environmental_variable(self, env_var_name, update=False):
+        if not self.client.connected:
+            raise RuntimeError('Must connect to system before accessing environmental variables.')
+
+        if update or self._env.get(env_var_name) is None:
+            self._env[env_var_name] = self.client.call(
+                command=f'echo ${env_var_name}',
+                working_dir='.',
+            ).strip() or None
+
+        return self._env.get(env_var_name)

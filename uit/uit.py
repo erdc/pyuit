@@ -1,38 +1,37 @@
-from __future__ import absolute_import
-from __future__ import print_function
-
-import uuid
-import os
 import json
-import requests
-import io
-import yaml
-from datetime import datetime
-import threading
+import os
 import random
+import threading
 import tempfile
+import uuid
+from functools import wraps
+from pathlib import PosixPath, Path
+from urllib.parse import urljoin, urlencode  # noqa: F401
+
+import dodcerts
+import requests
+import yaml
 from flask import Flask, request, render_template_string
-from uit.pbs_script import PbsScript
-from uit.util import robust
-
-
-try:
-    # Python 3
-    # noinspection PyCompatibility
-    from urllib.parse import urljoin, urlparse, parse_qs, urlencode  # noqa: F401
-except ImportError:
-    # Python 2
-    from urlparse import urljoin, urlparse, parse_qs, urlencode  # noqa: F401
-
 from werkzeug.serving import make_server
 
+from .pbs_script import PbsScript
+from .util import robust, HpcEnv
+
+# optional dependency
+try:
+    import pandas as pd
+    has_pandas = True
+except ImportError:
+    has_pandas = False
+
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
-pkg_dir, _ = os.path.split(__file__)
-DEFAULT_CA_FILE = os.path.join(pkg_dir, "data", "DoD_CAs.pem")
+DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
+HPC_SYSTEMS = ['topaz', 'onyx']
 
 _auth_code = None
 _token = None
+
 
 class Client:
     """Provides a python abstraction for interacting with the UIT API.
@@ -74,6 +73,10 @@ class Client:
         self._user = None
         self._userinfo = None
         self._username = None
+        self._callback = None
+
+        # Environmental variable cache
+        self.env = HpcEnv(self)
 
         if self.config_file is None:
             self.config_file = DEFAULT_CONFIG_FILE
@@ -98,7 +101,87 @@ class Client:
         if session_id is None:
             self.session_id = os.urandom(16).hex()
 
-    def authenticate(self, notebook=None, width=800, height=800):
+    def _ensure_connected(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not self.connected:
+                raise RuntimeError(f'Must connect to a system before running "{func.__name__}". '
+                                   f'Run "Client.connect" to connect to a system.')
+
+            return func(self, *args, **kwargs)
+        return wrapper
+
+    @property
+    def HOME(self):
+        return PosixPath(self.env.HOME)
+
+    @property
+    def WORKDIR(self):
+        return PosixPath(self.env.WORKDIR)
+
+    @property
+    def WORKDIR2(self):
+        return PosixPath(self.env.WORKDIR2)
+
+    @property
+    def CENTER(self):
+        return PosixPath(self.env.CENTER)
+
+    @property
+    def login_node(self):
+        return self._login_node
+
+    @property
+    def login_nodes(self):
+        return self._login_nodes
+
+    @property
+    def system(self):
+        return self._system
+
+    @property
+    def systems(self):
+        return self._systems
+
+    @property
+    def uit_url(self):
+        return self._uit_url
+
+    @property
+    def uit_urls(self):
+        return self._uit_urls
+
+    @property
+    def user(self):
+        return self._user
+
+    @property
+    def userinfo(self):
+        return self._userinfo
+
+    @property
+    def username(self):
+        return self._username
+
+    def _do_callback(self, *args):
+        if self._callback:
+            try:
+                self._callback(*args)
+            except Exception as e:
+                print(e)
+
+    def _as_df(self, data):
+        if not has_pandas:
+            raise RuntimeError('"as_df" cannot be set to True unless the Pandas module is installed.')
+        return pd.DataFrame(data)
+
+    def _resolve_path(self, path, default=None):
+        path = path or default
+        if isinstance(path, Path):
+            return path.as_posix()
+        return path
+
+    def authenticate(self, notebook=None, width=800, height=800, callback=None):
         """Ensure we have an access token. Request one from the user if we do not.
 
         Args:
@@ -106,10 +189,12 @@ class Client:
             width (int): Width to make the notebook widget.
             height (int): Height to make the notebook widget.
         """
+        self._callback = callback
         # check if we have available tokens/refresh tokens
         token = self.load_token()
         if token:
             print('access token available, no auth needed')
+            self._do_callback(True)
             return
 
         # start flask server
@@ -143,7 +228,7 @@ class Client:
         self.get_userinfo()
 
         if all([system, login_node]) or not any([system, login_node]):
-            raise ValueError('Please specify at one of system or login_node and not both')
+            raise ValueError('Please specify at least one of system or login_node and not both')
 
         if login_node is None:
             # pick random login node for system
@@ -199,7 +284,6 @@ class Client:
             global _auth_code
             if _auth_code:
                 self._auth_code = _auth_code
-                # stop_server()  # TODO: Check if this is still needed
             else:
                 raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
                                    'Then set the auth_code')
@@ -224,6 +308,7 @@ class Client:
         # assign token to global namespace
         global _token
         _token = token.json()['access_token']
+        self._do_callback(True)
 
     def load_token(self):
         """Load a token from the global namespace.
@@ -231,7 +316,7 @@ class Client:
         Returns:
             str: The access token.
         """
-        
+
         if self.token is not None:
             return self.token
 
@@ -285,29 +370,41 @@ class Client:
         username = self._userinfo['SYSTEMS'][self._system.upper()]['USERNAME']
         return uit_url, username
 
+    @_ensure_connected
     @robust()
-    def call(self, command, work_dir):
+    def call(self, command, working_dir=None, full_response=False):
         """Execute commands on the HPC via the exec endpoint.
 
         Args:
-           command (str): The command to run.
-           work_dir (str): Working directory from which to run the command.
+            command (str): The command to run.
+            working_dir (str, optional, default=None): Working directory from which to run the command.
+                If None the the users $HOME directory will be used
+            full_response(bool, default=False):
+                If True return the full JSON response from the UIT+ server.
 
         Returns:
             str: stdout from the command.
         """
+        # Need to do this manually to prevent recursive loop when resolving self.home
+        working_dir = working_dir or self.HOME
+
+        working_dir = self._resolve_path(working_dir)
+
         # construct the base options dictionary
-        data = {'command': command, 'workingdir': work_dir}
+        data = {'command': command, 'workingdir': working_dir}
         data = {'options': json.dumps(data)}
         r = requests.post(urljoin(self._uit_url, 'exec'), headers=self._headers, data=data, verify=self.ca_file)
         resp = r.json()
+        if full_response:
+            return resp
         if resp.get('success') == 'true':
-            return resp.get('stdout')
+            return resp.get('stdout') + resp.get('stderr')
         else:
             raise RuntimeError('UIT Command failed with response: ', resp)
 
+    @_ensure_connected
     @robust()
-    def put_file(self, local_path, remote_path):
+    def put_file(self, local_path, remote_path=None):
         """Put files on the HPC via the putfile endpoint.
 
         Args:
@@ -317,15 +414,20 @@ class Client:
         Returns:
             str: API response as json
         """
+        local_path = Path(local_path)
+        assert local_path.is_file()
+        filename = local_path.name
+        remote_path = self._resolve_path(remote_path, self.HOME / filename)
         data = {'file': remote_path}
         data = {'options': json.dumps(data)}
-        files = {'file': open(local_path, 'rb')}
+        files = {'file': local_path.open(mode='rb')}
         r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self._headers, data=data, files=files,
                           verify=self.ca_file)
         return r.json()
 
+    @_ensure_connected
     @robust()
-    def get_file(self, remote_path, local_path):
+    def get_file(self, remote_path, local_path=None):
         """Get a file from the HPC via the getfile endpoint.
 
         Args:
@@ -335,6 +437,11 @@ class Client:
         Returns:
             str: local_path
         """
+        if local_path is None:
+            remote_path = PosixPath(remote_path)
+            filename = remote_path.name
+            local_path = Path() / filename
+        remote_path = self._resolve_path(remote_path)
         data = {'file': remote_path}
         data = {'options': json.dumps(data)}
         r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self._headers, data=data, verify=self.ca_file,
@@ -348,99 +455,101 @@ class Client:
                     f.write(chunk)
         return local_path
 
+    @_ensure_connected
     @robust()
-    def list_dir(self, path=None, system=None, login_node=None):  # TODO: Ensure we can remove unused 'system' arg
+    def list_dir(self, path=None, parse=True, as_df=False):
         """Get a detailed directory listing from the HPC via the listdirectory endpoint.
 
         Args:
             path (str): Directory to list
-            system (str): System to connect to. (Unused)
-            login_node: Node to connect to. If None, a random one is chosen.
 
         Returns:
             str: The API response as JSON
         """
-        uit_url, username = self.get_uit_url(login_node=login_node)
-        if path is None:
-            path = os.path.join('/p/home', username)
+        path = self._resolve_path(path, self.HOME)
+
+        if not parse:
+            return self.call(f'ls -la {path}')
 
         data = {'directory': path}
         data = {'options': json.dumps(data)}
         r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self._headers, data=data,
                           verify=self.ca_file)
+        result = r.json()
+
+        if as_df and 'path' in result:
+            ls = result['dirs']
+            ls.extend(result['files'])
+            return self._as_df(ls)
         return r.json()
 
-    # TODO: Remove this and use the PbsScript class
-    def create_submit_script(self, hpc_subproject, nodes, project_name, job_type='adh', queue='standard',
-                             walltime='01:00:00', path=None, filename='submit_pbs', job_name='default',
-                             output_file='adh.out', email=None):
-        """Method to create a simple PBS submit script for ERDC HPC systems (currently only supporting Topaz and AdH).
+    @_ensure_connected
+    @robust()
+    def show_usage(self, parse=True, as_df=False):
+        """Get output from the `show_usage` command, which shows the subproject IDs
 
         Args:
-            hpc_subproject (str): HPC System subproject (e.g. ERDCV00898ADH)
-            nodes (int): Total number of nodes to run on (not processors)
-            project_name (str): Root filename for AdH simulation (without extension)
-            job_type (str): Type of job being submitted (default='adh'). AdH is the only type supported currently.
-            queue (str): Queue in which to submit (default='standard')
-            walltime (str): Walltime for this job (default='01:00:00')
-            path (str): Directory in which to save the submit script (default=cwd)
-            filename (str): Filename for the submit script (default='submit_pbs')
-            job_name (str): Job name in the PBS system (default='default')
-            output_file (str): Output filename for the run output (default='adh.out')
-            email (str): Email to send notifications to (default=None)
+            parse(bool, optional, default=True): return results parsed into a list of dicts rather than as a raw string.
+
+        Returns:
+            str: The API response
         """
+        result = self.call('show_usage')
+        if not parse:
+            return result
 
-        # if no path given, use cwd
-        if path is None:
-            path = os.getcwd()
+        lines = result.splitlines()
+        usage = [{
+            'system': j[0],
+            'subproject': j[1],
+            'hours_allocated': j[2],
+            'hours_used': j[3],
+            'hours_remaining': j[4],
+            'percent_remaining': j[5],
+            'background_hours_used': j[6]
+        } for j in [i.split() for i in lines[8:-1]]]
 
-        # if TOPAZ
-        if self._system.upper() == 'TOPAZ':
-            # set the number of mpi procs per node
-            mpiprocs = 36
-            # calculate the number of procs
-            procs = mpiprocs * nodes
+        if as_df:
+            return self._as_df(usage)
+        return usage
 
-            if job_type == 'adh':
-                # set the path to the executable
-                exe_path = '$PROJECTS_HOME/AdH_SW/adh_V5_BETA'
-                # create the run string
-                launch_string = 'mpiexec_mpt -np ' + str(procs) + ' ' + \
-                                exe_path + ' ' + project_name + ' > ' + output_file
-            else:
-                raise IOError('Job type other than AdH is not supported.')
+    @_ensure_connected
+    @robust()
+    def status(self, username=None, job_id=None, parse=True, as_df=False):
+        username = username if username is not None else self.username
 
-        else:
-            raise IOError('System {} not recognized. Cannot create submit script.'.format(self._system))
+        cmd = 'qstat -H'
+        if username:
+            cmd += f' -u {username}'
+        if job_id:
+            cmd += f' {job_id}'
 
-        # Open the file
-        full_path = os.path.join(path, filename)
-        outfile = io.open(full_path, 'w', newline='\n')
+        result = self.call(cmd)
+        if not parse:
+            return result
 
-        outfile.write('#!/bin/bash \n')
-        outfile.write('##Required PBS Directives -------------------------------------- \n')
-        outfile.write('#PBS -A {} \n'.format(hpc_subproject))
-        outfile.write('#PBS -q {} \n'.format(queue))
-        outfile.write('#PBS -l select={}:ncpus={}:mpiprocs={} \n'.format(nodes, mpiprocs, mpiprocs))
-        outfile.write('#PBS -l walltime={} \n'.format(walltime))
-        outfile.write('#PBS -j oe \n')
-        outfile.write('#PBS -N {} \n'.format(job_name))
-        if email:
-            outfile.write('#PBS -m e \n')
-            outfile.write('#PBS -M {} \n'.format(str(email)))
-        outfile.write(' \n')
-        outfile.write('## Execution Block ---------------------------------------------- \n')
-        outfile.write('# Environment Setup \n')
-        outfile.write('# cd to your scratch directory in /work \n')
-        outfile.write('cd $PBS_O_WORKDIR \n')
-        outfile.write(' \n')
-        outfile.write('## Launching ----------------------------------------------------- \n')
-        outfile.write('{} \n'.format(launch_string))
-        outfile.write(' \n')
-        outfile.write('END \n')
-        outfile.write(' \n')
+        lines = result.split('--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----\n')
+        lines = lines[-1].splitlines()
+        jobs = [dict(
+            job_id=values[0],
+            username=values[1],
+            queue=values[2],
+            jobname=values[3],
+            session_id=values[4],
+            nds=values[5],
+            tsk=values[6],
+            requested_memory=values[7],
+            requested_time=values[8],
+            status=values[9],
+            elapsed_time=values[10],
+        ) for values in [i.split() for i in lines]]
 
-    def submit(self, pbs_script, working_dir, remote_name='run.pbs', local_temp_dir=''):
+        if as_df:
+            return self._as_df(jobs)
+        return jobs
+
+    @_ensure_connected
+    def submit(self, pbs_script, working_dir=None, remote_name='run.pbs', local_temp_dir=None):
         """Submit a PBS Script.
 
         Args:
@@ -452,21 +561,23 @@ class Client:
         Returns:
             bool: True if job submitted successfully.
         """
-        if not self.connected:
-            raise RuntimeError('Must connect to system before submitting.')
+        working_dir = self._resolve_path(working_dir, self.WORKDIR)
 
-        if not local_temp_dir:
-            pbs_script_path = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
-        else:
+        if local_temp_dir:
             pbs_script_path = os.path.join(local_temp_dir, str(uuid.uuid4()))
+        else:
+            pbs_script_path = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
 
         # Write out PbsScript tempfile
         if isinstance(pbs_script, PbsScript):
             pbs_script.write(pbs_script_path)
         else:
-            pbs_script_text = pbs_script
-            with open(pbs_script_path, 'w') as f:
-                f.write(pbs_script_text)
+            if Path(pbs_script).is_file():
+                pbs_script_path = pbs_script
+            else:
+                pbs_script_text = pbs_script
+                with open(pbs_script_path, 'w') as f:
+                    f.write(pbs_script_text)
 
         # Transfer script to supercomputer using put_file()
         ret = self.put_file(pbs_script_path, os.path.join(working_dir, remote_name))
@@ -484,6 +595,7 @@ class Client:
         os.remove(pbs_script_path)
 
         return job_id.strip()
+
 
 ############################################################
 # Simple Flask Server to retrieve auth_code & access_token #
@@ -520,14 +632,32 @@ def start_server(auth_func, config_file):
         """
         WebHook to parse auth_code from url and retrieve access_token
         """
-
+        hidden = 'hidden'
         global _auth_code, _auth_url
-        _auth_code = request.args.get('code')
-        auth_func(auth_code=_auth_code)
+        try:
+            _auth_code = request.args.get('code')
+            auth_func(auth_code=_auth_code)
 
-        html_template = """
+            status = 'Succeeded'
+            msg = ''
+
+        except Exception as e:
+            status = 'Failed'
+            msg = str(e)
+        finally:
+            shutdown_server()
+
+        html_template = f"""
         <!doctype html>
-        <title styles="margin: auto;">UIT Authentication Succeeded</title>
+        <head>
+            <title>UIT Authentication {status}</title>
+        </head>
+        <body>
+            <h1 style="margin: 50px 182px;">UIT Authentication {status}</h1>
+            <div {hidden}>{msg}</div>
+        </body>
+
         """
-        shutdown_server()
         return render_template_string(html_template)
+
+    return server
