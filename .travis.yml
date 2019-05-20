@@ -16,7 +16,7 @@ install:
   - conda install anaconda-client
   - conda install pytest-cov
   - pip install coveralls
-  - conda build .
+  - conda build -c erdc .
   - conda install --use-local uit
   - conda info -a
 script:

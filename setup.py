@@ -1,7 +1,7 @@
 from setuptools import setup
 
 install_requires = [
-    'flask', 'PyYAML', 'requests'
+    'flask', 'PyYAML', 'requests',
 ]
 
 extras_require = dict()
