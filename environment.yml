@@ -11,7 +11,14 @@ channels:
 
 dependencies:
   - flask
-  - jupyter
   - pyyaml
   - requests
   - dodcerts
+
+  # for notebooks
+  - jupyter
+  - jupyterlab
+
+  # for tests
+  - pytest
+  - pytest-cov
