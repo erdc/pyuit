@@ -21,30 +21,6 @@ class TestUIT(unittest.TestCase):
         # call the method
         self.assertEqual('test_token', client.load_token())
 
-    @mock.patch('builtins.open')
-    @mock.patch('yaml.load')
-    def test_load_token_config(self, mock_load, __):
-        from datetime import datetime
-        from datetime import timedelta
-        client = Client(client_id='C001', client_secret='S001')
-        mock_config = mock.MagicMock()
-        mock_load.return_value = mock_config
-        test_dt = datetime.now() + timedelta(days=1)
-        test_dt_converted = test_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
-        mock_config.get.return_value = [{'access_token_expires_on': test_dt_converted, 'access_token': 'foo'}]
-        # call the method
-        self.assertEqual('foo', client.load_token())
-
-    @mock.patch('builtins.open')
-    @mock.patch('yaml.load')
-    def test_load_token_config_none(self, mock_load, __):
-        client = Client(client_id='C001', client_secret='S001')
-        mock_config = mock.MagicMock()
-        mock_load.return_value = mock_config
-        mock_config.get.return_value = None
-        # call the method
-        self.assertIsNone(client.load_token())
-
     @mock.patch('uit.uit.Client.call')
     @mock.patch('uit.uit.Client.put_file')
     def test_submit(self, _, mock_call):
