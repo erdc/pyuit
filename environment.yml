@@ -18,6 +18,7 @@ dependencies:
   # for notebooks
   - jupyter
   - jupyterlab
+  - pandas
 
   # for tests
   - pytest

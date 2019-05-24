@@ -2,7 +2,6 @@ import collections
 import os
 import io
 
-
 PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
 
@@ -279,3 +278,50 @@ class PbsScript(object):
         full_path = os.path.join(path)
         with io.open(full_path, 'w', newline='\n') as outfile:
             outfile.write(render_string)
+
+    # def submit(self, client, working_dir=None, remote_name=None, local_temp_dir=''):
+    #     """Submit a PBS Script.
+    #
+    #     Args:
+    #         pbs_script(PbsScript or str): PbsScript instance or string containing PBS script.
+    #         working_dir(str): Path to working dir on supercomputer in which to run pbs script.
+    #         remote_name(str): Custom name for pbs script on supercomputer. Defaults to "run.pbs".
+    #         local_temp_dir(str): Path to local temporary directory if unable to write to os temp dir.
+    #
+    #     Returns:
+    #         bool: True if job submitted successfully.
+    #     """
+    #     client = client or client  # TODO: self.client
+    #     # TODO: check to make sure system on client is compatible with self.system
+    #
+    #     remote_id = str(uuid.uuid4())  # TODO: self.remote_id
+    #     # print(remote_id)
+    #
+    #     working_dir = working_dir or client.WORKDIR + f'/{self.name}'
+    #     client.call(f'mkdir -p {working_dir}')
+    #
+    #     remote_name = f'{self.name}_run.pbs'
+    #
+    #     local_temp_dir = local_temp_dir or tempfile.gettempdir()
+    #
+    #     pbs_script_path = os.path.join(local_temp_dir, remote_id)
+    #
+    #     # Write out PbsScript tempfile
+    #     self.write(pbs_script_path)
+    #
+    #     # Transfer script to supercomputer using put_file()
+    #     ret = client.put_file(pbs_script_path, os.path.join(working_dir, remote_name))
+    #
+    #     if 'success' in ret and ret['success'] == 'false':
+    #         raise RuntimeError('An exception occurred while submitting job script: {}'.format(ret['error']))
+    #
+    #     # Submit the script using call() with qsub command
+    #     try:
+    #         job_id = client.call('qsub {}'.format(remote_name), working_dir)
+    #     except RuntimeError as e:
+    #         raise RuntimeError('An exception occurred while submitting job script: {}'.format(str(e)))
+    #
+    #     # Clean up (remove temp files)
+    #     os.remove(pbs_script_path)
+    #
+    #     return job_id.strip()
