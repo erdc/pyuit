@@ -47,7 +47,7 @@ class Client:
         token (str): Token from current UIT authorization.
     """
     def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
-                 token=None):
+                 token=None, port=5000):
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
 
@@ -55,8 +55,10 @@ class Client:
         self.client_id = client_id
         self.client_secret = client_secret
         self.config_file = config_file
+        self.session_id = session_id
         self.scope = scope
         self.token = token
+        self.port = port
 
         # Set attribute defaults
         self.connected = False
@@ -181,13 +183,13 @@ class Client:
             return path.as_posix()
         return path
 
-    def authenticate(self, notebook=None, width=800, height=800, callback=None):
+    def authenticate(self, inline=None, width=800, height=800, callback=None):
         """Ensure we have an access token. Request one from the user if we do not.
 
         Args:
-            notebook (bool): Flag to indicate we are running in a Jupyter Notebook.
-            width (int): Width to make the notebook widget.
-            height (int): Height to make the notebook widget.
+            inline (bool): Flag to show authentication site as an inline IFrame rather then opening in a browser tab.
+            width (int): Width to make the inline widget.
+            height (int): Height to make the inline widget.
             callback (func): Function to call once authentication process has happened. Should accept a boolean
                 representing the authenticated status (i.e. True means authentication was successful).
         """
@@ -200,10 +202,10 @@ class Client:
             return
 
         # start flask server
-        start_server(self.get_token, self.config_file)
+        start_server(self.get_token, self.port)
 
         auth_url = self.get_auth_url()
-        if notebook:
+        if inline:
             import IPython
             return IPython.display.IFrame(auth_url, width, height)
 
@@ -375,7 +377,7 @@ class Client:
 
     @_ensure_connected
     @robust()
-    def call(self, command, working_dir=None, full_response=False):
+    def call(self, command, working_dir=None, full_response=False, raise_on_error=True):
         """Execute commands on the HPC via the exec endpoint.
 
         Args:
@@ -384,6 +386,8 @@ class Client:
                 If None the the users $HOME directory will be used
             full_response(bool, default=False):
                 If True return the full JSON response from the UIT+ server.
+            raise_on_error(bool, default=True):
+                If True then an error is raised if the call is not successful.
 
         Returns:
             str: stdout from the command.
@@ -402,8 +406,10 @@ class Client:
             return resp
         if resp.get('success') == 'true':
             return resp.get('stdout') + resp.get('stderr')
-        else:
+        elif raise_on_error:
             raise RuntimeError('UIT Command failed with response: ', resp)
+        else:
+            return 'ERROR!\n' + resp.get('stdout') + resp.get('stderr')
 
     @_ensure_connected
     @robust()
@@ -595,9 +601,9 @@ class Client:
 
 
 class ServerThread(threading.Thread):
-    def __init__(self, app):
+    def __init__(self, app, port):
         threading.Thread.__init__(self)
-        self.srv = make_server('127.0.0.1', 5000, app)
+        self.srv = make_server('127.0.0.1', port, app)
         self.ctx = app.app_context()
         self.ctx.push()
 
@@ -608,9 +614,9 @@ class ServerThread(threading.Thread):
         self.srv.shutdown()
 
 
-def start_server(auth_func, config_file):
+def start_server(auth_func, port=5000):
     app = Flask('get_uit_token')
-    server = ServerThread(app)
+    server = ServerThread(app, port)
     server.start()
 
     def shutdown_server():

@@ -13,8 +13,8 @@ extras_require['examples'] = (['jupyter'])
 extras_require['tests'] = (['pytest', 'flake8'])
 
 setup(
-    name='uit',
-    version='0.3.0a1',
+    name='pyuit',
+    version='0.3.0a2',
     description="Python wrapper for DoD HPCMP UIT+ rest interface",
     author="Dharhas Pothina",
     author_email='dharhas.pothina@erdc.dren.mil',

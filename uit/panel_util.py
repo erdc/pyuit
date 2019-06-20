@@ -65,7 +65,7 @@ class HpcConnection(param.Parameterized):
     @param.depends('authenticated', 'connected')
     def view(self):
         if not self.authenticated:
-            return pn.Column(self.uit_client.authenticate(notebook=True, callback=self.update_authenticated))
+            return pn.Column(self.uit_client.authenticate(inline=True, callback=self.update_authenticated))
         elif not self.connected:
             system_pn = pn.Pane(self, parameters=['system'], show_name=False, name='HPC System')
             advanced_pn = pn.Pane(
@@ -118,7 +118,7 @@ class Solve(SimulationInput):
         self.uit_client = uit.Client()
 
         # authenticate to the uit server
-        result = self.uit_client.authenticate(notebook=self.notebook)
+        result = self.uit_client.authenticate(inline=self.notebook)
 
         # return an iFrame for authentication if notebook
         if self.notebook:
@@ -340,3 +340,11 @@ class JobMonitor(param.Parameterized):
             pn.panel(self.status_panel, name='Status'),
             pn.panel(self.logs_panel, name='Logs'),
         )
+
+
+class FileManager(param.Parameterized):
+    uit_client = param.ClassSelector(Client)
+    files = param.MultiFileSelector()
+
+    def panel(self):
+        return pn.panel(self.param.files)
