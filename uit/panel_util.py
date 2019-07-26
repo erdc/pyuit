@@ -19,9 +19,11 @@ class HpcConnection(param.Parameterized):
     connect_btn = param.Action(lambda self: self.connect(), label='Connect')
     disconnect_btn = param.Action(lambda self: self.disconnect(), label='Disconnect')
     connection_status = param.String(default='Not Connected', label='Status')
+    auth_code = param.String(default='', label='Code')
 
-    def __init__(self, uit_client=None, **params):
+    def __init__(self, uit_client=None, web_based=True, **params):
         super().__init__(**params)
+        self.web_based = web_based
         self.uit_client = uit_client or Client()
         self.update_node_options()
 
@@ -44,6 +46,10 @@ class HpcConnection(param.Parameterized):
             self.connect()
         return self.uit_client
 
+    @param.depends('auth_code', watch=True)
+    def get_token(self):
+        self.uit_client.get_token(auth_code=self.auth_code)
+
     def connect(self):
         system = None if self.login_node is not None else self.system
         self.connection_status = self.uit_client.connect(
@@ -65,7 +71,10 @@ class HpcConnection(param.Parameterized):
     @param.depends('authenticated', 'connected')
     def view(self):
         if not self.authenticated:
-            return pn.Column(self.uit_client.authenticate(inline=True, callback=self.update_authenticated))
+            auth_frame = self.uit_client.authenticate(inline=True, callback=self.update_authenticated)
+            if self.web_based:
+                return pn.Column(auth_frame)
+            return pn.Column(self.param.auth_code, auth_frame)
         elif not self.connected:
             system_pn = pn.Pane(self, parameters=['system'], show_name=False, name='HPC System')
             advanced_pn = pn.Pane(

@@ -30,7 +30,6 @@ DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 HPC_SYSTEMS = ['topaz', 'onyx']
 
 _auth_code = None
-_token = None
 
 
 class Client:
@@ -195,8 +194,8 @@ class Client:
         """
         self._callback = callback
         # check if we have available tokens/refresh tokens
-        token = self.load_token()
-        if token:
+
+        if self.token:
             print('access token available, no auth needed')
             self._do_callback(True)
             return
@@ -223,10 +222,9 @@ class Client:
         """
         # get access token from file
         # populate userinfo and header info
-        token = self.load_token()
-        if token is None:
+        if self.token is None:
             raise RuntimeError('No Valid Access Tokens Found, Please run authenticate() function and try again')
-        self._headers = {'x-uit-auth-token': token}
+        self._headers = {'x-uit-auth-token': self.token}
 
         # retrieve user info
         self.get_userinfo()
@@ -281,17 +279,13 @@ class Client:
 
         url = urljoin(UIT_API_URL, 'token')
 
-        if auth_code:
-            self._auth_code = auth_code
+        global _auth_code
+        self._auth_code = auth_code or _auth_code
 
         # check for auth_code
         if self._auth_code is None:
-            global _auth_code
-            if _auth_code:
-                self._auth_code = _auth_code
-            else:
-                raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
-                                   'Then set the auth_code')
+            raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
+                               'Then set the auth_code')
 
         # set up the data dictionary
         data = {
@@ -310,30 +304,8 @@ class Client:
         else:
             raise IOError('Token request failed.')
 
-        # assign token to global namespace
-        global _token
-        _token = token.json()['access_token']
+        self.token = token.json()['access_token']
         self._do_callback(True)
-
-    def load_token(self):
-        """Load a token from the global namespace.
-
-        Returns:
-            str: The access token.
-        """
-
-        if self.token is not None:
-            return self.token
-
-        global _token
-        return _token
-
-    def clear_token(self):
-        """Remove token from global namespace."""
-        # clear tokens saved in config file
-        global _token
-        _token = None
-        self.token = None
 
     def get_userinfo(self):
         """Get User Info from the UIT server."""
@@ -631,7 +603,7 @@ def start_server(auth_func, port=5000):
         WebHook to parse auth_code from url and retrieve access_token
         """
         hidden = 'hidden'
-        global _auth_code, _auth_url
+        global _auth_code
         try:
             _auth_code = request.args.get('code')
             auth_func(auth_code=_auth_code)
