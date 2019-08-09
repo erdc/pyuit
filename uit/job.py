@@ -59,8 +59,9 @@ class PbsJob:
         return self.job_id
 
     def update_status(self):
-        status = self.client.status(self.job_id)
+        status = self.client.status(self.job_id)[0]
         self._status = status['status']
+        return self.status
 
     def _get_log(self, log_type, filename=None):
         stdout_log = self.working_dir / f'{self.name}.{log_type}{self.job_number}'

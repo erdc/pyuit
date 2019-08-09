@@ -486,20 +486,50 @@ class Client:
 
     @_ensure_connected
     @robust()
-    def status(self, job_id=None, username=None, parse=True, as_df=False):
+    def status(self, job_id=None, username=None, full=False, with_historic=False, parse=True, as_df=False):
         username = username if username is not None else self.username
 
-        cmd = 'qstat -H'
-        if username:
+        cmd = 'qstat'
+
+        if full:
+            cmd += ' -f -F json'
+        elif username:
             cmd += f' -u {username}'
+
         if job_id:
             if isinstance(job_id, (tuple, list)):
                 job_id = ' '.join(job_id)
-            cmd += f' {job_id}'
+            cmd += f' -x {job_id}'
+            return self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
+        else:
+            # If no jobs are specified then
+            result1 = self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
+            if not with_historic:
+                return result1
+            else:
+                cmd += ' -x'
+                result2 = self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
 
+                if not parse:
+                    return result1, result2
+                elif as_df:
+                    return pd.concat((result1, result2))
+                else:
+                    result1.extend(result2)
+                    return result1
+
+    def _process_status_command(self, cmd, parse, full, as_df):
         result = self.call(cmd)
+
         if not parse:
             return result
+
+        if full:
+            result = json.loads(result)['Jobs']
+            if as_df:
+                return self._as_df(result).T
+            else:
+                return result
 
         delimiter = '--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----\n'
         columns = ('job_id', 'username', 'queue', 'jobname', 'session_id', 'nds', 'tsk',

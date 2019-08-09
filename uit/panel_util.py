@@ -292,22 +292,20 @@ class JobMonitor(param.Parameterized):
 
     def __init__(self, **params):
         super().__init__(**params)
-        self.update_statuses()
 
     @param.output(finished_job_ids=list)
     def finished_jobs(self):
         return self.statuses[self.statuses['status'] == 'F']['job_id'].tolist()
 
-    @param.depends('uit_client', watch=True)
+    @param.depends('jobs', watch=True)
     def update_statuses(self):
-        if self.uit_client:
-            self.statuses = None
-            self.statuses = PbsJob.update_statuses(self.jobs, as_df=True)
-            objects = [j for j in self.jobs if j.status in self.TERMINAL_STATUSES]
-            self.param.active_job.objects = objects
-            self.param.active_job.names = {j.job_id: j for j in objects}
-            if objects:
-                self.active_job = objects[0]
+        self.statuses = None
+        self.statuses = PbsJob.update_statuses(self.jobs, as_df=True)
+        objects = [j for j in self.jobs if j.status in self.TERMINAL_STATUSES]
+        self.param.active_job.objects = objects
+        self.param.active_job.names = {j.job_id: j for j in objects}
+        if objects:
+            self.active_job = objects[0]
 
     @param.depends('active_job')
     def out_log(self):
