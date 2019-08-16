@@ -16,9 +16,11 @@ dependencies:
   - dodcerts
 
   # for notebooks
-  - jupyter
   - jupyterlab
+  - nodejs
   - pandas
+  - panel
+  - param
 
   # for tests
   - pytest

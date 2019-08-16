@@ -28,8 +28,21 @@ UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 HPC_SYSTEMS = ['topaz', 'onyx']
+NODE_TYPES = {
+    'topaz': {
+        'compute': (36,),
+    },
+    'onyx': {
+        'compute': (1, 2, 4, 11, 22, 44),
+        'gpu': (1, 2, 11, 22),
+        'bigmem': (1, 2, 4, 11, 22, 44),
+        'transfer': (1,),
+        'knl': (1, 2, 4, 8, 16, 32, 64),
+    }
+}
 
 _auth_code = None
+_server = None
 
 
 class Client:
@@ -201,7 +214,9 @@ class Client:
             return
 
         # start flask server
-        start_server(self.get_token, self.port)
+        global _server
+        if _server is None:
+            _server = start_server(self.get_token, self.port)
 
         auth_url = self.get_auth_url()
         if inline:
@@ -269,6 +284,10 @@ class Client:
         }
 
         return url + '?' + urlencode(data)
+
+    # def _mock_get_token(self, auth_code=None):
+    #     self.token = auth_code
+    #     self._do_callback(True)
 
     def get_token(self, auth_code=None):
         """Get token from the UIT server.
@@ -482,7 +501,7 @@ class Client:
 
         columns = ['system', 'subproject', 'hours_allocated', 'hours_used',
                    'hours_remaining', 'percent_remaining', 'background_hours_used']
-        return self._parse_hpc_output(result, columns, as_df, num_header_lines=8)
+        return self._parse_hpc_output(result, columns, as_df, num_header_lines=9)  # header lines was 8 for topaz. TODO: create a smarter (more dynamic) way to parse output that is system agnostic
 
     @_ensure_connected
     @robust()
@@ -492,7 +511,7 @@ class Client:
         cmd = 'qstat'
 
         if full:
-            cmd += ' -f -F json'
+            cmd += ' -f'
         elif username:
             cmd += f' -u {username}'
 
@@ -525,7 +544,7 @@ class Client:
             return result
 
         if full:
-            result = json.loads(result)['Jobs']
+            result = self._parse_full_status(result)
             if as_df:
                 return self._as_df(result).T
             else:
@@ -536,6 +555,23 @@ class Client:
                    'requested_memory', 'requested_time', 'status', 'elapsed_time')
 
         return self._parse_hpc_output(result, columns, as_df, delimiter=delimiter)
+
+    @staticmethod
+    def _parse_full_status(status_str):
+        clean_status_str = status_str.replace('\n\t', '').split('Job Id: ')[1:]
+        statuses = dict()
+        for status in clean_status_str:
+            lines = status.splitlines()
+            d = dict()
+            for l in lines[1:-1]:
+                try:
+                    k, v = l.split('=', 1)
+                    d[k.strip()] = v.strip()
+                except ValueError:
+                    print('ERROR', l)
+            d['Variable_List'] = dict(kv.split('=') for kv in d.get('Variable_List').split(','))
+            statuses[lines[0]] = d
+        return statuses
 
     def _parse_hpc_output(self, output, columns, as_df, delimiter=None, num_header_lines=0):
         if delimiter is not None:
@@ -616,16 +652,17 @@ class ServerThread(threading.Thread):
         self.srv.shutdown()
 
 
+def shutdown_server():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    func()
+
+
 def start_server(auth_func, port=5000):
     app = Flask('get_uit_token')
     server = ServerThread(app, port)
     server.start()
-
-    def shutdown_server():
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func is None:
-            raise RuntimeError('Not running with the Werkzeug Server')
-        func()
 
     @app.route('/save_token', methods=['GET'])
     def save_token():
@@ -644,8 +681,6 @@ def start_server(auth_func, port=5000):
         except Exception as e:
             status = 'Failed'
             msg = str(e)
-        finally:
-            shutdown_server()
 
         html_template = f"""
         <!doctype html>

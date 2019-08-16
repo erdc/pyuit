@@ -20,7 +20,7 @@ class PbsScript(object):
         system (str): Name of the system to run on.
     """
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
-                 queue='debug', node_type='compute', system='topaz'):
+                 queue='debug', node_type='compute', system='onyx'):
 
         if not name:
             raise ValueError('Parameter "name" is required.')

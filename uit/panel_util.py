@@ -1,17 +1,16 @@
-import time
 import os
-import posixpath
+import glob
 
 import param
 import panel as pn
 
-from .uit import Client, HPC_SYSTEMS
+from .uit import Client, HPC_SYSTEMS, NODE_TYPES
 from .job import PbsJob
 
 
 class HpcConnection(param.Parameterized):
     uit_client = param.ClassSelector(Client)
-    system = param.ObjectSelector(default=HPC_SYSTEMS[0], objects=HPC_SYSTEMS)
+    system = param.ObjectSelector(default=HPC_SYSTEMS[1], objects=HPC_SYSTEMS)
     login_node = param.ObjectSelector(default=None, objects=[None], label='Login Node')
     exclude_nodes = param.ListSelector(default=list(), objects=[], label='Exclude Nodes')
     authenticated = param.Boolean(default=False)
@@ -71,13 +70,21 @@ class HpcConnection(param.Parameterized):
     @param.depends('authenticated', 'connected')
     def view(self):
         if not self.authenticated:
+            header = '<h1>Step 1 of 2: Authorize and Authenticate</h1> ' \
+                     '<h2>Instructions:</h2> ' \
+                     '<p>Login to UIT+ with your CAC and then click the "Approve" button to authorize ' \
+                     'this application to use your HPC account on your behalf.</p>'
+
             auth_frame = self.uit_client.authenticate(inline=True, callback=self.update_authenticated)
             if self.web_based:
-                return pn.Column(auth_frame)
-            return pn.Column(self.param.auth_code, auth_frame)
+                return pn.Column(header, auth_frame)
+            header += '<p>When the "Success" message is shown copy the code (the alpha-numeric sequence after ' \
+                      '"code=") and paste it into the Code field at the bottom. Then click "Authenticate".</p>'
+            return pn.Column(header, auth_frame, self.param.auth_code,
+                             pn.widgets.Button(name='Authenticate', button_type='primary', width=200))
         elif not self.connected:
-            system_pn = pn.Pane(self, parameters=['system'], show_name=False, name='HPC System')
-            advanced_pn = pn.Pane(
+            system_pn = pn.panel(self, parameters=['system'], show_name=False, name='HPC System')
+            advanced_pn = pn.panel(
                 self,
                 parameters=['login_node', 'exclude_nodes'],
                 widgets={'exclude_nodes': pn.widgets.CrossSelector},
@@ -86,8 +93,9 @@ class HpcConnection(param.Parameterized):
             )
 
             return pn.Column(
-                pn.Pane(pn.layout.Tabs(system_pn, advanced_pn)),
-                pn.Pane(self, parameters=['connect_btn'], show_name=False)
+                '<h1>Step 2 of 2: Connect</h1>',
+                pn.panel(pn.layout.Tabs(system_pn, advanced_pn)),
+                pn.panel(self, parameters=['connect_btn'], show_name=False)
             )
         else:
             self.param.connect_btn.label = 'Re-Connect'
@@ -95,163 +103,18 @@ class HpcConnection(param.Parameterized):
                 pn.panel(self.param.disconnect_btn, show_name=False, width=200),
                 pn.panel(self.param.connect_btn, show_name=False, width=200),
             )
-            return pn.Column(btns, pn.Pane(self, parameters=['connection_status'], show_name=False, width=400))
+            return pn.Column(btns, pn.panel(self, parameters=['connection_status'], show_name=False, width=400))
 
     def panel(self):
         return pn.panel(self.view)
 
 
-class SimulationInput(param.Parameterized):
-    files = param.MultiFileSelector(default=[''], path='./')
-
-
-class Solve(SimulationInput):
-
-    def __init__(self, uit_client=None, **params):
-        super(Solve, self).__init__(**params)
-        self.uit_client = uit_client or Client()
-        self.jobID = None
-
-    def update_hpc_conneciton_dependent_defaults(self):
-        if not self.uit_client.connected:
-            return
-
-        subprojects = [u['subproject'] for u in self.uit_client.show_usage()]
-        self.param.hpc_subproject.default = subprojects[0]
-        self.param.hpc_subproject.objects = subprojects
-        self.workdir = self.uit_client.WORKDIR.as_posix()
-
-    def pre_authenticate(self):
-        # THIS ASSUMES A UIT CLIENT HAS ALREADY BEEN SET UP
-        # instantiate client
-        self.uit_client = uit.Client()
-
-        # authenticate to the uit server
-        result = self.uit_client.authenticate(inline=self.notebook)
-
-        # return an iFrame for authentication if notebook
-        if self.notebook:
-            return result
-
-    def launch(self):
-        if self.solve_on == 'desktop':
-            self.launch_local()
-        else:
-            if self.solve_from == 'desktop':
-                self.launch_hpc()
-            else:
-                print('solve from is still under development')
-
-    def launch_local(self):
-        # from roamsAPI.adh.sw2d import adhModel
-        # instantiate roams adhModel
-        adh_model = model.adhModel()
-        # set hpcCompute variable
-        hpcCompute = False
-        # get local architecture
-        architecture = self.local_architecture
-        # solve locally
-        adh_model.solveAdHModel(self.workdir, self.adh_rootname, hpcCompute, architecture)
-
-    def launch_hpc(self):
-        self.pre_authenticate()
-        # connect to hpc
-        #     c.connect(system='topaz', exclude_login_nodes=['topaz03','topaz07'])
-        self.uit_client.connect(login_node=self.hpc_login_node)
-
-        # create submit script
-        self.uit_client.create_submit_script(
-            self.hpc_subproject, nodes=self.nodes, walltime=self.wall_time,
-                               project_name=self.adh_rootname,
-                               filename=self.submit_script_filename, email=None, queue=self.queue)
-
-        # add submit file to the list
-        self.sim_files.append(self.submit_script_filename)
-
-        # create the directory if necessary
-        self.create_dir(self.workdir)
-
-        # transfer the files to hpc
-        self.move_files()
-
-        # submit the job
-        script_path = posixpath.join(self.workdir, self.submit_script_filename)
-        resp = self.uit_client.call('qsub ' + script_path, working_dir=self.workdir)
-
-        try:
-            self.jobID = int(resp.split('.')[0])
-        except:
-            raise SystemError('Job did not submit correctly.')
-
-        # query the job
-        qstat = self.uit_client.call('qstat -u ' + self.uit_client.username, working_dir=self.workdir)
-        print(qstat)
-
-        # wait for job to complete
-        self.wait_for_job(str(self.jobID))
-
-    def wait_for_job(self, jobID, interval=60):
-        while True:
-            qview_resp = self.uit_client.call('qview', working_dir=self.workdir)
-            if jobID in qview_resp:
-                print('running')
-                time.sleep(interval)
-            else:
-                break
-
-        print('Job Completed.')
-
-    def define_files(self, files):
-        # clear out old files
-        self.sim_files.clear()
-        # add files to the widget
-        [self.sim_files.append(file) for file in files]
-
-    def move_files(self):
-        # if authentication hasn't been done yet
-        if self.uit_client is None:
-            self.pre_authenticate()
-
-        # create the hpc directory
-        self.create_dir(self.workdir)
-
-        for source_path in self.sim_files:
-            # split the directory/filename from source
-            head, tail = os.path.split(source_path)
-            # create the destination path
-            dest_path = posixpath.join(self.workdir, tail)
-            print('Uploading file {} to {}'.format(source_path, dest_path))
-            # transfer the file
-            self.uit_client.put_file(source_path, dest_path)
-
-    def create_dir(self, directory):
-        """does nothing if directory already exists"""
-        # if authentication hasn't been done yet
-        if self.uit_client is None:
-            self.pre_authenticate()
-
-        # check that the directory exists
-        resp = self.uit_client.list_dir(directory)
-
-        # if dir does not exist
-        if 'success' in resp.keys() and resp['success'] == 'false':
-            self.uit_client.call('mkdir ' + directory, working_dir=directory)
-            print('Directory {} created'.format(directory))
-
-    def view(self):
-        self.update_hpc_conneciton_dependent_defaults()
-        solver = self
-        inputinfo = pn.Pane(solver, parameters=list(SimulationInput.param),
-                            widgets={'files': pn.widgets.CrossSelector}, show_name=False, name='Input')
-        hpc_submit = pn.Pane(solver, parameters=list(HPCSubmitScript.param), show_name=False, name='HPC Options')
-        return pn.Column(pn.Pane(pn.layout.Tabs(inputinfo, hpc_submit, height=500)),
-                         pn.Pane(self, parameters=['submit_btn'], show_name=False))
-
-
 class HPCSubmitScript(param.Parameterized):
     hpc_subproject = param.ObjectSelector(default=None, precedence=3)
     workdir = param.String(default='', precedence=4)
-    nodes = param.Integer(default=1, bounds=(0, 5), precedence=5)
+    node_type = param.ObjectSelector(default='', objects=[], precedence=5)
+    nodes = param.Integer(default=1, bounds=(0, 100), precedence=5.1)
+    processes_per_node = param.ObjectSelector(default=1, objects=[], precedence=5.2)
     wall_time = param.String(default='00:05:00', precedence=6)
     queue = param.ObjectSelector(default='debug', objects=['standard', 'debug'], precedence=7)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
@@ -264,6 +127,13 @@ class HPCSubmitScript(param.Parameterized):
         self.param.hpc_subproject.objects = subprojects
         self.hpc_subproject = subprojects[0]
         self.workdir = self.uit_client.WORKDIR.as_posix()
+        self.param.node_type.objects = list(NODE_TYPES[self.uit_client.system].keys())
+        self.node_type = self.param.node_type.objects[0]
+
+    @param.depends('node_type', watch=True)
+    def update_processes_per_node(self):
+        self.param.processes_per_node.objects = NODE_TYPES[self.uit_client.system][self.node_type]
+        self.processes_per_node = self.param.processes_per_node.objects[0]
 
 
 class PbsScriptStage(HPCSubmitScript):
@@ -275,7 +145,7 @@ class PbsScriptStage(HPCSubmitScript):
 
     def view(self):
         self.update_hpc_conneciton_dependent_defaults()
-        hpc_submit = pn.Pane(self, parameters=list(HPCSubmitScript.param), show_name=False, name='PBS Options')
+        hpc_submit = pn.panel(self, parameters=list(HPCSubmitScript.param), show_name=False, name='PBS Options')
         return hpc_submit
 
     def panel(self):
@@ -350,8 +220,187 @@ class JobMonitor(param.Parameterized):
 
 
 class FileManager(param.Parameterized):
-    uit_client = param.ClassSelector(Client)
-    files = param.MultiFileSelector()
+    directory = param.String(
+        default=os.getcwd(),
+        precedence=0.1
+    )
+    file_keyword = param.String(
+        doc='Keyword for file name. Hidden from ui.',
+        default='*',
+        precedence=-1
+    )
+
+    def __init__(self, **params):
+        super().__init__(**params)
+        self.cross_selector = pn.widgets.CrossSelector(name='Files', value=[], options=[], width=900)
+        self._update_files()
+
+    @param.depends('directory', watch=True)
+    def _update_files(self):
+        self.cross_selector.options = glob.glob(os.path.join(self.directory, '*' + self.file_keyword + '*'))
 
     def panel(self):
-        return pn.panel(self.param.files)
+        return pn.Column(self.param.directory, self.cross_selector, width=700)
+
+    @param.output(selected_files=list)
+    def output(self):
+        """Return a list of the values in the right hand box"""
+        return self.cross_selector.value
+
+
+class FileManagerHPC(FileManager):
+    """File manager for HPC applications using the uit client for communication.
+
+    This extension of FileManager does not currently make use of
+    FileManager.root or FileManager.file_keyword
+
+    """
+    uit_client = param.ClassSelector(
+        Client,
+        precedence=-1
+    )
+
+    def __init__(self, **params):
+        if 'uit_client' in params:
+            self.directory = str(params['uit_client'].WORKDIR)
+
+        super().__init__(**params)
+        self._update_files()
+
+    @param.depends('directory', watch=True)
+    def _update_files(self):
+        # get the ls from the client
+        ls_df = self.uit_client.list_dir(
+            path=self.directory,
+            parse=True,
+            as_df=True)
+
+        # catch for errors returned as dict
+        if type(ls_df) is dict:
+            raise RuntimeError(f"""
+            Request for directory list returned the error: {ls_df['error']}
+
+            Directory requested: {self.directory}
+
+            """)
+
+        # convert dataframe to file list
+        self.file_list = ls_df['path'].to_list()
+
+        # update cross selector widget
+        self.cross_selector.options = self.file_list
+
+    def panel(self):
+        return pn.Column(self.param.directory, self.cross_selector, width=700)
+
+
+class FileTransfer(param.Parameterized):
+    uit_client = param.ClassSelector(
+        Client,
+        precedence=-1
+    )
+
+    from_location = param.ObjectSelector(
+        default='topaz',
+        objects=['topaz', 'onyx', 'local'],
+        precedence=0.21
+    )
+    from_directory = param.String(
+        precedence=0.22
+    )
+    to_location = param.ObjectSelector(
+        default='topaz',
+        objects=['topaz', 'onyx', 'local'],
+        precedence=0.31
+    )
+    to_directory = param.String(
+        precedence=0.32
+    )
+    file_manager = param.ClassSelector(
+        class_=FileManager,
+        precedence=0.4
+    )
+    transfer_button = param.Action(lambda self: self.param.trigger('transfer_button'), label='Transfer', precedence=1.0)
+
+    def __init__(self, uit_client, **params):
+
+        super().__init__(**params)
+        self.uit_client = uit_client or Client()
+        self.file_manager = FileManagerHPC(uit_client=self.uit_client)
+
+        # adjust to/from based on uit_client
+        self.param.from_location.objects = [self.uit_client.system, 'local']
+        self.from_location = self.uit_client.system
+        self.param.to_location.objects = [self.uit_client.system, 'local']
+        self.to_location = self.uit_client.system
+
+    @param.depends('transfer_button', watch=True)
+    def transfer(self):
+        if self.from_location == 'local':
+            for local_file in self.file_manager.cross_selector.value:
+                self.uit_client.put_file(local_file, self.to_directory)
+        elif self.to_location == 'local':
+            for remote_file in self.file_manager.cross_selector.value:
+                print('transferring {}'.format(remote_file))
+                self.uit_client.get_file(remote_file,
+                                         local_path=os.path.join(self.to_directory, os.path.basename(remote_file)))
+
+        else:
+            print('HPC to HPC transfers are not supported.')
+
+    @param.depends('from_directory', watch=True)
+    def _update_file_manager(self):
+        """
+        """
+        self.file_manager.directory = self.from_directory
+
+    def _from_location(self):
+        return pn.Column(self.param.from_location, self.param.from_directory)
+
+    @param.depends('from_location', watch=True)
+    def _to_location(self):
+        remote_dir = str(self.uit_client.WORKDIR)
+        local_dir = os.getcwd()
+
+        if self.from_location == 'local':
+            # set from location and dir
+            self.from_directory = local_dir
+
+            # set to location and dir
+            self.to_location = self.uit_client.system
+            self.to_directory = remote_dir
+
+            # set file manager to local manager
+            self.file_manager = FileManager()
+        else:
+            # set to location and dir
+            self.to_location = 'local'
+            self.to_directory = local_dir
+            self.from_directory = remote_dir
+
+            # set file manager to hpc manager
+            self.file_manager = FileManagerHPC(uit_client=self.uit_client)
+
+        # set cross selector directory
+        self.file_manager._update_files()
+
+    @param.depends('from_directory', watch=True)
+    def panel(self):
+        from_box = pn.WidgetBox(
+            pn.Column(
+                self._from_location,
+                pn.Column(self.file_manager.cross_selector)
+            )
+        )
+
+        to_box = pn.WidgetBox(
+            pn.Column(self.param.to_location, self.param.to_directory),
+            width=900,
+            width_policy='max'
+        )
+
+        return pn.Column(
+            from_box,
+            to_box,
+            pn.panel(self.param.transfer_button)
+        )
