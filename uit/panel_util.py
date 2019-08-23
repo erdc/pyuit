@@ -4,7 +4,8 @@ import glob
 import param
 import panel as pn
 
-from .uit import Client, HPC_SYSTEMS, NODE_TYPES
+from .uit import Client, HPC_SYSTEMS
+from uit.pbs_script import NODE_TYPES, factors
 from .job import PbsJob
 
 
@@ -132,12 +133,12 @@ class HPCSubmitScript(param.Parameterized):
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):
-        self.param.processes_per_node.objects = NODE_TYPES[self.uit_client.system][self.node_type]
-        self.processes_per_node = self.param.processes_per_node.objects[0]
+        self.param.processes_per_node.objects = factors(NODE_TYPES[self.uit_client.system][self.node_type])
+        self.processes_per_node = self.param.processes_per_node.objects[-1]
 
 
 class PbsScriptStage(HPCSubmitScript):
-    submit_btn = param.Action(lambda self: self.submit(), label='Submit')
+    submit_btn = param.Action(lambda self: self.submit(), label='Submit', precedence=10)
     uit_client = param.ClassSelector(Client)
 
     def submit(self):

@@ -2,6 +2,27 @@ import collections
 import os
 import io
 
+NODE_TYPES = {
+    'topaz': {
+        'compute': 36,
+        'gpu': 28,
+        'bigmem': 32,
+        'transfer': 1,
+    },
+    'onyx': {
+        'compute': 44,
+        'gpu': 22,
+        'bigmem': 44,
+        'transfer': 1,
+        'knl': 64,
+    }
+}
+
+
+def factors(n):
+    return sorted(set([j for k in [[i, n // i] for i in range(1, int(n ** 0.5) + 1) if not n % i] for j in k]))
+
+
 PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
 
@@ -37,25 +58,32 @@ class PbsScript(object):
         self.processes_per_node = processes_per_node
         self.max_time = max_time
         self.queue = queue
-        self.node_type = node_type
-
-        node_types = ['compute', 'gpu', 'bigmem', 'transfer', 'knl']
-
-        if node_type.lower() not in node_types:
-            raise ValueError('Please specify a valid node type: {}'.format(', '.join(node_types)))
         self.node_type = node_type.lower()
-
-        systems = ['topaz', 'onyx']
-        if system.lower() not in systems:
-            raise ValueError('Please specify a valid system: {}'.format(', '.join(systems)))
         self.system = system.lower()
 
-        if self.node_type.lower() == 'knl' and self.system != 'onyx':
-            raise ValueError('KNL node types are only valid on Onyx.')
+        self._validate_system()
+        self._validate_node_type()
+        self._validate_processes_per_node()
 
         self._optional_directives = []
         self._modules = {}
         self.execution_block = ""
+
+    def _validate_system(self):
+        systems = list(NODE_TYPES.keys())
+        if self.system not in systems:
+            raise ValueError(f'Please specify a valid system. Must be one of: {systems}')
+
+    def _validate_node_type(self):
+        node_types = list(NODE_TYPES[self.system].keys())
+        if self.node_type not in node_types:
+            raise ValueError(f'Please specify a valid node type: {node_types}')
+
+    def _validate_processes_per_node(self):
+        processes_per_node = factors(NODE_TYPES[self.system][self.node_type])
+        if self.processes_per_node not in processes_per_node:
+            raise ValueError(f'Please specify valid "processes_per_node" for the given node type [{self.node_type}] '
+                             f'and System [{self.system}].\nMust be one of: {processes_per_node}')
 
     def set_directive(self, directive, value):
         """Add a new directive to the PBS script.
@@ -149,75 +177,21 @@ class PbsScript(object):
         Returns:
             str: Correctly formatted string for PBS header
         """
-        if self.system == 'onyx':
-            if self.node_type == 'compute':
-                processes_per_node = [1, 2, 4, 11, 22, 44]
-                if self.processes_per_node in processes_per_node:
-                    ncpus = 44
-                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}'.format(
-                        self.num_nodes, ncpus, self.processes_per_node
-                    )
-                    return no_nodes_process_str
-                else:
-                    raise ValueError('Please specify valid self.processes_per_node for the given system [Onyx]')
-            if self.node_type == 'gpu':
-                processes_per_node = [1, 2, 11, 22]
-                if self.processes_per_node in processes_per_node:
-                    ncpus = 22
-                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}2:ngpus=1'.format(
-                        self.num_nodes, ncpus, self.processes_per_node
-                    )
-                    return no_nodes_process_str
-                else:
-                    raise ValueError('Please specify valid self.processes_per_node for the given node '
-                                     'type [GPU] and System [Onyx]')
-            if self.node_type == 'bigmem':
-                processes_per_node = [1, 2, 4, 11, 22, 44]
-                if self.processes_per_node in processes_per_node:
-                    ncpus = 44
-                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:bigmem=1'.format(
-                        self.num_nodes, ncpus, self.processes_per_node
-                    )
-                    return no_nodes_process_str
-                else:
-                    raise ValueError('Please specify valid self.processes_per_node for the given node type [bigmem] '
-                                     'and System [Onyx]')
-            if self.node_type == "transfer":
-                no_nodes_process_str = '#PBS -l select=1:ncpus=1'
-                return no_nodes_process_str
-            if self.node_type == 'knl':
-                processes_per_node = [1, 2, 4, 8, 16, 32, 64]
-                if self.processes_per_node in processes_per_node:
-                    ncpus = 64
-                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:nmics=1'.format(
-                        self.num_nodes, ncpus, self.processes_per_node
-                    )
-                    return no_nodes_process_str
-                else:
-                    raise ValueError('Please specify valid self.processes_per_node for the given node type [knl] '
-                                     'and System [Onyx]')
-        elif self.system == 'topaz':
-            if self.node_type == 'compute':
-                ncpus = 36
-                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}'.format(
-                    self.num_nodes, ncpus, self.processes_per_node
-                )
-                return no_nodes_process_str
-            if self.node_type == 'gpu':
-                ncpus = 28
-                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:ngpus=1'.format(
-                    self.num_nodes, ncpus, self.processes_per_node
-                )
-                return no_nodes_process_str
-            if self.node_type == 'bigmem':
-                ncpus = 32
-                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:bigmem=1'.format(
-                    self.num_nodes, ncpus, self.processes_per_node
-                )
-                return no_nodes_process_str
-            if self.node_type == "transfer":
-                no_nodes_process_str = '#PBS -l select=1:ncpus=1'
-                return no_nodes_process_str
+        processes_per_node = factors(NODE_TYPES[self.system][self.node_type])
+        self._validate_processes_per_node()
+        ncpus = max(processes_per_node)
+        no_nodes_process_str = f'#PBS -l select={self.num_nodes}:ncpus={ncpus}'
+        if self.node_type != 'transfer':
+            no_nodes_process_str += f':mpiprocs={self.processes_per_node}'
+        node_type_args = dict(
+            gpu='ngpus',
+            bigmem='bigmem',
+            knl='nmics',
+        )
+        if self.node_type in node_type_args:
+            no_nodes_process_str += f':{node_type_args[self.node_type]}=1'
+
+        return no_nodes_process_str
 
     def render_optional_directives_block(self):
         """Render each optional directive on a separate line.

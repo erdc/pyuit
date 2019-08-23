@@ -28,18 +28,6 @@ UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 HPC_SYSTEMS = ['topaz', 'onyx']
-NODE_TYPES = {
-    'topaz': {
-        'compute': (36,),
-    },
-    'onyx': {
-        'compute': (1, 2, 4, 11, 22, 44),
-        'gpu': (1, 2, 11, 22),
-        'bigmem': (1, 2, 4, 11, 22, 44),
-        'transfer': (1,),
-        'knl': (1, 2, 4, 8, 16, 32, 64),
-    }
-}
 
 _auth_code = None
 _server = None
