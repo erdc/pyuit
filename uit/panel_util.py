@@ -114,7 +114,7 @@ class HPCSubmitScript(param.Parameterized):
     hpc_subproject = param.ObjectSelector(default=None, precedence=3)
     workdir = param.String(default='', precedence=4)
     node_type = param.ObjectSelector(default='', objects=[], precedence=5)
-    nodes = param.Integer(default=1, bounds=(0, 100), precedence=5.1)
+    nodes = param.Integer(default=1, bounds=(1, 100), precedence=5.1)
     processes_per_node = param.ObjectSelector(default=1, objects=[], precedence=5.2)
     wall_time = param.String(default='00:05:00', precedence=6)
     queue = param.ObjectSelector(default='debug', objects=['standard', 'debug'], precedence=7)

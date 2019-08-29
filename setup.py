@@ -8,13 +8,13 @@ extras_require = dict()
 
 extras_require['recommended'] = ['dodcerts']
 
-extras_require['examples'] = (['jupyter'])
+extras_require['examples'] = (['jupyterlab', 'nodejs', 'panel', 'param', 'holoviews', 'pandas'])
 
 extras_require['tests'] = (['pytest', 'flake8'])
 
 setup(
     name='pyuit',
-    version='0.3.0a8',
+    version='0.3.0a9',
     description="Python wrapper for DoD HPCMP UIT+ rest interface",
     author="Dharhas Pothina",
     author_email='dharhas.pothina@erdc.dren.mil',
