@@ -16,3 +16,8 @@ development install::
     conda activate uit
     python setup.py develop
 
+
+
+**CONDA BUILD**
+
+conda build -c erdc -c conda-forge conda.recipe

@@ -7,6 +7,7 @@
 name: uit
 
 channels:
+  - conda-forge
   - erdc
 
 dependencies:
@@ -16,8 +17,12 @@ dependencies:
   - dodcerts
 
   # for notebooks
-  - jupyter
   - jupyterlab
+  - nodejs
+  - pandas
+  - panel
+  - param
+  - holoviews
 
   # for tests
   - pytest

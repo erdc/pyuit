@@ -2,6 +2,26 @@ import collections
 import os
 import io
 
+NODE_TYPES = {
+    'topaz': {
+        'compute': 36,
+        'gpu': 28,
+        'bigmem': 32,
+        'transfer': 1,
+    },
+    'onyx': {
+        'compute': 44,
+        'gpu': 22,
+        'bigmem': 44,
+        'transfer': 1,
+        'knl': 64,
+    }
+}
+
+
+def factors(n):
+    return sorted(set([j for k in [[i, n // i] for i in range(1, int(n ** 0.5) + 1) if not n % i] for j in k]))
+
 
 PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
 
@@ -19,9 +39,11 @@ class PbsScript(object):
         project_id (str): Project ID to be passed in the PBS Header.
         queue (str): Name of the queue into which to submit the job.
         system (str): Name of the system to run on.
+        array_indices (tuple): Indices for a job array in the following format: (start, end, [step]).
+            e.g. (0, 9) or (0, 9, 3)
     """
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
-                 queue='debug', node_type='compute', system='topaz'):
+                 queue='debug', node_type='compute', system='onyx', array_indices=None):
 
         if not name:
             raise ValueError('Parameter "name" is required.')
@@ -38,25 +60,80 @@ class PbsScript(object):
         self.processes_per_node = processes_per_node
         self.max_time = max_time
         self.queue = queue
-        self.node_type = node_type
-
-        node_types = ['compute', 'gpu', 'bigmem', 'transfer', 'knl']
-
-        if node_type.lower() not in node_types:
-            raise ValueError('Please specify a valid node type: {}'.format(', '.join(node_types)))
         self.node_type = node_type.lower()
-
-        systems = ['topaz', 'onyx']
-        if system.lower() not in systems:
-            raise ValueError('Please specify a valid system: {}'.format(', '.join(systems)))
         self.system = system.lower()
+        self._array_indices = array_indices
 
-        if self.node_type.lower() == 'knl' and self.system != 'onyx':
-            raise ValueError('KNL node types are only valid on Onyx.')
+        self._validate_system()
+        self._validate_node_type()
+        self._validate_processes_per_node()
 
         self._optional_directives = []
         self._modules = {}
         self.execution_block = ""
+
+    def _validate_system(self):
+        systems = list(NODE_TYPES.keys())
+        if self.system not in systems:
+            raise ValueError(f'Please specify a valid system. Must be one of: {systems}')
+
+    def _validate_node_type(self):
+        node_types = list(NODE_TYPES[self.system].keys())
+        if self.node_type not in node_types:
+            raise ValueError(f'Please specify a valid node type: {node_types}')
+
+    def _validate_processes_per_node(self):
+        processes_per_node = factors(NODE_TYPES[self.system][self.node_type])
+        if self.processes_per_node not in processes_per_node:
+            raise ValueError(f'Please specify valid "processes_per_node" for the given node type [{self.node_type}] '
+                             f'and System [{self.system}].\nMust be one of: {processes_per_node}')
+
+
+    @property
+    def get_num_nodes_process_directive(self):
+        """Generate a properly formatted CPU Request for use in PBS Headers.
+
+        Generates string based on:
+        - Number of Nodes
+        - Processors per Node
+        - System
+        - Node Type
+
+        Returns:
+            str: Correctly formatted string for PBS header
+        """
+        processes_per_node = factors(NODE_TYPES[self.system][self.node_type])
+        self._validate_processes_per_node()
+        ncpus = max(processes_per_node)
+        no_nodes_process_options = f'select={self.num_nodes}:ncpus={ncpus}'
+        if self.node_type != 'transfer':
+            no_nodes_process_options += f':mpiprocs={self.processes_per_node}'
+        node_type_args = dict(
+            gpu='ngpus',
+            bigmem='bigmem',
+            knl='nmics',
+        )
+        if self.node_type in node_type_args:
+            no_nodes_process_options += f':{node_type_args[self.node_type]}=1'
+
+        return PbsDirective('-l', no_nodes_process_options)
+
+    @property
+    def job_array_directives(self):
+        if self._array_indices is not None:
+            options = f'{self._array_indices[0]}-{self._array_indices[1]}'
+            try:
+                options += f':{self._array_indices[2]}'
+            except IndexError:
+                pass
+            return PbsDirective('-J', options), PbsDirective('-r', 'y')
+
+    @property
+    def job_array_indices(self):
+        if self._array_indices is not None:
+            indices = list(self._array_indices)
+            indices[1] += 1  # unlike Python PBS is inclusive of the last index
+            return list(range(*indices))
 
     def set_directive(self, directive, value):
         """Add a new directive to the PBS script.
@@ -127,98 +204,18 @@ class PbsScript(object):
         Returns:
             str: String of all required directives.
         """
-        pbs_dir_start = "## Required PBS Directives --------------------------------"
-        job_name = "#PBS -N " + self.name
-        project_id = "#PBS -A " + self.project_id
-        queue = "#PBS -q " + self.queue
+        header = "## Required PBS Directives --------------------------------"
+        directives = [
+            PbsDirective('-N', self.name),
+            PbsDirective('-A', self.project_id),
+            PbsDirective('-q', self.queue),
+            self.get_num_nodes_process_directive,
+            PbsDirective('-l', f'walltime={self.max_time}'),
+        ]
+        if self._array_indices is not None:
+            directives.extend(self.job_array_directives)
 
-        no_nodes_process = self.get_num_nodes_process_str()
-        time_to_run = "#PBS -l walltime={}".format(self.max_time)
-        directive_block = pbs_dir_start + "\n" + job_name + "\n" + project_id + "\n" + \
-            queue + "\n" + no_nodes_process + "\n" + time_to_run
-        return directive_block
-
-    def get_num_nodes_process_str(self):
-        """Generate a properly formatted CPU Request for use in PBS Headers.
-
-        Generates string based on:
-        - Number of Nodes
-        - Processors per Node
-        - System
-        - Node Type
-
-        Returns:
-            str: Correctly formatted string for PBS header
-        """
-        if self.system == 'onyx':
-            if self.node_type == 'compute':
-                processes_per_node = [1, 2, 4, 11, 22, 44]
-                if self.processes_per_node in processes_per_node:
-                    ncpus = 44
-                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}'.format(
-                        self.num_nodes, ncpus, self.processes_per_node
-                    )
-                    return no_nodes_process_str
-                else:
-                    raise ValueError('Please specify valid self.processes_per_node for the given system [Onyx]')
-            if self.node_type == 'gpu':
-                processes_per_node = [1, 2, 11, 22]
-                if self.processes_per_node in processes_per_node:
-                    ncpus = 22
-                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}2:ngpus=1'.format(
-                        self.num_nodes, ncpus, self.processes_per_node
-                    )
-                    return no_nodes_process_str
-                else:
-                    raise ValueError('Please specify valid self.processes_per_node for the given node '
-                                     'type [GPU] and System [Onyx]')
-            if self.node_type == 'bigmem':
-                processes_per_node = [1, 2, 4, 11, 22, 44]
-                if self.processes_per_node in processes_per_node:
-                    ncpus = 44
-                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:bigmem=1'.format(
-                        self.num_nodes, ncpus, self.processes_per_node
-                    )
-                    return no_nodes_process_str
-                else:
-                    raise ValueError('Please specify valid self.processes_per_node for the given node type [bigmem] '
-                                     'and System [Onyx]')
-            if self.node_type == "transfer":
-                no_nodes_process_str = '#PBS -l select=1:ncpus=1'
-                return no_nodes_process_str
-            if self.node_type == 'knl':
-                processes_per_node = [1, 2, 4, 8, 16, 32, 64]
-                if self.processes_per_node in processes_per_node:
-                    ncpus = 64
-                    no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:nmics=1'.format(
-                        self.num_nodes, ncpus, self.processes_per_node
-                    )
-                    return no_nodes_process_str
-                else:
-                    raise ValueError('Please specify valid self.processes_per_node for the given node type [knl] '
-                                     'and System [Onyx]')
-        elif self.system == 'topaz':
-            if self.node_type == 'compute':
-                ncpus = 36
-                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}'.format(
-                    self.num_nodes, ncpus, self.processes_per_node
-                )
-                return no_nodes_process_str
-            if self.node_type == 'gpu':
-                ncpus = 28
-                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:ngpus=1'.format(
-                    self.num_nodes, ncpus, self.processes_per_node
-                )
-                return no_nodes_process_str
-            if self.node_type == 'bigmem':
-                ncpus = 32
-                no_nodes_process_str = '#PBS -l select={}:ncpus={}:mpiprocs={}:bigmem=1'.format(
-                    self.num_nodes, ncpus, self.processes_per_node
-                )
-                return no_nodes_process_str
-            if self.node_type == "transfer":
-                no_nodes_process_str = '#PBS -l select=1:ncpus=1'
-                return no_nodes_process_str
+        return self._render_directive_list(header, directives)
 
     def render_optional_directives_block(self):
         """Render each optional directive on a separate line.
@@ -226,14 +223,16 @@ class PbsScript(object):
         Returns:
              str: All optional directives.
         """
-        opt_list = ['## Optional Directives -----------------------------']
-        directives = self._optional_directives
-        for i in range(len(directives)):
-            opt_list.append("#PBS " + directives[i].directive + " " + directives[i].options)
+        header = '## Optional Directives -----------------------------'
+        return self._render_directive_list(header, self._optional_directives)
 
-        render_opt_dir_block = '\n'.join(map(str, opt_list))
+    @staticmethod
+    def _render_directive_list(header, directives):
+        lines = [header]
+        for directive in directives:
+            lines.append(f"#PBS {directive.directive} {directive.options}")
 
-        return render_opt_dir_block
+        return '\n'.join(lines)
 
     def render_modules_block(self):
         """Render each module call on a separate line.

@@ -30,7 +30,7 @@ DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 HPC_SYSTEMS = ['topaz', 'onyx']
 
 _auth_code = None
-_token = None
+_server = None
 
 
 class Client:
@@ -47,7 +47,7 @@ class Client:
         token (str): Token from current UIT authorization.
     """
     def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
-                 token=None):
+                 token=None, port=5000):
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
 
@@ -55,8 +55,10 @@ class Client:
         self.client_id = client_id
         self.client_secret = client_secret
         self.config_file = config_file
+        self.session_id = session_id
         self.scope = scope
         self.token = token
+        self.port = port
 
         # Set attribute defaults
         self.connected = False
@@ -170,10 +172,10 @@ class Client:
             except Exception as e:
                 print(e)
 
-    def _as_df(self, data):
+    def _as_df(self, data, columns=None):
         if not has_pandas:
             raise RuntimeError('"as_df" cannot be set to True unless the Pandas module is installed.')
-        return pd.DataFrame(data)
+        return pd.DataFrame.from_records(data, columns=columns)
 
     def _resolve_path(self, path, default=None):
         path = path or default
@@ -181,27 +183,31 @@ class Client:
             return path.as_posix()
         return path
 
-    def authenticate(self, notebook=None, width=800, height=800, callback=None):
+    def authenticate(self, inline=None, width=800, height=800, callback=None):
         """Ensure we have an access token. Request one from the user if we do not.
 
         Args:
-            notebook (bool): Flag to indicate we are running in a Jupyter Notebook.
-            width (int): Width to make the notebook widget.
-            height (int): Height to make the notebook widget.
+            inline (bool): Flag to show authentication site as an inline IFrame rather then opening in a browser tab.
+            width (int): Width to make the inline widget.
+            height (int): Height to make the inline widget.
+            callback (func): Function to call once authentication process has happened. Should accept a boolean
+                representing the authenticated status (i.e. True means authentication was successful).
         """
         self._callback = callback
         # check if we have available tokens/refresh tokens
-        token = self.load_token()
-        if token:
+
+        if self.token:
             print('access token available, no auth needed')
             self._do_callback(True)
             return
 
         # start flask server
-        start_server(self.get_token, self.config_file)
+        global _server
+        if _server is None:
+            _server = start_server(self.get_token, self.port)
 
         auth_url = self.get_auth_url()
-        if notebook:
+        if inline:
             import IPython
             return IPython.display.IFrame(auth_url, width, height)
 
@@ -219,10 +225,9 @@ class Client:
         """
         # get access token from file
         # populate userinfo and header info
-        token = self.load_token()
-        if token is None:
+        if self.token is None:
             raise RuntimeError('No Valid Access Tokens Found, Please run authenticate() function and try again')
-        self._headers = {'x-uit-auth-token': token}
+        self._headers = {'x-uit-auth-token': self.token}
 
         # retrieve user info
         self.get_userinfo()
@@ -245,7 +250,8 @@ class Client:
         self._uit_url = self._uit_urls[login_node]
         self.connected = True
 
-        print('Connected successfully to {} on {}'.format(login_node, system))
+        msg = 'Connected successfully to {} on {}'.format(login_node, system)
+        return msg
 
     def get_auth_url(self):
         """Generate Authorization URL with UIT Server.
@@ -267,6 +273,10 @@ class Client:
 
         return url + '?' + urlencode(data)
 
+    # def _mock_get_token(self, auth_code=None):
+    #     self.token = auth_code
+    #     self._do_callback(True)
+
     def get_token(self, auth_code=None):
         """Get token from the UIT server.
 
@@ -276,17 +286,13 @@ class Client:
 
         url = urljoin(UIT_API_URL, 'token')
 
-        if auth_code:
-            self._auth_code = auth_code
+        global _auth_code
+        self._auth_code = auth_code or _auth_code
 
         # check for auth_code
         if self._auth_code is None:
-            global _auth_code
-            if _auth_code:
-                self._auth_code = _auth_code
-            else:
-                raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
-                                   'Then set the auth_code')
+            raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
+                               'Then set the auth_code')
 
         # set up the data dictionary
         data = {
@@ -305,30 +311,8 @@ class Client:
         else:
             raise IOError('Token request failed.')
 
-        # assign token to global namespace
-        global _token
-        _token = token.json()['access_token']
+        self.token = token.json()['access_token']
         self._do_callback(True)
-
-    def load_token(self):
-        """Load a token from the global namespace.
-
-        Returns:
-            str: The access token.
-        """
-
-        if self.token is not None:
-            return self.token
-
-        global _token
-        return _token
-
-    def clear_token(self):
-        """Remove token from global namespace."""
-        # clear tokens saved in config file
-        global _token
-        _token = None
-        self.token = None
 
     def get_userinfo(self):
         """Get User Info from the UIT server."""
@@ -372,7 +356,7 @@ class Client:
 
     @_ensure_connected
     @robust()
-    def call(self, command, working_dir=None, full_response=False):
+    def call(self, command, working_dir=None, full_response=False, raise_on_error=True):
         """Execute commands on the HPC via the exec endpoint.
 
         Args:
@@ -381,6 +365,8 @@ class Client:
                 If None the the users $HOME directory will be used
             full_response(bool, default=False):
                 If True return the full JSON response from the UIT+ server.
+            raise_on_error(bool, default=True):
+                If True then an error is raised if the call is not successful.
 
         Returns:
             str: stdout from the command.
@@ -399,8 +385,10 @@ class Client:
             return resp
         if resp.get('success') == 'true':
             return resp.get('stdout') + resp.get('stderr')
-        else:
+        elif raise_on_error:
             raise RuntimeError('UIT Command failed with response: ', resp)
+        else:
+            return 'ERROR!\n' + resp.get('stdout') + resp.get('stderr')
 
     @_ensure_connected
     @robust()
@@ -480,7 +468,8 @@ class Client:
         if as_df and 'path' in result:
             ls = result['dirs']
             ls.extend(result['files'])
-            return self._as_df(ls)
+            columns = ('perms', 'type', 'owner', 'group', 'size', 'lastmodified', 'path', 'name')
+            return self._as_df(ls, columns)
         return r.json()
 
     @_ensure_connected
@@ -498,55 +487,91 @@ class Client:
         if not parse:
             return result
 
-        lines = result.splitlines()
-        usage = [{
-            'system': j[0],
-            'subproject': j[1],
-            'hours_allocated': j[2],
-            'hours_used': j[3],
-            'hours_remaining': j[4],
-            'percent_remaining': j[5],
-            'background_hours_used': j[6]
-        } for j in [i.split() for i in lines[8:-1]]]
-
-        if as_df:
-            return self._as_df(usage)
-        return usage
+        columns = ['system', 'subproject', 'hours_allocated', 'hours_used',
+                   'hours_remaining', 'percent_remaining', 'background_hours_used']
+        return self._parse_hpc_output(result, columns, as_df, num_header_lines=9)  # header lines was 8 for topaz. TODO: create a smarter (more dynamic) way to parse output that is system agnostic
 
     @_ensure_connected
     @robust()
-    def status(self, username=None, job_id=None, parse=True, as_df=False):
+    def status(self, job_id=None, username=None, full=False, with_historic=False, parse=True, as_df=False):
         username = username if username is not None else self.username
 
-        cmd = 'qstat -H'
-        if username:
-            cmd += f' -u {username}'
-        if job_id:
-            cmd += f' {job_id}'
+        cmd = 'qstat'
 
+        if full:
+            cmd += ' -f'
+        elif username:
+            cmd += f' -u {username}'
+
+        if job_id:
+            if isinstance(job_id, (tuple, list)):
+                job_id = ' '.join(job_id)
+            cmd += f' -x {job_id}'
+            return self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
+        else:
+            # If no jobs are specified then
+            result1 = self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
+            if not with_historic:
+                return result1
+            else:
+                cmd += ' -x'
+                result2 = self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
+
+                if not parse:
+                    return result1, result2
+                elif as_df:
+                    return pd.concat((result1, result2))
+                else:
+                    result1.extend(result2)
+                    return result1
+
+    def _process_status_command(self, cmd, parse, full, as_df):
         result = self.call(cmd)
+
         if not parse:
             return result
 
-        lines = result.split('--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----\n')
-        lines = lines[-1].splitlines()
-        jobs = [dict(
-            job_id=values[0],
-            username=values[1],
-            queue=values[2],
-            jobname=values[3],
-            session_id=values[4],
-            nds=values[5],
-            tsk=values[6],
-            requested_memory=values[7],
-            requested_time=values[8],
-            status=values[9],
-            elapsed_time=values[10],
-        ) for values in [i.split() for i in lines]]
+        if full:
+            result = self._parse_full_status(result)
+            if as_df:
+                return self._as_df(result).T
+            else:
+                return result
+
+        delimiter = '--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----\n'
+        columns = ('job_id', 'username', 'queue', 'jobname', 'session_id', 'nds', 'tsk',
+                   'requested_memory', 'requested_time', 'status', 'elapsed_time')
+
+        return self._parse_hpc_output(result, columns, as_df, delimiter=delimiter)
+
+    @staticmethod
+    def _parse_full_status(status_str):
+        clean_status_str = status_str.replace('\n\t', '').split('Job Id: ')[1:]
+        statuses = dict()
+        for status in clean_status_str:
+            lines = status.splitlines()
+            d = dict()
+            for l in lines[1:-1]:
+                try:
+                    k, v = l.split('=', 1)
+                    d[k.strip()] = v.strip()
+                except ValueError:
+                    print('ERROR', l)
+            d['Variable_List'] = dict(kv.split('=') for kv in d.get('Variable_List').split(','))
+            statuses[lines[0]] = d
+        return statuses
+
+    def _parse_hpc_output(self, output, columns, as_df, delimiter=None, num_header_lines=0):
+        if delimiter is not None:
+            lines = output.split(delimiter)[-1].splitlines()
+        else:
+            lines = output.splitlines()[num_header_lines:-1]
+
+        rows = [{k: v for k, v in list(zip(columns, i.split()))} for i in lines]
 
         if as_df:
-            return self._as_df(jobs)
-        return jobs
+            return self._as_df(rows, columns)
+        return rows
 
     @_ensure_connected
     def submit(self, pbs_script, working_dir=None, remote_name='run.pbs', local_temp_dir=None):
@@ -563,10 +588,9 @@ class Client:
         """
         working_dir = self._resolve_path(working_dir, self.WORKDIR)
 
-        if local_temp_dir:
-            pbs_script_path = os.path.join(local_temp_dir, str(uuid.uuid4()))
-        else:
-            pbs_script_path = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        local_temp_dir = local_temp_dir or tempfile.gettempdir()
+
+        pbs_script_path = os.path.join(local_temp_dir, str(uuid.uuid4()))
 
         # Write out PbsScript tempfile
         if isinstance(pbs_script, PbsScript):
@@ -587,7 +611,7 @@ class Client:
 
         # Submit the script using call() with qsub command
         try:
-            job_id = self.call('qsub {}'.format(remote_name), working_dir)
+            job_id = self.call(f'qsub {remote_name}', working_dir)
         except RuntimeError as e:
             raise RuntimeError('An exception occurred while submitting job script: {}'.format(str(e)))
 
@@ -603,9 +627,9 @@ class Client:
 
 
 class ServerThread(threading.Thread):
-    def __init__(self, app):
+    def __init__(self, app, port):
         threading.Thread.__init__(self)
-        self.srv = make_server('127.0.0.1', 5000, app)
+        self.srv = make_server('127.0.0.1', port, app)
         self.ctx = app.app_context()
         self.ctx.push()
 
@@ -616,16 +640,17 @@ class ServerThread(threading.Thread):
         self.srv.shutdown()
 
 
-def start_server(auth_func, config_file):
-    app = Flask('get_uit_token')
-    server = ServerThread(app)
-    server.start()
+def shutdown_server():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    func()
 
-    def shutdown_server():
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func is None:
-            raise RuntimeError('Not running with the Werkzeug Server')
-        func()
+
+def start_server(auth_func, port=5000):
+    app = Flask('get_uit_token')
+    server = ServerThread(app, port)
+    server.start()
 
     @app.route('/save_token', methods=['GET'])
     def save_token():
@@ -633,7 +658,7 @@ def start_server(auth_func, config_file):
         WebHook to parse auth_code from url and retrieve access_token
         """
         hidden = 'hidden'
-        global _auth_code, _auth_url
+        global _auth_code
         try:
             _auth_code = request.args.get('code')
             auth_func(auth_code=_auth_code)
@@ -644,8 +669,6 @@ def start_server(auth_func, config_file):
         except Exception as e:
             status = 'Failed'
             msg = str(e)
-        finally:
-            shutdown_server()
 
         html_template = f"""
         <!doctype html>
