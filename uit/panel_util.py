@@ -1,12 +1,53 @@
 import os
 import glob
+from pathlib import Path, PosixPath
 
 import param
 import panel as pn
 
-from .uit import Client, HPC_SYSTEMS
+from .uit import Client, HPC_SYSTEMS, QUEUES
 from uit.pbs_script import NODE_TYPES, factors
 from .job import PbsJob
+
+
+class HpcAuthenticate(param.Parameterized):
+    uit_client = param.ClassSelector(Client)
+    authenticated = param.Boolean(default=False)
+    auth_code = param.String(default='', label='Code')
+
+    def __init__(self, uit_client=None, web_based=True, **params):
+        super().__init__(**params)
+        self.web_based = web_based
+        self.uit_client = uit_client or Client()
+
+    def update_authenticated(self, authenticated=False):
+        self.authenticated = authenticated
+        self.param.trigger('authenticated')
+
+    @param.depends('auth_code', watch=True)
+    def get_token(self):
+        self.uit_client.get_token(auth_code=self.auth_code)
+
+    @param.depends('authenticated')
+    def view(self):
+        if not self.authenticated:
+            header = '<h1>Step 1 of 2: Authorize and Authenticate</h1> ' \
+                     '<h2>Instructions:</h2> ' \
+                     '<p>Login to UIT+ with your CAC and then click the "Approve" button to authorize ' \
+                     'this application to use your HPC account on your behalf.</p>'
+
+            auth_frame = self.uit_client.authenticate(inline=True, callback=self.update_authenticated)
+            if self.web_based:
+                return pn.Column(header, auth_frame)
+            header += '<p>When the "Success" message is shown copy the code (the alpha-numeric sequence after ' \
+                      '"code=") and paste it into the Code field at the bottom. Then click "Authenticate".</p>'
+            return pn.Column(header, auth_frame, self.param.auth_code,
+                             pn.widgets.Button(name='Authenticate', button_type='primary', width=200))
+
+        return "Successfully Authenticated! Click Next to continue."
+
+    def panel(self):
+        return pn.panel(self.view)
 
 
 class HpcConnection(param.Parameterized):
@@ -14,16 +55,13 @@ class HpcConnection(param.Parameterized):
     system = param.ObjectSelector(default=HPC_SYSTEMS[1], objects=HPC_SYSTEMS)
     login_node = param.ObjectSelector(default=None, objects=[None], label='Login Node')
     exclude_nodes = param.ListSelector(default=list(), objects=[], label='Exclude Nodes')
-    authenticated = param.Boolean(default=False)
     connected = param.Boolean(default=False)
     connect_btn = param.Action(lambda self: self.connect(), label='Connect')
     disconnect_btn = param.Action(lambda self: self.disconnect(), label='Disconnect')
     connection_status = param.String(default='Not Connected', label='Status')
-    auth_code = param.String(default='', label='Code')
 
-    def __init__(self, uit_client=None, web_based=True, **params):
+    def __init__(self, uit_client=None, **params):
         super().__init__(**params)
-        self.web_based = web_based
         self.uit_client = uit_client or Client()
         self.update_node_options()
 
@@ -46,10 +84,6 @@ class HpcConnection(param.Parameterized):
             self.connect()
         return self.uit_client
 
-    @param.depends('auth_code', watch=True)
-    def get_token(self):
-        self.uit_client.get_token(auth_code=self.auth_code)
-
     def connect(self):
         system = None if self.login_node is not None else self.system
         self.connection_status = self.uit_client.connect(
@@ -64,26 +98,9 @@ class HpcConnection(param.Parameterized):
         self.connection_status = 'Not Connected'
         self.connected = False
 
-    def update_authenticated(self, authenticated=False):
-        self.authenticated = authenticated
-        self.param.trigger('authenticated')
-
-    @param.depends('authenticated', 'connected')
+    @param.depends('connected')
     def view(self):
-        if not self.authenticated:
-            header = '<h1>Step 1 of 2: Authorize and Authenticate</h1> ' \
-                     '<h2>Instructions:</h2> ' \
-                     '<p>Login to UIT+ with your CAC and then click the "Approve" button to authorize ' \
-                     'this application to use your HPC account on your behalf.</p>'
-
-            auth_frame = self.uit_client.authenticate(inline=True, callback=self.update_authenticated)
-            if self.web_based:
-                return pn.Column(header, auth_frame)
-            header += '<p>When the "Success" message is shown copy the code (the alpha-numeric sequence after ' \
-                      '"code=") and paste it into the Code field at the bottom. Then click "Authenticate".</p>'
-            return pn.Column(header, auth_frame, self.param.auth_code,
-                             pn.widgets.Button(name='Authenticate', button_type='primary', width=200))
-        elif not self.connected:
+        if not self.connected:
             system_pn = pn.panel(self, parameters=['system'], show_name=False, name='HPC System')
             advanced_pn = pn.panel(
                 self,
@@ -117,7 +134,7 @@ class HPCSubmitScript(param.Parameterized):
     nodes = param.Integer(default=1, bounds=(1, 100), precedence=5.1)
     processes_per_node = param.ObjectSelector(default=1, objects=[], precedence=5.2)
     wall_time = param.String(default='00:05:00', precedence=6)
-    queue = param.ObjectSelector(default='debug', objects=['standard', 'debug'], precedence=7)
+    queue = param.ObjectSelector(default='debug', objects=QUEUES, precedence=7)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
 
     def update_hpc_conneciton_dependent_defaults(self):
@@ -130,6 +147,7 @@ class HPCSubmitScript(param.Parameterized):
         self.workdir = self.uit_client.WORKDIR.as_posix()
         self.param.node_type.objects = list(NODE_TYPES[self.uit_client.system].keys())
         self.node_type = self.param.node_type.objects[0]
+        self.param.queue.objects = self.uit_client.get_queues()
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):
@@ -236,6 +254,10 @@ class FileManager(param.Parameterized):
         self.cross_selector = pn.widgets.CrossSelector(name='Files', value=[], options=[], width=900)
         self._update_files()
 
+    @property
+    def value(self):
+        return self.cross_selector.value
+
     @param.depends('directory', watch=True)
     def _update_files(self):
         self.cross_selector.options = glob.glob(os.path.join(self.directory, '*' + self.file_keyword + '*'))
@@ -261,35 +283,35 @@ class FileManagerHPC(FileManager):
         precedence=-1
     )
 
-    def __init__(self, **params):
-        if 'uit_client' in params:
-            self.directory = str(params['uit_client'].WORKDIR)
-
-        super().__init__(**params)
-        self._update_files()
+    @param.depends('uit_client', watch=True)
+    def _initialize_directory(self):
+        if self.uit_client:
+            self.directory = str(self.uit_client.WORKDIR)
+            self._update_files()
 
     @param.depends('directory', watch=True)
     def _update_files(self):
-        # get the ls from the client
-        ls_df = self.uit_client.list_dir(
-            path=self.directory,
-            parse=True,
-            as_df=True)
+        if self.uit_client:
+            # get the ls from the client
+            ls_df = self.uit_client.list_dir(
+                path=self.directory,
+                parse=True,
+                as_df=True)
 
-        # catch for errors returned as dict
-        if type(ls_df) is dict:
-            raise RuntimeError(f"""
-            Request for directory list returned the error: {ls_df['error']}
+            # catch for errors returned as dict
+            if type(ls_df) is dict:
+                raise RuntimeError(f"""
+                Request for directory list returned the error: {ls_df['error']}
+    
+                Directory requested: {self.directory}
+    
+                """)
 
-            Directory requested: {self.directory}
+            # convert dataframe to file list
+            self.file_list = ls_df['path'].to_list()
 
-            """)
-
-        # convert dataframe to file list
-        self.file_list = ls_df['path'].to_list()
-
-        # update cross selector widget
-        self.cross_selector.options = self.file_list
+            # update cross selector widget
+            self.cross_selector.options = self.file_list
 
     def panel(self):
         return pn.Column(self.param.directory, self.cross_selector, width=700)
@@ -404,4 +426,223 @@ class FileTransfer(param.Parameterized):
             from_box,
             to_box,
             pn.panel(self.param.transfer_button)
+        )
+
+
+class FileBrowser(param.Parameterized):
+    """
+    """
+    path = param.ClassSelector(Path, precedence=-1)
+    path_text = param.String(label='', precedence=0.3)
+    home = param.Action(lambda self: self.go_home(), label='🏠', precedence=0.1)
+    up = param.Action(lambda self: self.move_up(), label='⬆️', precedence=0.2)
+    callback = param.Action(lambda x: None, label='Select', precedence=0.4)
+    file_listing = param.ListSelector(default=[], label='', precedence=0.5)
+    patterns = param.List(precedence=-1)
+    show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
+
+    def __init__(self, **params):
+        super().__init__(**params)
+        self.go_home()
+
+    def _new_path(self, path):
+        return Path(path)
+
+    @property
+    def controls(self):
+        return ['home', 'up']
+
+    @property
+    def control_styles(self):
+        styles = {c: {'width': 25} for c in self.controls}
+
+        styles.update(
+            path_text={'width_policy': 'max'},
+            callback={'width': 100, 'button_type': 'success'},
+        )
+        return styles
+
+    @property
+    def panel(self):
+        return pn.Column(
+            pn.Param(
+                self,
+                parameters=self.controls + ['path_text', 'callback'],
+                widgets=self.control_styles,
+                default_layout=pn.Row,
+                width_policy='max',
+                show_name=False,
+                margin=0,
+            ),
+            self.param.show_hidden,
+            self.param.file_listing,
+            width_policy='max',
+            margin=0,
+        )
+
+    @property
+    def value(self):
+        if self.file_listing:
+            return [str(self.path / v) for v in self.file_listing]
+        else:
+            return [self.path.as_posix()]
+
+    def go_home(self):
+        self.path = Path.cwd()
+
+    def move_up(self):
+        self.path = self.path.parent
+
+    @param.depends('file_listing', watch=True)
+    def move_down(self):
+        for filename in self.file_listing:
+            fn = self.path / filename
+            if fn.is_dir():
+                self.path = fn
+                self.make_options()
+            elif self.callback:
+                self.callback(True)
+
+    @param.depends('path_text', watch=True)
+    def validate(self):
+        """Check that inputted path is valid - set validator accordingly"""
+        path = self._new_path(self.path_text)
+        if path.is_dir():
+            self.path = path
+        else:
+            print("Invalid Directory")
+
+    @param.depends('path', 'show_hidden', watch=True)
+    def make_options(self):
+        self.path_text = self.path.as_posix()
+        selected = []
+        try:
+            selected = [p.name + '/' for p in self.path.glob('*') if p.is_dir()]
+            for pattern in self.patterns:
+                selected.extend([p.name for p in self.path.glob(pattern)])
+            if not self.show_hidden:
+                selected = [p for p in selected if not str(p).startswith('.')]
+        except Exception as e:
+            print(e)
+
+        self.file_listing = []
+        self.param.file_listing.objects = selected
+
+
+class HpcPath(PosixPath):
+    def __init__(self, path, is_dir=None, uit_client=None):
+        super().__init__()
+        self._init(is_dir=is_dir, uit_client=uit_client)
+
+    def _init(self, template=None, is_dir=None, uit_client=None):
+        super()._init(template=template)
+        self._is_dir = is_dir
+        self._ls = None
+        self.uit_client = uit_client
+
+    def __truediv__(self, key):
+        new_path = super().__truediv__(key)
+        new_path.uit_client = self.uit_client
+        return new_path
+
+    @property
+    def ls(self):
+        if not self._ls:
+            self._get_metadata()
+        return self._ls
+
+    def _get_metadata(self):
+        if self.uit_client and self.uit_client.connected:
+            self._ls = self.uit_client.list_dir(self.as_posix())
+            self._is_dir = 'path' in self.ls
+        else:
+            print('WARNING: Path has not uit client!')
+
+    def is_dir(self):
+        if self._is_dir is None:
+            self._get_metadata()
+        return self._is_dir
+
+    def glob(self, pattern):
+        result = list()
+        if 'dirs' in self.ls:
+            result.extend([HpcPath(p['path'], is_dir=True, uit_client=self.uit_client) for p in self.ls['dirs']])
+            result.extend([HpcPath(p['path'], is_dir=False, uit_client=self.uit_client) for p in self.ls['files']])
+        return [r for r in result if r.match(pattern)]
+
+
+class HpcFileBrowser(FileBrowser):
+    path = param.ClassSelector(HpcPath)
+    workdir = param.Action(lambda self: self.go_to_workdir(), label='⚙️', precedence=0.15)
+    uit_client = param.ClassSelector(Client)
+
+    def __init__(self, uit_client, **params):
+        super().__init__(**params)
+        self.uit_client = uit_client
+
+    @property
+    def controls(self):
+        controls = super().controls
+        controls.insert(1, 'workdir')
+        return controls
+
+    def _new_path(self, path):
+        return HpcPath(path, uit_client=self.uit_client)
+
+    @param.depends('uit_client', watch=True)
+    def go_home(self):
+        if self.uit_client and self.uit_client.connected:
+            self.path = self._new_path(self.uit_client.HOME)
+
+    def go_to_workdir(self):
+        self.path = self._new_path(self.uit_client.WORKDIR)
+
+
+class SelectFile(param.Parameterized):
+    file_path = param.String(default='')
+    show_browser = param.Boolean(default=False)
+    browse_toggle = param.Action(lambda self: self.toggle(), label='Browse')
+    file_browser = param.ClassSelector(FileBrowser)
+
+    def __init__(self, **params):
+        super().__init__(**params)
+        self.file_browser = self.file_browser or FileBrowser()
+
+    @param.depends('file_browser', watch=True)
+    def update_callback(self):
+        self.file_browser.callback = self.update_file
+
+    def update_file(self, done):
+        if done:
+            self.file_path = self.file_browser.value[0]
+
+    def toggle(self):
+        self.show_browser = not self.show_browser
+        self.browse_toggle.label = 'Hide' if self.show_browser else 'Browse'
+
+    @param.depends('show_browser')
+    def file_browser_panel(self):
+        if self.show_browser:
+            return self.file_browser.panel
+
+    def input_row(self):
+        return pn.Param(
+            self,
+            parameters=['file_path', 'browse_toggle'],
+            widgets={
+                'file_path': {'width_policy': 'max'},
+                'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
+            },
+            default_layout=pn.Row,
+            show_name=False,
+            width_policy='max',
+            margin=0,
+        )
+
+    @property
+    def panel(self):
+        return pn.Column(
+            self.input_row,
+            self.file_browser_panel,
+            width_policy='max'
         )

@@ -28,6 +28,7 @@ UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 HPC_SYSTEMS = ['topaz', 'onyx']
+QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
 
 _auth_code = None
 _server = None
@@ -272,10 +273,6 @@ class Client:
         }
 
         return url + '?' + urlencode(data)
-
-    # def _mock_get_token(self, auth_code=None):
-    #     self.token = auth_code
-    #     self._do_callback(True)
 
     def get_token(self, auth_code=None):
         """Get token from the UIT server.
@@ -619,6 +616,14 @@ class Client:
         os.remove(pbs_script_path)
 
         return job_id.strip()
+
+    @_ensure_connected
+    def get_queues(self):
+        output = self.call('qstat -Q')
+        standard_queues = QUEUES
+        other_queues = set([i.split()[0] for i in output.splitlines()][2:]) - set(standard_queues)
+        all_queues = standard_queues + sorted([q for q in other_queues if '_' not in q])
+        return all_queues
 
 
 ############################################################

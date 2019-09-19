@@ -141,5 +141,4 @@ class PbsArrayJob(PbsJob):
     def sub_jobs(self):
         if self._sub_jobs is None and self.job_id is not None:
             self._sub_jobs = [self.PbsArraySubJob(self, job_index) for job_index in self.script.job_array_indices]
-        print(self._sub_jobs)
         return self._sub_jobs
