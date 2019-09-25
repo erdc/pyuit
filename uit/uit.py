@@ -5,7 +5,7 @@ import threading
 import tempfile
 import uuid
 from functools import wraps
-from pathlib import PosixPath, Path
+from pathlib import PurePosixPath, Path
 from urllib.parse import urljoin, urlencode  # noqa: F401
 
 import dodcerts
@@ -116,19 +116,19 @@ class Client:
 
     @property
     def HOME(self):
-        return PosixPath(self.env.HOME)
+        return PurePosixPath(self.env.HOME)
 
     @property
     def WORKDIR(self):
-        return PosixPath(self.env.WORKDIR)
+        return PurePosixPath(self.env.WORKDIR)
 
     @property
     def WORKDIR2(self):
-        return PosixPath(self.env.WORKDIR2)
+        return PurePosixPath(self.env.WORKDIR2)
 
     @property
     def CENTER(self):
-        return PosixPath(self.env.CENTER)
+        return PurePosixPath(self.env.CENTER)
 
     @property
     def login_node(self):
@@ -423,7 +423,7 @@ class Client:
             str: local_path
         """
         if local_path is None:
-            remote_path = PosixPath(remote_path)
+            remote_path = PurePosixPath(remote_path)
             filename = remote_path.name
             local_path = Path() / filename
         remote_path = self._resolve_path(remote_path)

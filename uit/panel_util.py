@@ -1,6 +1,6 @@
 import os
 import glob
-from pathlib import Path, PosixPath
+from pathlib import Path, PurePosixPath
 
 import param
 import panel as pn
@@ -529,7 +529,7 @@ class FileBrowser(param.Parameterized):
         self.param.file_listing.objects = selected
 
 
-class HpcPath(PosixPath):
+class HpcPath(PurePosixPath):
     def __init__(self, path, is_dir=None, uit_client=None):
         super().__init__()
         self._init(is_dir=is_dir, uit_client=uit_client)
