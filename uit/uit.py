@@ -375,7 +375,7 @@ class Client:
 
         # construct the base options dictionary
         data = {'command': command, 'workingdir': working_dir}
-        data = {'options': json.dumps(data)}
+        data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         r = requests.post(urljoin(self._uit_url, 'exec'), headers=self._headers, data=data, verify=self.ca_file)
         resp = r.json()
         if full_response:
@@ -404,7 +404,7 @@ class Client:
         filename = local_path.name
         remote_path = self._resolve_path(remote_path, self.HOME / filename)
         data = {'file': remote_path}
-        data = {'options': json.dumps(data)}
+        data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         files = {'file': local_path.open(mode='rb')}
         r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self._headers, data=data, files=files,
                           verify=self.ca_file)
@@ -428,7 +428,7 @@ class Client:
             local_path = Path() / filename
         remote_path = self._resolve_path(remote_path)
         data = {'file': remote_path}
-        data = {'options': json.dumps(data)}
+        data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self._headers, data=data, verify=self.ca_file,
                           stream=True)
         if r.status_code != 200:
@@ -457,7 +457,7 @@ class Client:
             return self.call(f'ls -la {path}')
 
         data = {'directory': path}
-        data = {'options': json.dumps(data)}
+        data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self._headers, data=data,
                           verify=self.ca_file)
         result = r.json()
@@ -689,3 +689,10 @@ def start_server(auth_func, port=5000):
         return render_template_string(html_template)
 
     return server
+
+
+def encode_pure_posix_path(obj):
+    if isinstance(obj, PurePosixPath):
+        return obj.as_posix()
+    else:
+        raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')

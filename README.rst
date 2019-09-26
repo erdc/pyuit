@@ -11,6 +11,10 @@ Python wrapper for DoD HPCMP UIT+ rest interface
 
 **INSTALL**
 
+conda install::
+
+    conda install -c erdc/label/dev -c conda-forge pyuit
+
 development install::
 
     conda env create -f environment.yml

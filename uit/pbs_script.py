@@ -88,7 +88,6 @@ class PbsScript(object):
             raise ValueError(f'Please specify valid "processes_per_node" for the given node type [{self.node_type}] '
                              f'and System [{self.system}].\nMust be one of: {processes_per_node}')
 
-
     @property
     def get_num_nodes_process_directive(self):
         """Generate a properly formatted CPU Request for use in PBS Headers.

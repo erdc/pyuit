@@ -1,6 +1,8 @@
 import os
 import glob
+import logging
 from pathlib import Path, PurePosixPath
+from functools import wraps
 
 import param
 import panel as pn
@@ -8,6 +10,8 @@ import panel as pn
 from .uit import Client, HPC_SYSTEMS, QUEUES
 from uit.pbs_script import NODE_TYPES, factors
 from .job import PbsJob
+
+log = logging.getLogger(__name__)
 
 
 class HpcAuthenticate(param.Parameterized):
@@ -113,13 +117,23 @@ class HpcConnection(param.Parameterized):
             return pn.Column(
                 '<h1>Step 2 of 2: Connect</h1>',
                 pn.panel(pn.layout.Tabs(system_pn, advanced_pn)),
-                pn.panel(self, parameters=['connect_btn'], show_name=False)
+                pn.Param(
+                    self, parameters=['connect_btn'],
+                    widgets={'connect_btn': {'button_type': 'success', 'width': 100}},
+                    show_name=False
+                )
             )
         else:
             self.param.connect_btn.label = 'Re-Connect'
-            btns = pn.Row(
-                pn.panel(self.param.disconnect_btn, show_name=False, width=200),
-                pn.panel(self.param.connect_btn, show_name=False, width=200),
+            btns = pn.Param(
+                self,
+                parameters=['connect_btn', 'disconnect_btn'],
+                widgets={
+                    'disconnect_btn': {'button_type': 'danger', 'width': 100},
+                    'connect_btn': {'button_type': 'success', 'width': 100}
+                },
+                show_name=False,
+                default_layout=pn.Row,
             )
             return pn.Column(btns, pn.panel(self, parameters=['connection_status'], show_name=False, width=400))
 
@@ -364,12 +378,12 @@ class FileTransfer(param.Parameterized):
                 self.uit_client.put_file(local_file, self.to_directory)
         elif self.to_location == 'local':
             for remote_file in self.file_manager.cross_selector.value:
-                print('transferring {}'.format(remote_file))
+                log.info('transferring {}'.format(remote_file))
                 self.uit_client.get_file(remote_file,
                                          local_path=os.path.join(self.to_directory, os.path.basename(remote_file)))
 
         else:
-            print('HPC to HPC transfers are not supported.')
+            log.warning('HPC to HPC transfers are not supported.')
 
     @param.depends('from_directory', watch=True)
     def _update_file_manager(self):
@@ -443,7 +457,16 @@ class FileBrowser(param.Parameterized):
 
     def __init__(self, **params):
         super().__init__(**params)
-        self.go_home()
+        self._initialize_path()
+
+    def _initialize_path(self):
+        if self.path_text:
+            self.validate()
+
+        if not self.path:
+            self.go_home()
+        else:
+            self.make_options()
 
     def _new_path(self, path):
         return Path(path)
@@ -507,10 +530,10 @@ class FileBrowser(param.Parameterized):
     def validate(self):
         """Check that inputted path is valid - set validator accordingly"""
         path = self._new_path(self.path_text)
-        if path.is_dir():
+        if path and path.is_dir():
             self.path = path
         else:
-            print("Invalid Directory")
+            log.warning("Invalid Directory")
 
     @param.depends('path', 'show_hidden', watch=True)
     def make_options(self):
@@ -523,27 +546,40 @@ class FileBrowser(param.Parameterized):
             if not self.show_hidden:
                 selected = [p for p in selected if not str(p).startswith('.')]
         except Exception as e:
-            print(e)
+            log.exception(str(e))
 
         self.file_listing = []
         self.param.file_listing.objects = selected
 
 
-class HpcPath(PurePosixPath):
-    def __init__(self, path, is_dir=None, uit_client=None):
-        super().__init__()
-        self._init(is_dir=is_dir, uit_client=uit_client)
+class HpcPath(Path, PurePosixPath):
+    """PurePath subclass that can make some system calls on an HPC system.
+
+    """
 
     def _init(self, template=None, is_dir=None, uit_client=None):
         super()._init(template=template)
         self._is_dir = is_dir
-        self._ls = None
+        self._ls = []
         self.uit_client = uit_client
+
+    def __new__(cls, *args, is_dir=None, uit_client=None):
+        self = cls._from_parts(args, init=False)
+        self._init(is_dir=is_dir, uit_client=uit_client)
+        return self
 
     def __truediv__(self, key):
         new_path = super().__truediv__(key)
         new_path.uit_client = self.uit_client
         return new_path
+
+    def _ensure_connected(method):
+        @wraps(method)
+        def wrapper(self, *args, **kwargs):
+            if self.uit_client and self.uit_client.connected:
+                return method(self, *args, **kwargs)
+            log.warning('Path has no uit client, or it is not connected!')
+        return wrapper
 
     @property
     def ls(self):
@@ -551,12 +587,10 @@ class HpcPath(PurePosixPath):
             self._get_metadata()
         return self._ls
 
+    @_ensure_connected
     def _get_metadata(self):
-        if self.uit_client and self.uit_client.connected:
-            self._ls = self.uit_client.list_dir(self.as_posix())
-            self._is_dir = 'path' in self.ls
-        else:
-            print('WARNING: Path has not uit client!')
+        self._ls = self.uit_client.list_dir(self.as_posix())
+        self._is_dir = 'path' in self.ls
 
     def is_dir(self):
         if self._is_dir is None:
@@ -579,6 +613,7 @@ class HpcFileBrowser(FileBrowser):
     def __init__(self, uit_client, **params):
         super().__init__(**params)
         self.uit_client = uit_client
+        self._initialize_path()
 
     @property
     def controls(self):
@@ -590,10 +625,14 @@ class HpcFileBrowser(FileBrowser):
         return HpcPath(path, uit_client=self.uit_client)
 
     @param.depends('uit_client', watch=True)
-    def go_home(self):
-        if self.uit_client and self.uit_client.connected:
-            self.path = self._new_path(self.uit_client.HOME)
+    def _initialize_path(self):
+        super()._initialize_path()
 
+    @HpcPath._ensure_connected
+    def go_home(self):
+        self.path = self._new_path(self.uit_client.HOME)
+
+    @HpcPath._ensure_connected
     def go_to_workdir(self):
         self.path = self._new_path(self.uit_client.WORKDIR)
 
