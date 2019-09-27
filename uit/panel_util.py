@@ -23,6 +23,7 @@ class HpcAuthenticate(param.Parameterized):
         super().__init__(**params)
         self.web_based = web_based
         self.uit_client = uit_client or Client()
+        self.update_authenticated(bool(self.uit_client.token))
 
     def update_authenticated(self, authenticated=False):
         self.authenticated = authenticated
@@ -35,7 +36,7 @@ class HpcAuthenticate(param.Parameterized):
     @param.depends('authenticated')
     def view(self):
         if not self.authenticated:
-            header = '<h1>Step 1 of 2: Authorize and Authenticate</h1> ' \
+            header = '<h1>Authenticate to HPC</h1> ' \
                      '<h2>Instructions:</h2> ' \
                      '<p>Login to UIT+ with your CAC and then click the "Approve" button to authorize ' \
                      'this application to use your HPC account on your behalf.</p>'
@@ -48,7 +49,7 @@ class HpcAuthenticate(param.Parameterized):
             return pn.Column(header, auth_frame, self.param.auth_code,
                              pn.widgets.Button(name='Authenticate', button_type='primary', width=200))
 
-        return "Successfully Authenticated! Click Next to continue."
+        return pn.pane.HTML("<h1>Successfully Authenticated!</h1><p>Click Next to continue</p>", width=400)
 
     def panel(self):
         return pn.panel(self.view)
@@ -104,24 +105,32 @@ class HpcConnection(param.Parameterized):
 
     @param.depends('connected')
     def view(self):
+        connect_btn = pn.Param(
+            self, parameters=['connect_btn'],
+            widgets={'connect_btn': {'button_type': 'success', 'width': 100}},
+            show_name=False
+        )
+
         if not self.connected:
-            system_pn = pn.panel(self, parameters=['system'], show_name=False, name='HPC System')
-            advanced_pn = pn.panel(
-                self,
-                parameters=['login_node', 'exclude_nodes'],
-                widgets={'exclude_nodes': pn.widgets.CrossSelector},
-                show_name=False,
-                name='Advanced Options'
+            system_pn = pn.Column(
+                pn.panel(self, parameters=['system'], show_name=False),
+                connect_btn,
+                name='HPC System',
+            )
+            advanced_pn = pn.Column(
+                pn.panel(
+                    self,
+                    parameters=['login_node', 'exclude_nodes'],
+                    widgets={'exclude_nodes': pn.widgets.CrossSelector},
+                    show_name=False,
+                ),
+                connect_btn,
+                name='Advanced Options',
             )
 
             return pn.Column(
-                '<h1>Step 2 of 2: Connect</h1>',
+                '<h1>Connect to HPC System</h1>',
                 pn.panel(pn.layout.Tabs(system_pn, advanced_pn)),
-                pn.Param(
-                    self, parameters=['connect_btn'],
-                    widgets={'connect_btn': {'button_type': 'success', 'width': 100}},
-                    show_name=False
-                )
             )
         else:
             self.param.connect_btn.label = 'Re-Connect'
@@ -246,9 +255,12 @@ class JobMonitor(param.Parameterized):
         )
 
     def panel(self):
-        return pn.layout.Tabs(
-            pn.panel(self.status_panel, name='Status'),
-            pn.panel(self.logs_panel, name='Logs'),
+        return pn.Column(
+            pn.pane.HTML('<h1>Job Status</h1>'),
+            pn.layout.Tabs(
+                pn.panel(self.status_panel, name='Status'),
+                pn.panel(self.logs_panel, name='Logs'),
+            ),
         )
 
 
@@ -642,6 +654,8 @@ class SelectFile(param.Parameterized):
     show_browser = param.Boolean(default=False)
     browse_toggle = param.Action(lambda self: self.toggle(), label='Browse')
     file_browser = param.ClassSelector(FileBrowser)
+    title = param.String(default='File Path')
+    help_text = param.String()
 
     def __init__(self, **params):
         super().__init__(**params)
@@ -669,7 +683,7 @@ class SelectFile(param.Parameterized):
             self,
             parameters=['file_path', 'browse_toggle'],
             widgets={
-                'file_path': {'width_policy': 'max'},
+                'file_path': {'width_policy': 'max', 'show_name': False},
                 'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
             },
             default_layout=pn.Row,
@@ -680,8 +694,10 @@ class SelectFile(param.Parameterized):
 
     @property
     def panel(self):
+        self.param.file_path.label = self.title
         return pn.Column(
             self.input_row,
+            pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
             self.file_browser_panel,
             width_policy='max'
         )
