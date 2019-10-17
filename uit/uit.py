@@ -1,10 +1,12 @@
 import json
 import os
+import re
 import random
 import threading
 import tempfile
 import uuid
 from functools import wraps
+from itertools import chain
 from pathlib import PurePosixPath, Path
 from urllib.parse import urljoin, urlencode  # noqa: F401
 
@@ -77,6 +79,7 @@ class Client:
         self._userinfo = None
         self._username = None
         self._callback = None
+        self._available_modules = None
 
         # Environmental variable cache
         self.env = HpcEnv(self)
@@ -165,6 +168,12 @@ class Client:
     @property
     def username(self):
         return self._username
+
+    @property
+    def available_modules(self):
+        if self._available_modules is None:
+            self.get_available_modules()
+        return self._available_modules
 
     def _do_callback(self, *args):
         if self._callback:
@@ -625,6 +634,20 @@ class Client:
         all_queues = standard_queues + sorted([q for q in other_queues if '_' not in q])
         return all_queues
 
+    @_ensure_connected
+    def get_available_modules(self, flatten=False):
+        output = self.call('module avail')
+        sections = re.split('-+ (.*) -+', output)[1:]
+        self._available_modules = {a: b.split() for a, b in zip(sections[::2], sections[1::2])}
+
+        if flatten:
+            return sorted(chain.from_iterable(self._available_modules.values()))
+        return self._available_modules
+
+    @_ensure_connected
+    def get_loaded_modules(self):
+        output = self.call('module list')
+        return [m.split(') ')[1] for m in output.splitlines()[1:]]
 
 ############################################################
 # Simple Flask Server to retrieve auth_code & access_token #
