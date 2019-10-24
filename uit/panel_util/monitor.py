@@ -78,4 +78,3 @@ class HpcJobMonitor(param.Parameterized):
                 pn.panel(self.logs_panel, name='Logs'),
             ),
         )
-
