@@ -3,7 +3,7 @@ import os
 import io
 
 NODE_TYPES = {
-    'topaz': {
+    'jim': {
         'compute': 36,
         'gpu': 28,
         'bigmem': 32,
@@ -70,6 +70,7 @@ class PbsScript(object):
 
         self._optional_directives = []
         self._modules = {}
+        self._environment_variables = collections.OrderedDict()
         self.execution_block = ""
 
     def _validate_system(self):
@@ -197,6 +198,9 @@ class PbsScript(object):
         """  # noqa: E501
         return self._modules
 
+    def set_environment_variable(self, key, value):
+        self._environment_variables[key] = value
+
     def render_required_directives_block(self):
         """Render each required directive on a separate line.
 
@@ -247,9 +251,12 @@ class PbsScript(object):
                 str_module = "module " + value + " " + key
             opt_list.append(str_module)
 
-        str_render_modules_block = '\n'.join(map(str, opt_list))
+        return '\n'.join(map(str, opt_list))
 
-        return str_render_modules_block
+    def render_environment_block(self):
+        opt_list = ['## Environment --------------------------------------']
+        opt_list.extend([f'export {key}="{value}"' for key, value in self._environment_variables.items()])
+        return '\n'.join(opt_list)
 
     def render(self):
         """Render the PBS Script.
@@ -261,9 +268,10 @@ class PbsScript(object):
         render_required_directives = self.render_required_directives_block()
         render_optional_directives = self.render_optional_directives_block()
         render_modules_block = self.render_modules_block()
+        render_environment_block = self.render_environment_block()
         render_execution_block = self.execution_block
-        render_string = shebang + "\n \n" + render_required_directives + "\n \n" + render_optional_directives + \
-            "\n \n" + render_modules_block + "\n \n" + render_execution_block
+        render_string = '\n\n'.join([shebang, render_required_directives, render_optional_directives,
+                                     render_modules_block, render_environment_block, render_execution_block])
         return render_string
 
     def write(self, path):

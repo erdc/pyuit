@@ -55,7 +55,7 @@ class TestPBSScript(unittest.TestCase):
         self.assertEqual('OepnGL', res[0].options)
         self.assertEqual('C++', res[1].options)
 
-    def test_get_render_required_directives_block_for_topaz_compute_node(self):
+    def test_get_render_required_directives_block_for_jim_compute_node(self):
         res = self.pbs.render_required_directives_block()
         self.assertIn('#PBS -N ' + self.pbs.name, res)
         self.assertIn('#PBS -A ' + self.pbs.project_id, res)
@@ -63,21 +63,21 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn('#PBS -l select={}:ncpus=36:mpiprocs={}'.format(self.pbs.num_nodes, self.pbs.processes_per_node),
                       res)
 
-    def test_get_render_required_directives_block_for_topaz_gpu_node(self):
+    def test_get_render_required_directives_block_for_jim_gpu_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
                             node_type='gpu')
         res = pbs_gpu.render_required_directives_block()
         self.assertIn('#PBS -l select={}:ncpus=28:mpiprocs={}'.format(pbs_gpu.num_nodes, pbs_gpu.processes_per_node),
                       res)
 
-    def test_get_render_required_directives_block_for_topaz_bigmem_node(self):
+    def test_get_render_required_directives_block_for_jim_bigmem_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
                             node_type='bigmem')
         res = pbs_gpu.render_required_directives_block()
         self.assertIn('#PBS -l select={}:ncpus=32:mpiprocs={}'.format(pbs_gpu.num_nodes, pbs_gpu.processes_per_node),
                       res)
 
-    def test_get_render_required_directives_block_for_topaz_transfer_node(self):
+    def test_get_render_required_directives_block_for_jim_transfer_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=10, max_time=20,
                             node_type='transfer')
         res = pbs_gpu.render_required_directives_block()
@@ -248,9 +248,9 @@ class TestPBSScript(unittest.TestCase):
         self.assertRaises(ValueError, PbsScript, name='test1', project_id='P001', num_nodes=5,
                           processes_per_node=10, max_time=20, system='test_node')
 
-    def test_init_topaz_system_knl_node_value_error(self):
+    def test_init_jim_system_knl_node_value_error(self):
         self.assertRaises(ValueError, PbsScript, name='test1', project_id='P001', num_nodes=5,
-                          processes_per_node=10, max_time=20, node_type='knl', system='topaz')
+                          processes_per_node=10, max_time=20, node_type='knl', system='jim')
 
 
 if __name__ == '__main__':
