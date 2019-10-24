@@ -213,11 +213,12 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             max_time=self.wall_time,
             system=self.uit_client.system,
         )
-        #  TODO remove "(default)" from any modules
+
+        # remove "(default)" from any modules when adding to pbs script
         for module in self.modules_to_load:
-            self._pbs_script.load_module(module)
+            self._pbs_script.load_module(module.replace('(default)', ''))
         for module in self.modules_to_unload:
-            self._pbs_script.unload_module(module)
+            self._pbs_script.unload_module(module.replace('(default)', ''))
         self._pbs_script._environment_variables = self.environment_variables
         self._pbs_script.execution_block = self.execution_block()
         return self._pbs_script

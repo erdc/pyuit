@@ -3,7 +3,7 @@ import os
 import io
 
 NODE_TYPES = {
-    'topaz': {
+    'jim': {
         'compute': 36,
         'gpu': 28,
         'bigmem': 32,

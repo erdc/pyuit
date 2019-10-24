@@ -98,16 +98,16 @@ class FileTransfer(param.Parameterized):
     )
 
     from_location = param.ObjectSelector(
-        default='topaz',
-        objects=['topaz', 'onyx', 'local'],
+        default='onyx',
+        objects=['jim', 'onyx', 'local'],
         precedence=0.21
     )
     from_directory = param.String(
         precedence=0.22
     )
     to_location = param.ObjectSelector(
-        default='topaz',
-        objects=['topaz', 'onyx', 'local'],
+        default='onyx',
+        objects=['jim', 'onyx', 'local'],
         precedence=0.31
     )
     to_directory = param.String(
@@ -212,7 +212,7 @@ class FileBrowser(param.Parameterized):
     up = param.Action(lambda self: self.move_up(), label='⬆️', precedence=0.2)
     callback = param.Action(lambda x: None, label='Select', precedence=0.4)
     file_listing = param.ListSelector(default=[], label='', precedence=0.5)
-    patterns = param.List(precedence=-1)
+    patterns = param.List(precedence=-1, default=['*'])
     show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
 
     def __init__(self, **params):
@@ -283,7 +283,7 @@ class FileBrowser(param.Parameterized):
             if fn.is_dir():
                 self.path = fn
                 self.make_options()
-            elif self.callback:
+            if self.callback:
                 self.callback(True)
 
     @param.depends('path_text', watch=True)
@@ -414,8 +414,8 @@ class SelectFile(param.Parameterized):
     def update_callback(self):
         self.file_browser.callback = self.update_file
 
-    def update_file(self, done):
-        if done:
+    def update_file(self, new_selection):
+        if new_selection:
             self.file_path = self.file_browser.value[0]
 
     def toggle(self):

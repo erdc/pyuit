@@ -29,7 +29,7 @@ except ImportError:
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
-HPC_SYSTEMS = ['topaz', 'onyx']
+HPC_SYSTEMS = ['jim', 'onyx']
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
 
 _auth_code = None
