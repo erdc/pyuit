@@ -23,13 +23,14 @@ requirements:
     {% for dep in data['install_requires'] %}
     - {{ dep.lower() }}
     {% endfor %}
-    {% for dep in data['extras_require']['recommended'] %}
+    {% for dep in data['extras_require']['guitools'] %}
     - {{ dep.lower() }}
     {% endfor %}
 
 test:
   imports:
     - uit
+    - uit.gui_tools
 
 about:
   home: https://github.com/dharhas/uit
