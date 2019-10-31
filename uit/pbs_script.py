@@ -72,6 +72,7 @@ class PbsScript(object):
         self._modules = {}
         self._environment_variables = collections.OrderedDict()
         self.execution_block = ""
+        self.configure_job_dir = False
 
     def _validate_system(self):
         systems = list(NODE_TYPES.keys())
@@ -88,6 +89,12 @@ class PbsScript(object):
         if self.processes_per_node not in processes_per_node:
             raise ValueError(f'Please specify valid "processes_per_node" for the given node type [{self.node_type}] '
                              f'and System [{self.system}].\nMust be one of: {processes_per_node}')
+
+    @staticmethod
+    def _create_block_header_string(header):
+        header += ' '
+        return f'## {header.ljust(50, "-")}'
+
 
     @property
     def get_num_nodes_process_directive(self):
@@ -207,7 +214,7 @@ class PbsScript(object):
         Returns:
             str: String of all required directives.
         """
-        header = "## Required PBS Directives --------------------------------"
+        header = self._create_block_header_string('Required PBS Directives')
         directives = [
             PbsDirective('-N', self.name),
             PbsDirective('-A', self.project_id),
@@ -226,7 +233,7 @@ class PbsScript(object):
         Returns:
              str: All optional directives.
         """
-        header = '## Optional Directives -----------------------------'
+        header = self._create_block_header_string('Optional Directives')
         return self._render_directive_list(header, self._optional_directives)
 
     @staticmethod
@@ -243,7 +250,7 @@ class PbsScript(object):
         Returns:
             str: All module calls.
         """
-        opt_list = ['## Modules --------------------------------------']
+        opt_list = [self._create_block_header_string('Modules')]
         for key, value in self._modules.items():
             if value != 'load' and value != 'unload':
                 str_module = "module swap " + key + " " + value
@@ -254,9 +261,27 @@ class PbsScript(object):
         return '\n'.join(map(str, opt_list))
 
     def render_environment_block(self):
-        opt_list = ['## Environment --------------------------------------']
+        opt_list = [self._create_block_header_string('Environment')]
         opt_list.extend([f'export {key}="{value}"' for key, value in self._environment_variables.items()])
         return '\n'.join(opt_list)
+
+    def render_job_dir_configuration(self):
+        if self.configure_job_dir:
+            return '''
+            JOBID=`echo ${PBS_JOBID} | cut -d '.' -f 1 | cut -d '[' -f 1`
+            JOBDIR=$PBS_O_WORKDIR/$PBS_JOBNAME.$JOBID
+            if [ ! -d ${JOBDIR} ]; then
+              mkdir -p ${JOBDIR}
+            fi
+            # cd $JOBDIR
+            
+            '''
+        return ''
+
+    def render_execution_block(self):
+        header = self._create_block_header_string('Execution Block')
+        job_dir_config = self.render_job_dir_configuration()
+        return header + '\n' + job_dir_config + self.execution_block
 
     def render(self):
         """Render the PBS Script.
@@ -269,7 +294,7 @@ class PbsScript(object):
         render_optional_directives = self.render_optional_directives_block()
         render_modules_block = self.render_modules_block()
         render_environment_block = self.render_environment_block()
-        render_execution_block = self.execution_block
+        render_execution_block = self.render_execution_block()
         render_string = '\n\n'.join([shebang, render_required_directives, render_optional_directives,
                                      render_modules_block, render_environment_block, render_execution_block])
         return render_string
