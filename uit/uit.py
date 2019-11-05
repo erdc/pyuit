@@ -495,7 +495,8 @@ class Client:
 
         columns = ['system', 'subproject', 'hours_allocated', 'hours_used',
                    'hours_remaining', 'percent_remaining', 'background_hours_used']
-        return self._parse_hpc_output(result, columns, as_df, num_header_lines=9)  # header lines was 8 for topaz. TODO: create a smarter (more dynamic) way to parse output that is system agnostic
+        delimiter = '========= ============= =========== =========== =========== ========= ==========\n'
+        return self._parse_hpc_output(result, columns, as_df, delimiter=delimiter, remove_last_line=True)
 
     @_ensure_connected
     @robust()
@@ -567,11 +568,12 @@ class Client:
             statuses[lines[0]] = d
         return statuses
 
-    def _parse_hpc_output(self, output, columns, as_df, delimiter=None, num_header_lines=0):
+    def _parse_hpc_output(self, output, columns, as_df, delimiter=None, remove_last_line=False):
         if delimiter is not None:
             lines = output.split(delimiter)[-1].splitlines()
-        else:
-            lines = output.splitlines()[num_header_lines:-1]
+
+        if remove_last_line:
+            lines = lines[:-1]
 
         rows = [{k: v for k, v in list(zip(columns, i.split()))} for i in lines]
 
