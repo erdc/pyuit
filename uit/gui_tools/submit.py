@@ -18,10 +18,10 @@ class PbsScriptInputs(param.Parameterized):
     nodes = param.Integer(default=1, bounds=(1, 100), precedence=5.1)
     processes_per_node = param.ObjectSelector(default=1, objects=[], precedence=5.2)
     wall_time = param.String(default='00:05:00', precedence=6)
-    queue = param.ObjectSelector(default='debug', objects=QUEUES, precedence=7)
+    queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
 
-    def update_hpc_conneciton_dependent_defaults(self):
+    def update_hpc_connection_dependent_defaults(self):
         if not self.uit_client.connected:
             return
 
@@ -32,6 +32,7 @@ class PbsScriptInputs(param.Parameterized):
         self.param.node_type.objects = list(NODE_TYPES[self.uit_client.system].keys())
         self.node_type = self.param.node_type.objects[0]
         self.param.queue.objects = self.uit_client.get_queues()
+        self.queue = self.queue if self.queue in self.param.queue.objects else self.param.queue.objects[0]
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):
@@ -39,7 +40,7 @@ class PbsScriptInputs(param.Parameterized):
         self.processes_per_node = self.param.processes_per_node.objects[-1]
 
     def pbs_options_view(self):
-        self.update_hpc_conneciton_dependent_defaults()
+        self.update_hpc_connection_dependent_defaults()
         hpc_submit = pn.panel(self, parameters=list(PbsScriptInputs.param), show_name=False, name='PBS Options')
         return hpc_submit
 
@@ -56,7 +57,7 @@ class PbsScriptAdvancedInputs(param.Parameterized):
     browse_toggle = param.Boolean(default=False)
     configuration_file = param.String()
 
-    def update_hpc_conneciton_dependent_defaults_advanced(self):
+    def update_hpc_connection_dependent_defaults_advanced(self):
         if not self.uit_client.connected:
             return
 
@@ -82,7 +83,9 @@ class PbsScriptAdvancedInputs(param.Parameterized):
                 continue
             elif m in dfg.groups:
                 group = dfg.get_group(m)
-                row = group[group['Default']].iloc[0]
+                row = group.iloc[0]
+                if group.shape[0] > 1:
+                    row = group[group['Default']].iloc[0]
                 module = f'{row.Name}/{row.Version}'
                 modules.append(module)
             else:
@@ -161,7 +164,7 @@ class PbsScriptAdvancedInputs(param.Parameterized):
         )
 
     def advanced_options_view(self):
-        self.update_hpc_conneciton_dependent_defaults_advanced()
+        self.update_hpc_connection_dependent_defaults_advanced()
         return pn.Row(
             pn.Column(
                 '<h3>Modules to Load</h3>',
@@ -191,14 +194,15 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     job_name = param.String()
     uit_client = param.ClassSelector(Client)
     _pbs_script = param.ClassSelector(PbsScript, default=None)
+    ready = param.Boolean(default=False, precedence=-1)
 
     def submit(self):
         pass
 
     def _submit(self):
         if not self.param.submit_btn.constant:
-            self.param.submit_btn.label = 'Submitted: Click "next" to Continue'
             self.param.submit_btn.constant = True
+            self.ready = True
             return self.submit()
 
     @property
@@ -239,7 +243,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         )
 
     def view(self):
-        return self.param.job_name,
+        return pn.panel(self.param.job_name),
 
     def panel(self):
         return pn.Column(

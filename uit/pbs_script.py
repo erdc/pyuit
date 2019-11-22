@@ -70,6 +70,7 @@ class PbsScript(object):
 
         self._optional_directives = []
         self._modules = {}
+        self._module_use = []
         self._environment_variables = collections.OrderedDict()
         self.execution_block = ""
         self.configure_job_dir = False
@@ -172,6 +173,9 @@ class PbsScript(object):
         """
         return self._optional_directives
 
+    def module_use(self, path):
+        self._module_use.append(path)
+
     def load_module(self, module):
         """Add a load directive to the PBS script for the given module.
 
@@ -251,6 +255,8 @@ class PbsScript(object):
             str: All module calls.
         """
         opt_list = [self._create_block_header_string('Modules')]
+        for path in self._module_use:
+            opt_list.append(f'module use --append {path}')
         for key, value in self._modules.items():
             if value != 'load' and value != 'unload':
                 str_module = "module swap " + key + " " + value

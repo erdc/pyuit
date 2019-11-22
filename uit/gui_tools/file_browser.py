@@ -215,11 +215,19 @@ class FileBrowser(param.Parameterized):
     patterns = param.List(precedence=-1, default=['*'])
     show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
 
-    def __init__(self, **params):
+    def __init__(self, delayed_init=False, **params):
+        self.delayed_init = delayed_init
         super().__init__(**params)
         self._initialize_path()
 
+    def init(self):
+        self.delayed_init = False
+        self._initialize_path()
+
     def _initialize_path(self):
+        if self.delayed_init:
+            return
+
         if self.path_text:
             self.validate()
 
@@ -258,7 +266,7 @@ class FileBrowser(param.Parameterized):
                 margin=0,
             ),
             self.param.show_hidden,
-            self.param.file_listing,
+            pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'),
             width_policy='max',
             margin=0,
         )
@@ -292,6 +300,8 @@ class FileBrowser(param.Parameterized):
         path = self._new_path(self.path_text)
         if path and path.is_dir():
             self.path = path
+        elif path and path.is_file():
+            self.path = path.parent
         else:
             log.warning("Invalid Directory")
 
@@ -302,7 +312,7 @@ class FileBrowser(param.Parameterized):
         try:
             selected = [p.name + '/' for p in self.path.glob('*') if p.is_dir()]
             for pattern in self.patterns:
-                selected.extend([p.name for p in self.path.glob(pattern)])
+                selected.extend([p.name for p in self.path.glob(pattern) if not p.is_dir()])
             if not self.show_hidden:
                 selected = [p for p in selected if not str(p).startswith('.')]
         except Exception as e:
@@ -350,13 +360,28 @@ class HpcPath(Path, PurePosixPath):
 
     @_ensure_connected
     def _get_metadata(self):
-        self._ls = self.uit_client.list_dir(self.as_posix())
-        self._is_dir = 'path' in self.ls
+        if not self.is_absolute():
+            self._str = str(self.uit_client.HOME / self)
+        ls = self.uit_client.list_dir(self.parent.as_posix())
+        path = self.as_posix()
+        self._is_dir = False
+        self._is_file = False
+        self._ls = None
+        if path in (d['path'] for d in ls['dirs']):
+            self._is_dir = True
+            self._ls = self.uit_client.list_dir(path)
+        elif path in (f['path'] for f in ls['files']):
+            self._is_file = True
 
     def is_dir(self):
         if self._is_dir is None:
             self._get_metadata()
         return self._is_dir
+
+    def is_file(self):
+        if self._is_file is None:
+            self._get_metadata()
+        return self._is_file
 
     def glob(self, pattern):
         result = list()
@@ -372,9 +397,8 @@ class HpcFileBrowser(FileBrowser):
     uit_client = param.ClassSelector(Client)
 
     def __init__(self, uit_client, **params):
+        params['uit_client'] = uit_client
         super().__init__(**params)
-        self.uit_client = uit_client
-        self._initialize_path()
 
     @property
     def controls(self):
@@ -408,7 +432,7 @@ class SelectFile(param.Parameterized):
 
     def __init__(self, **params):
         super().__init__(**params)
-        self.file_browser = self.file_browser or FileBrowser()
+        self.file_browser = self.file_browser or FileBrowser(delayed_init=True)
 
     @param.depends('file_browser', watch=True)
     def update_callback(self):
@@ -420,11 +444,13 @@ class SelectFile(param.Parameterized):
 
     def toggle(self):
         self.show_browser = not self.show_browser
-        self.browse_toggle.label = 'Hide' if self.show_browser else 'Browse'
+        self.param.browse_toggle.label = 'Hide' if self.show_browser else 'Browse'
 
     @param.depends('show_browser')
     def file_browser_panel(self):
         if self.show_browser:
+            self.file_browser.path_text = self.file_path
+            self.file_browser.init()
             return self.file_browser.panel
 
     def input_row(self):

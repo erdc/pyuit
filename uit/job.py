@@ -1,5 +1,6 @@
 import re
-from pathlib import Path
+import os
+from pathlib import PurePosixPath, Path
 
 from .uit import Client
 from .pbs_script import PbsScript
@@ -20,7 +21,7 @@ class PbsJob:
 
     @property
     def working_dir(self):
-        return Path(self._working_dir)
+        return PurePosixPath(self._working_dir)
 
     @property
     def job_id(self):
@@ -35,16 +36,15 @@ class PbsJob:
         return self._status
 
     def submit(self, working_dir=None, remote_name=None, local_temp_dir=''):
-        """Submit a PBS Script.
+        """Submit a Job to HPC queue.
 
         Args:
-            pbs_script(PbsScript or str): PbsScript instance or string containing PBS script.
             working_dir(str): Path to working dir on supercomputer in which to run pbs script.
             remote_name(str): Custom name for pbs script on supercomputer. Defaults to "run.pbs".
             local_temp_dir(str): Path to local temporary directory if unable to write to os temp dir.
 
         Returns:
-            bool: True if job submitted successfully.
+            str: id of submitted job.
         """
         if self.job_id is not None:
             # TODO: log a warning stating that the job has already been submitted
@@ -69,13 +69,35 @@ class PbsJob:
         return self.working_dir / f'{self.name}.{log_type}{self.job_number}'
 
     def _get_log(self, log_type, filename=None):
-        log_contents = self.client.call(f'cat {self._get_log_file_path(log_type)}')
+        try:
+            if self.status in ['F']:
+                log_contents = self.client.call(f'cat {self._get_log_file_path(log_type)}')
+            else:
+                log_contents = self.client.call(f'qpeek {self.job_id}')
+                if log_contents == 'Unknown Job ID\n':
+                    log_contents = self.client.call(f'cat {self._get_log_file_path(log_type)}')
+                else:
+                    index = {'o': 0, 'e': 1}[log_type]
+                    log_contents = log_contents.split('\n\n')[index].split('\n', 1)[1]
+        except RuntimeError as e:
+            log_contents = str(e)
 
         if filename is not None:
             with Path(filename).open('w') as log:
                 log.write(log_contents)
 
         return log_contents
+
+    def resolve_path(self, path):
+        """
+        Resolves strings with variables relating to the job id.
+        """
+        path = path.replace('$JOB_ID', self.job_id)
+        path = path.replace('$JOB_NUMBER', self.job_number)
+        path = PurePosixPath(path)
+        if path.is_absolute():
+            return path
+        return self.working_dir / path
 
     def get_stdout_log(self, filename=None):
         return self._get_log('o', filename)
@@ -125,10 +147,25 @@ class PbsArrayJob(PbsJob):
             file_path = super()._get_log_file_path(log_type).as_posix()
             return file_path + f'.{self.job_index}'
 
+        def resolve_path(self, path):
+            """
+            Resolves strings with variables relating to the job id.
+            """
+            path = path.replace('$JOB_INDEX', str(self.job_index))
+            return super().resolve_path(path)
+
     def __init__(self, script, **kwargs):
         assert script._array_indices is not None
         super().__init__(script, **kwargs)
         self._sub_jobs = None
+
+    def update_status(self):
+        status = self.client.status(self.job_id)[0]
+        self._status = status['status']
+        return self.status
+
+    def _get_log(self, log_type, filename=None):
+        raise AttributeError('Cannot get the log on a PbsArrayJob. You must access logs on the sub-jobs.')
 
     # @property
     # def job_array_ids(self):
@@ -142,3 +179,37 @@ class PbsArrayJob(PbsJob):
         if self._sub_jobs is None and self.job_id is not None:
             self._sub_jobs = [self.PbsArraySubJob(self, job_index) for job_index in self.script.job_array_indices]
         return self._sub_jobs
+
+
+def get_active_jobs(uit_client):
+    statuses = uit_client.status(with_historic=True)
+    statuses = uit_client.status(job_id=[j['job_id'] for j in statuses], full=True)
+    jobs = list()
+    for job_id, status in statuses.items():
+        j = get_job_from_full_status(job_id, status, uit_client)
+        jobs.append(j)
+    return jobs
+
+
+def get_job_from_full_status(job_id, status, uit_client):
+    Job = PbsJob
+    script = PbsScript(
+        name=status['Job_Name'],
+        project_id=status['Account_Name'],
+        num_nodes=status['Resource_List.compute'],
+        processes_per_node=int(status['Resource_List.ncpus']) / int(status['Resource_List.compute']),
+        max_time=status['Resource_List.walltime'],
+    )
+    if status.get('array'):
+        Job = PbsArrayJob
+        script._array_indices = (int(i) for i in status['array_indices_submitted'].split('-'))
+    working_dir = os.path.dirname(status['Output_Path'].split(':')[1])
+    j = Job(script=script, client=uit_client, working_dir=working_dir)
+    j._job_id = job_id
+    j._status = status['job_state']
+    return j
+
+
+def get_job_from_id(job_id, uit_client):
+    status = uit_client.status(job_id=job_id, full=True)
+    return get_job_from_full_status(job_id, status[job_id], uit_client)

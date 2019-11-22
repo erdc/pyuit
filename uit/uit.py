@@ -631,7 +631,7 @@ class Client:
     @_ensure_connected
     def get_queues(self):
         output = self.call('qstat -Q')
-        standard_queues = QUEUES
+        standard_queues = [] if self.system == 'jim' else QUEUES
         other_queues = set([i.split()[0] for i in output.splitlines()][2:]) - set(standard_queues)
         all_queues = standard_queues + sorted([q for q in other_queues if '_' not in q])
         return all_queues
@@ -639,6 +639,7 @@ class Client:
     @_ensure_connected
     def get_available_modules(self, flatten=False):
         output = self.call('module avail')
+        output = re.sub('.*:ERROR:.*', '', output)
         sections = re.split('-+ (.*) -+', output)[1:]
         self._available_modules = {a: b.split() for a, b in zip(sections[::2], sections[1::2])}
 
@@ -649,7 +650,8 @@ class Client:
     @_ensure_connected
     def get_loaded_modules(self):
         output = self.call('module list')
-        return [m.split(') ')[1] for m in output.splitlines()[1:]]
+        output = re.sub('.*:ERROR:.*', '', output)
+        return re.split('\n?\s*\d+\)\s*', output[:-1])[1:]
 
 ############################################################
 # Simple Flask Server to retrieve auth_code & access_token #

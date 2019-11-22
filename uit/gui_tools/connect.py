@@ -8,6 +8,7 @@ class HpcAuthenticate(param.Parameterized):
     uit_client = param.ClassSelector(Client)
     authenticated = param.Boolean(default=False)
     auth_code = param.String(default='', label='Code')
+    ready = param.Boolean(default=False, precedence=-1)
 
     def __init__(self, uit_client=None, web_based=True, **params):
         super().__init__(**params)
@@ -16,7 +17,7 @@ class HpcAuthenticate(param.Parameterized):
         self.update_authenticated(bool(self.uit_client.token))
 
     def update_authenticated(self, authenticated=False):
-        self.authenticated = authenticated
+        self.ready = self.authenticated = authenticated
         self.param.trigger('authenticated')
 
     @param.depends('auth_code', watch=True)
@@ -54,6 +55,7 @@ class HpcConnect(param.Parameterized):
     connect_btn = param.Action(lambda self: self.connect(), label='Connect')
     disconnect_btn = param.Action(lambda self: self.disconnect(), label='Disconnect')
     connection_status = param.String(default='Not Connected', label='Status')
+    ready = param.Boolean(default=False, precedence=-1)
 
     def __init__(self, uit_client=None, **params):
         super().__init__(**params)
@@ -87,6 +89,7 @@ class HpcConnect(param.Parameterized):
             exclude_login_nodes=self.exclude_nodes,
         )
         self.connected = self.uit_client.connected
+        self.ready = self.connected
 
     def disconnect(self):
         self.param.connect_btn.label = 'Connect'
