@@ -224,9 +224,10 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         for module in self.modules_to_unload:
             self._pbs_script.unload_module(module.replace('(default)', ''))
         self._pbs_script._environment_variables = self.environment_variables
-        self._pbs_script.execution_block = self.execution_block()
+        self._pbs_script.execution_block = self.execution_block
         return self._pbs_script
 
+    @property
     def execution_block(self):
         return ''
 

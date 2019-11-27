@@ -75,12 +75,6 @@ class HpcConnect(param.Parameterized):
     def update_exclude_nodes_visibility(self):
         self.param.exclude_nodes.precedence = 1 if self.login_node is None else -1
 
-    @param.output(uit_client=Client)
-    def next(self):
-        if not self.connected:
-            self.connect()
-        return self.uit_client
-
     def connect(self):
         system = None if self.login_node is not None else self.system
         self.connection_status = self.uit_client.connect(

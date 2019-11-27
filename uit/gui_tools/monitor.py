@@ -73,11 +73,15 @@ class HpcJobMonitor(param.Parameterized):
             else 'https://upload.wikimedia.org/wikipedia/commons/2/2a/Loading_Key.gif'
         return pn.panel(statuses)
 
+    @param.depends('jobs')
     def status_panel(self):
-        return pn.Column(
-            self.statuses_panel,
-            pn.Row(self.param.update, width=100),
-        )
+        if self.jobs:
+            return pn.Column(
+                self.statuses_panel,
+                pn.Row(self.param.update, width=100),
+            )
+        else:
+            return pn.pane.HTML('<h2>No jobs are available</h2>')
 
     @param.depends('active_job', 'log')
     def log_pane(self):

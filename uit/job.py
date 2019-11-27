@@ -15,6 +15,19 @@ class PbsJob:
         self._job_id = None
         self._status = None
 
+    def __repr__(self):
+        return f'<{self.__class__.__name__} name={self.name} id={self.job_id}>'
+
+    def __str__(self):
+        return '\n  '.join((
+            f'{self.__class__.__name__}:',
+            f'Name: {self.name}',
+            f'ID: {self.job_id}',
+            f'Status: {self.status}',
+            f'Working Dir: {self.working_dir}',
+            f'Script: {self.script.__repr__()}',
+        ))
+
     @property
     def name(self):
         return self.script.name
@@ -199,10 +212,11 @@ def get_job_from_full_status(job_id, status, uit_client):
         num_nodes=status['Resource_List.compute'],
         processes_per_node=int(status['Resource_List.ncpus']) / int(status['Resource_List.compute']),
         max_time=status['Resource_List.walltime'],
+        system=uit_client.system,
     )
     if status.get('array'):
         Job = PbsArrayJob
-        script._array_indices = (int(i) for i in status['array_indices_submitted'].split('-'))
+        script._array_indices = tuple(int(i) for i in status['array_indices_submitted'].split('-'))
     working_dir = os.path.dirname(status['Output_Path'].split(':')[1])
     j = Job(script=script, client=uit_client, working_dir=working_dir)
     j._job_id = job_id
@@ -210,6 +224,47 @@ def get_job_from_full_status(job_id, status, uit_client):
     return j
 
 
-def get_job_from_id(job_id, uit_client):
-    status = uit_client.status(job_id=job_id, full=True)
-    return get_job_from_full_status(job_id, status[job_id], uit_client)
+def get_job_from_id(job_id, uit_client, with_historic=True):
+    status = uit_client.status(job_id=job_id, with_historic=with_historic, full=True)
+    for job_id, full_status in status.items():
+        return get_job_from_full_status(job_id, full_status, uit_client)
+
+
+def _process_l_directives(pbs_script):
+    matches = re.findall('#PBS -l (.*)', pbs_script)
+    d = dict()
+    for match in matches:
+        if 'walltime' in match:
+            d['walltime'] = match.split('=')[1]
+        else:
+            d.update({k: v for k, v in [i.split('=') for i in matches[0].split(':')]})
+
+    return d
+
+
+def get_job_from_pbs_script(job_id, pbs_script, uit_client):
+    script = PurePosixPath(pbs_script)
+    working_dir = script.parent
+    pbs_script = uit_client.call(f'cat {pbs_script}')
+    matches = re.findall('#PBS -(.*)', pbs_script)
+    directives = {k: v for k, v in [i.split() for i in matches]}
+    directives['l'] = _process_l_directives(pbs_script)
+
+    Job = PbsJob
+    script = PbsScript(
+        name=directives['N'],
+        project_id=directives['A'],
+        num_nodes=int(directives['l']['select']),
+        processes_per_node=int(directives['l']['ncpus']),
+        max_time=directives['l']['walltime'],
+        queue=directives['q'],
+        system=uit_client.system,
+    )
+    if 'J' in directives:
+        Job = PbsArrayJob
+        script._array_indices = tuple(int(i) for i in re.split('[-:]', directives['J']))
+    working_dir = working_dir
+    j = Job(script=script, client=uit_client, working_dir=working_dir)
+    j._job_id = job_id
+    j._status = 'F'
+    return j

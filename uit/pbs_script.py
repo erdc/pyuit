@@ -75,6 +75,12 @@ class PbsScript(object):
         self.execution_block = ""
         self.configure_job_dir = False
 
+    def __repr__(self):
+        return f'<{self.__class__.__name__} name={self.name}>'
+
+    def __str__(self):
+        return self.render()
+
     def _validate_system(self):
         systems = list(NODE_TYPES.keys())
         if self.system not in systems:
