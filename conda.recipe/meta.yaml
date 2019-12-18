@@ -33,5 +33,5 @@ test:
     - uit.gui_tools
 
 about:
-  home: https://github.com/dharhas/uit
+  home: https://github.com/erdc/pyuit
   summary: Python wrapper for DoD HPCMP UIT+ rest interface

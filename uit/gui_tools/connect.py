@@ -56,6 +56,7 @@ class HpcConnect(param.Parameterized):
     disconnect_btn = param.Action(lambda self: self.disconnect(), label='Disconnect')
     connection_status = param.String(default='Not Connected', label='Status')
     ready = param.Boolean(default=False, precedence=-1)
+    next_stage = param.Selector()
 
     def __init__(self, uit_client=None, **params):
         super().__init__(**params)

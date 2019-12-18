@@ -195,12 +195,14 @@ class PbsArrayJob(PbsJob):
 
 
 def get_active_jobs(uit_client):
-    statuses = uit_client.status(with_historic=True)
-    statuses = uit_client.status(job_id=[j['job_id'] for j in statuses], full=True)
     jobs = list()
-    for job_id, status in statuses.items():
-        j = get_job_from_full_status(job_id, status, uit_client)
-        jobs.append(j)
+    statuses = uit_client.status(with_historic=True)
+    if statuses:
+        statuses = uit_client.status(job_id=[j['job_id'] for j in statuses], full=True)
+
+        for job_id, status in statuses.items():
+            j = get_job_from_full_status(job_id, status, uit_client)
+            jobs.append(j)
     return jobs
 
 

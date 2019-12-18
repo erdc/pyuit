@@ -134,6 +134,12 @@ class Client:
         return PurePosixPath(self.env.CENTER)
 
     @property
+    def headers(self):
+        if self._headers is None:
+            self._headers = {'x-uit-auth-token': self.token} if self.token else None
+        return self._headers
+
+    @property
     def login_node(self):
         return self._login_node
 
@@ -237,7 +243,6 @@ class Client:
         # populate userinfo and header info
         if self.token is None:
             raise RuntimeError('No Valid Access Tokens Found, Please run authenticate() function and try again')
-        self._headers = {'x-uit-auth-token': self.token}
 
         # retrieve user info
         self.get_userinfo()
@@ -323,7 +328,7 @@ class Client:
     def get_userinfo(self):
         """Get User Info from the UIT server."""
         # request user info from UIT site
-        data = requests.get(urljoin(UIT_API_URL, 'userinfo'), headers=self._headers, verify=self.ca_file).json()
+        data = requests.get(urljoin(UIT_API_URL, 'userinfo'), headers=self.headers, verify=self.ca_file).json()
         self._userinfo = data.get('userinfo')
         self._user = self._userinfo.get('USERNAME')
         self._systems = [sys.lower() for sys in self._userinfo['SYSTEMS'].keys()]
@@ -385,7 +390,7 @@ class Client:
         # construct the base options dictionary
         data = {'command': command, 'workingdir': working_dir}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
-        r = requests.post(urljoin(self._uit_url, 'exec'), headers=self._headers, data=data, verify=self.ca_file)
+        r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
         resp = r.json()
         if full_response:
             return resp
@@ -415,7 +420,7 @@ class Client:
         data = {'file': remote_path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         files = {'file': local_path.open(mode='rb')}
-        r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self._headers, data=data, files=files,
+        r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self.headers, data=data, files=files,
                           verify=self.ca_file)
         return r.json()
 
@@ -429,16 +434,14 @@ class Client:
             local_path (str): local file to download to.
 
         Returns:
-            str: local_path
+            Path: local_path
         """
-        if local_path is None:
-            remote_path = PurePosixPath(remote_path)
-            filename = remote_path.name
-            local_path = Path() / filename
+        remote_path = PurePosixPath(remote_path)
+        local_path = Path(local_path) if local_path else Path() / remote_path.name
         remote_path = self._resolve_path(remote_path)
         data = {'file': remote_path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
-        r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self._headers, data=data, verify=self.ca_file,
+        r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
                           stream=True)
         if r.status_code != 200:
             raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
@@ -467,7 +470,7 @@ class Client:
 
         data = {'directory': path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
-        r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self._headers, data=data,
+        r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self.headers, data=data,
                           verify=self.ca_file)
         result = r.json()
 

@@ -1,12 +1,8 @@
-import yaml
-from collections import OrderedDict
-from pathlib import Path
-
 import param
 import panel as pn
-import pandas as pd
 
 from .file_browser import HpcFileBrowser
+from .configurable import HpcConfigurable
 from ..uit import Client, QUEUES
 from ..pbs_script import NODE_TYPES, factors, PbsScript
 
@@ -41,67 +37,21 @@ class PbsScriptInputs(param.Parameterized):
 
     def pbs_options_view(self):
         self.update_hpc_connection_dependent_defaults()
-        hpc_submit = pn.panel(self, parameters=list(PbsScriptInputs.param), show_name=False, name='PBS Options')
+        hpc_submit = pn.panel(
+            self,
+            parameters=list(PbsScriptInputs.param),
+            widgets={'nodes': pn.widgets.Spinner},
+            show_name=False,
+            name='PBS Options'
+        )
         return hpc_submit
 
 
-class PbsScriptAdvancedInputs(param.Parameterized):
-    modules_to_load = param.ListSelector(default=[])
-    modules_to_unload = param.ListSelector(default=[])
-    load_modules = param.List()
-    unload_modules = param.List()
-    environment_variables = param.ClassSelector(OrderedDict, default=OrderedDict())
+class PbsScriptAdvancedInputs(HpcConfigurable):
     env_names = param.List()
     env_values = param.List()
     browse = param.Action(lambda self: self.toggle_file_browser(), label='📂')
     browse_toggle = param.Boolean(default=False)
-    configuration_file = param.String()
-
-    def update_hpc_connection_dependent_defaults_advanced(self):
-        if not self.uit_client.connected:
-            return
-
-        self.load_config_file()
-        self.param.modules_to_unload.objects = sorted(self.uit_client.get_loaded_modules())
-        self.param.modules_to_load.objects = self._get_modules_available_to_load()
-        self.modules_to_load = self._validate_modules(self.param.modules_to_load.objects, self.modules_to_load)
-        self.unload_modules = self._validate_modules(self.param.modules_to_unload.objects, self.modules_to_unload)
-
-    def _get_modules_available_to_load(self):
-        modules = set(self.uit_client.get_available_modules(flatten=True)) - set(self.param.modules_to_unload.objects)
-        return sorted(modules)
-
-    def _validate_modules(self, possible, candidates):
-        df = pd.DataFrame([v.split('/', 1) for v in possible], columns=['Name', 'Version'])
-        df['Default'] = df['Version'].apply(lambda v: True if v is None else v.endswith('(default)'))
-        dfg = df.groupby('Name')
-
-        modules = list()
-        for m in candidates:
-            if m in possible:
-                modules.append(m)
-                continue
-            elif m in dfg.groups:
-                group = dfg.get_group(m)
-                row = group.iloc[0]
-                if group.shape[0] > 1:
-                    row = group[group['Default']].iloc[0]
-                module = f'{row.Name}/{row.Version}'
-                modules.append(module)
-            else:
-                print(f'Module "{m}" is  invalid.')
-        return sorted(modules)
-
-    def load_config_file(self):
-        config_file = Path(self.configuration_file)
-        if config_file.is_file():
-            with config_file.open() as f:
-                config = yaml.safe_load(f).get(self.uit_client.system, {})
-            modules = config.get('modules')
-            if modules:
-                self.modules_to_load = modules.get('load') or self.modules_to_load
-                self.modules_to_unload = modules.get('unload') or self.modules_to_unload
-            self.environment_variables = OrderedDict(config.get('environment_variables')) or self.environment_variables
 
     def update_environ(self, *events):
         for event in events:
@@ -164,7 +114,6 @@ class PbsScriptAdvancedInputs(param.Parameterized):
         )
 
     def advanced_options_view(self):
-        self.update_hpc_connection_dependent_defaults_advanced()
         return pn.Row(
             pn.Column(
                 '<h3>Modules to Load</h3>',
