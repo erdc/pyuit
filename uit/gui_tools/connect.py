@@ -9,6 +9,7 @@ class HpcAuthenticate(param.Parameterized):
     authenticated = param.Boolean(default=False)
     auth_code = param.String(default='', label='Code')
     ready = param.Boolean(default=False, precedence=-1)
+    next_stage = param.Selector()
 
     def __init__(self, uit_client=None, web_based=True, **params):
         super().__init__(**params)
