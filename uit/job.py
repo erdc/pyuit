@@ -3,7 +3,7 @@ import os
 from pathlib import PurePosixPath, Path
 
 from .uit import Client
-from .pbs_script import PbsScript
+from .pbs_script import PbsScript, NODE_ARGS
 
 
 class PbsJob:
@@ -208,12 +208,20 @@ def get_active_jobs(uit_client):
 
 def get_job_from_full_status(job_id, status, uit_client):
     Job = PbsJob
+    node_type = 'transfer'
+    for ntype, node_arg in NODE_ARGS.items():
+        nnodes = int(status.get(f'Resource_List.{node_arg}', 0))
+        if nnodes > 0:
+            node_type = ntype
+            break
     script = PbsScript(
         name=status['Job_Name'],
         project_id=status['Account_Name'],
-        num_nodes=status['Resource_List.compute'],
-        processes_per_node=int(status['Resource_List.ncpus']) / int(status['Resource_List.compute']),
+        num_nodes=status['Resource_List.nodect'],
+        processes_per_node=int(status['Resource_List.ncpus']) / int(status['Resource_List.nodect']),
         max_time=status['Resource_List.walltime'],
+        queue=status['queue'].split('_')[0],
+        node_type=node_type,
         system=uit_client.system,
     )
     if status.get('array'):

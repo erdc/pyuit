@@ -84,7 +84,7 @@ class HpcJobMonitor(HpcConfigurable):
 
     @param.depends('statuses')
     def statuses_panel(self):
-        statuses = pn.panel(self.statuses) \
+        statuses = pn.panel(self.statuses, width=1300) \
             if self.statuses is not None \
             else pn.pane.GIF(resource_filename('panel', 'assets/spinner.gif'))
         return statuses
@@ -94,7 +94,7 @@ class HpcJobMonitor(HpcConfigurable):
         if self.jobs:
             return pn.Column(
                 self.statuses_panel,
-                pn.Param(self.param.update, widgets={'update': {'button_type': 'primary', 'width':100}}),
+                pn.Param(self.param.update, widgets={'update': {'button_type': 'primary', 'width': 100}}),
             )
         else:
             return pn.pane.HTML('<h2>No jobs are available</h2>')

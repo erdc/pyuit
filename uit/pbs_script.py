@@ -2,6 +2,7 @@ import collections
 import os
 import io
 
+
 NODE_TYPES = {
     'jim': {
         'compute': 36,
@@ -17,6 +18,14 @@ NODE_TYPES = {
         'knl': 64,
     }
 }
+
+
+NODE_ARGS = dict(
+    compute='compute',
+    gpu='ngpus',
+    bigmem='bigmem',
+    knl='nmics',
+)
 
 
 def factors(n):
@@ -116,19 +125,13 @@ class PbsScript(object):
         Returns:
             str: Correctly formatted string for PBS header
         """
-        processes_per_node = factors(NODE_TYPES[self.system][self.node_type])
         self._validate_processes_per_node()
-        ncpus = max(processes_per_node)
+        ncpus = NODE_TYPES[self.system][self.node_type]
         no_nodes_process_options = f'select={self.num_nodes}:ncpus={ncpus}'
         if self.node_type != 'transfer':
             no_nodes_process_options += f':mpiprocs={self.processes_per_node}'
-        node_type_args = dict(
-            gpu='ngpus',
-            bigmem='bigmem',
-            knl='nmics',
-        )
-        if self.node_type in node_type_args:
-            no_nodes_process_options += f':{node_type_args[self.node_type]}=1'
+        if self.node_type in NODE_ARGS:
+            no_nodes_process_options += f':{NODE_ARGS[self.node_type]}=1'
 
         return PbsDirective('-l', no_nodes_process_options)
 
