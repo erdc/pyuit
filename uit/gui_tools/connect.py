@@ -9,7 +9,7 @@ class HpcAuthenticate(param.Parameterized):
     authenticated = param.Boolean(default=False)
     auth_code = param.String(default='', label='Code')
     ready = param.Boolean(default=False, precedence=-1)
-    next_stage = param.Selector()
+    _next_stage = param.Selector()
 
     def __init__(self, uit_client=None, web_based=True, **params):
         super().__init__(**params)
@@ -57,6 +57,7 @@ class HpcConnect(param.Parameterized):
     disconnect_btn = param.Action(lambda self: self.disconnect(), label='Disconnect')
     connection_status = param.String(default='Not Connected', label='Status')
     ready = param.Boolean(default=False, precedence=-1)
+    _next_stage = param.Selector()
     next_stage = param.Selector()
 
     def __init__(self, uit_client=None, **params):
@@ -76,6 +77,10 @@ class HpcConnect(param.Parameterized):
     @param.depends('login_node', watch=True)
     def update_exclude_nodes_visibility(self):
         self.param.exclude_nodes.precedence = 1 if self.login_node is None else -1
+
+    @param.depends('_next_stage', watch=True)
+    def update_next_stage(self):
+        self.next_stage = self._next_stage
 
     def connect(self):
         system = None if self.login_node is not None else self.system

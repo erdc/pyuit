@@ -303,7 +303,7 @@ class FileBrowser(param.Parameterized):
         elif path and path.is_file():
             self.path = path.parent
         else:
-            log.warning("Invalid Directory")
+            log.warning(f'Invalid Directory: {path}')
 
     @param.depends('path', 'show_hidden', watch=True)
     def make_options(self):
@@ -363,14 +363,15 @@ class HpcPath(Path, PurePosixPath):
         if not self.is_absolute():
             self._str = str(self.uit_client.HOME / self)
         ls = self.uit_client.list_dir(self.parent.as_posix())
-        path = self.as_posix()
         self._is_dir = False
         self._is_file = False
         self._ls = None
-        if path in (d['path'] for d in ls['dirs']):
+
+        # compare names instead of full path to handle symbolic links
+        if self.name in (d['name'] for d in ls['dirs']):
             self._is_dir = True
-            self._ls = self.uit_client.list_dir(path)
-        elif path in (f['path'] for f in ls['files']):
+            self._ls = self.uit_client.list_dir(self.as_posix())
+        elif self.name in (f['name'] for f in ls['files']):
             self._is_file = True
 
     def is_dir(self):
@@ -385,7 +386,7 @@ class HpcPath(Path, PurePosixPath):
 
     def glob(self, pattern):
         result = list()
-        if 'dirs' in self.ls:
+        if 'dirs' in self.ls:  # then self.ls is valid
             result.extend([HpcPath(p['path'], is_dir=True, uit_client=self.uit_client) for p in self.ls['dirs']])
             result.extend([HpcPath(p['path'], is_dir=False, uit_client=self.uit_client) for p in self.ls['files']])
         return [r for r in result if r.match(pattern)]

@@ -219,7 +219,9 @@ class Client:
 
         # start flask server
         global _server
-        if _server is None:
+        if _server is not None:
+            _server.auth_func = self.get_token
+        else:
             _server = start_server(self.get_token, self.port)
 
         auth_url = self.get_auth_url()
@@ -615,7 +617,7 @@ class Client:
                     f.write(pbs_script_text)
 
         # Transfer script to supercomputer using put_file()
-        ret = self.put_file(pbs_script_path, os.path.join(working_dir, remote_name))
+        ret = self.put_file(pbs_script_path, working_dir / remote_name)
 
         if 'success' in ret and ret['success'] == 'false':
             raise RuntimeError('An exception occurred while submitting job script: {}'.format(ret['error']))
@@ -662,9 +664,10 @@ class Client:
 
 
 class ServerThread(threading.Thread):
-    def __init__(self, app, port):
+    def __init__(self, app, port, auth_func):
         threading.Thread.__init__(self)
         self.srv = make_server('127.0.0.1', port, app)
+        self.auth_func = auth_func
         self.ctx = app.app_context()
         self.ctx.push()
 
@@ -684,7 +687,7 @@ def shutdown_server():
 
 def start_server(auth_func, port=5000):
     app = Flask('get_uit_token')
-    server = ServerThread(app, port)
+    server = ServerThread(app, port, auth_func)
     server.start()
 
     @app.route('/save_token', methods=['GET'])
@@ -696,7 +699,7 @@ def start_server(auth_func, port=5000):
         global _auth_code
         try:
             _auth_code = request.args.get('code')
-            auth_func(auth_code=_auth_code)
+            server.auth_func(auth_code=_auth_code)
 
             status = 'Succeeded'
             msg = ''
