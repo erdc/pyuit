@@ -667,7 +667,7 @@ class ServerThread(threading.Thread):
     def __init__(self, app, port, auth_func):
         threading.Thread.__init__(self)
         self.srv = make_server('127.0.0.1', port, app)
-        self.auth_func=auth_func
+        self.auth_func = auth_func
         self.ctx = app.app_context()
         self.ctx.push()
 
