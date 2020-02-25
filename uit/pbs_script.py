@@ -130,7 +130,7 @@ class PbsScript(object):
         no_nodes_process_options = f'select={self.num_nodes}:ncpus={ncpus}'
         if self.node_type != 'transfer':
             no_nodes_process_options += f':mpiprocs={self.processes_per_node}'
-        if self.node_type in NODE_ARGS:
+        if self.node_type != 'compute' and self.node_type in NODE_ARGS:
             no_nodes_process_options += f':{NODE_ARGS[self.node_type]}=1'
 
         return PbsDirective('-l', no_nodes_process_options)

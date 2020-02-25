@@ -39,7 +39,7 @@ class PbsScriptInputs(param.Parameterized):
         self.update_hpc_connection_dependent_defaults()
         hpc_submit = pn.panel(
             self,
-            parameters=list(PbsScriptInputs.param),
+            parameters=list(PbsScriptInputs.param)[1:],  # all params except 'name'
             widgets={'nodes': pn.widgets.Spinner},
             show_name=False,
             name='PBS Options'
