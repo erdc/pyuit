@@ -1,19 +1,28 @@
 import re
 import os
+from datetime import datetime
 from pathlib import PurePosixPath, Path
 
 from .uit import Client
 from .pbs_script import PbsScript, NODE_ARGS
+from .execution_block import EXECUTION_BLOCK_TEMPLATE
 
 
 class PbsJob:
 
-    def __init__(self, script, client=None, working_dir=None):
+    def __init__(self, script, client=None, label=None, workspace=None,
+                 transfer_input_files=None, home_input_files=None, archive_input_files=None, ):
         self.script = script
         self.client = client or Client()
-        self._working_dir = working_dir
+        self.workspace = workspace or Path.cwd()
+        self.transfer_input_files = transfer_input_files or list()
+        self.home_input_files = home_input_files or list()
+        self.archive_input_files = archive_input_files or list()
+        self.label = label
         self._job_id = None
         self._status = None
+        self._remote_workspace_id = None
+        self._remote_workspace = None
 
     def __repr__(self):
         return f'<{self.__class__.__name__} name={self.name} id={self.job_id}>'
@@ -34,7 +43,36 @@ class PbsJob:
 
     @property
     def working_dir(self):
-        return PurePosixPath(self._working_dir)
+        return self.client.WORKDIR / self.remote_workspace_suffix
+
+    @property
+    def remote_workspace_id(self):
+        """Get the timestamp associated with this job to be used as a workspace id.
+
+        Returns:
+            str: Remote workspace ID
+        """
+
+        if not self._remote_workspace_id:
+            self._remote_workspace_id = datetime.now().strftime('%Y-%m-%d.%H_%M_%S.%f')
+        return self._remote_workspace_id
+
+    @property
+    def remote_workspace_suffix(self):
+        """Get the job specific suffix.
+
+        Made up of a combination of label, name, and remote workspace ID.
+
+        Returns:
+            str: Suffix
+        """
+        if not self._remote_workspace:
+            self._remote_workspace = PurePosixPath(self.label, f'{self.name}.{self.remote_workspace_id}')
+        return self._remote_workspace
+
+    @property
+    def pbs_submit_script_name(self):
+        return f'{self.name}.{self.remote_workspace_id}.pbs'
 
     @property
     def job_id(self):
@@ -64,14 +102,75 @@ class PbsJob:
             return self.job_id
         # TODO: check to make sure system on self.client is compatible with self.script
 
-        self._working_dir = working_dir or self.working_dir or self.client.WORKDIR / self.name
-        self.client.call(f'mkdir -p {self.working_dir.as_posix()}')
+        working_dir = self.working_dir.as_posix()
+        try:
+            self.client.call(f'mkdir -p {working_dir}')
+        except RuntimeError as e:
+            raise RuntimeError('Error setting up job directory on "{}": {}'.format(self.system, str(e)))
 
-        remote_name = remote_name or f'{self.name}_run.pbs'
+        self._transfer_files()
+        self._render_execution_block()
 
-        self._job_id = self.client.submit(self.script, working_dir, remote_name, local_temp_dir)
+        remote_name = remote_name or self.pbs_submit_script_name
+
+        self._job_id = self.client.submit(self.script, working_dir=working_dir,
+                                          remote_name=remote_name, local_temp_dir=local_temp_dir)
+
+        if remote_name == self.pbs_submit_script_name:
+            self.client.call(f'mv {self.pbs_submit_script_name} {self.name}.{self.job_number}.pbs',
+                             working_dir=working_dir)
 
         return self.job_id
+
+    def _transfer_files(self):
+        # Transfer any files listed in transfer_input_files to working_dir on supercomputer
+        for transfer_file in self.transfer_input_files:
+            transfer_file = Path(transfer_file)
+            remote_path = self.working_dir / transfer_file.name
+            ret = self.client.put_file(local_path=transfer_file, remote_path=remote_path)
+
+            if ret.get('success') == 'false':
+                raise RuntimeError('Failed to transfer input files: {}'.format(ret['error']))
+
+    def _render_execution_block(self):
+        execution_block = EXECUTION_BLOCK_TEMPLATE.format(
+            archive_input_files=self._render_archive_input_files(),
+            home_input_files=self._render_home_input_files(),
+            execution_block=self.script.execution_block,
+        )
+        self.script.execution_block = execution_block
+
+    def _render_home_input_files(self):
+            return '\n'.join([f'cp ${{HOME}}/{f} .' for f in self.home_input_files])
+
+    def _render_archive_input_files(self):
+            return '\n'.join([f'archive get - C ${{ARCHIVE_HOME}} {f}' for f in self.archive_input_files])
+
+    def _schedule_cleanup(self):
+        self.cleanup = False  # TODO rethink how cleanup should work
+        # if self.cleanup:
+        #     # Render cleanup script
+        #     cleanup_walltime = strfdelta(self.max_cleanup_time, '%H:%M:%S')
+        #     context = {
+        #         'execute_job_id': execute_job_id,
+        #         'execute_job_num': execute_job_id.split('.', 1)[0],
+        #         'job_work_dir': self.working_dir,
+        #         'job_archive_dir': self.archive_dir,
+        #         'job_home_dir': self.home_dir,
+        #         'project_id': self.project_id,
+        #         'cleanup_walltime': cleanup_walltime,
+        #         'archive_output_files': self.archive_output_files,
+        #         'home_output_files': self.home_output_files,
+        #         'transfer_output_files': self.transfer_output_files,
+        #     }
+        #
+        #     cleanup_template = os.path.join(resources_dir, 'clean_after_exec.sh')
+        #     with open(cleanup_template, 'r') as f:
+        #         text = f.read()
+        #         template = Template(text)
+        #         cleanup_script = template.render(context)
+        #     self.extended_properties['cleanup_job_id'] = self.client.submit(cleanup_script, self.working_dir,
+        #                                                                     f'cleanup.{execute_job_id}.pbs')
 
     def update_status(self):
         status = self.client.status(self.job_id)[0]

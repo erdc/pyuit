@@ -193,7 +193,8 @@ class Client:
             raise RuntimeError('"as_df" cannot be set to True unless the Pandas module is installed.')
         return pd.DataFrame.from_records(data, columns=columns)
 
-    def _resolve_path(self, path, default=None):
+    @staticmethod
+    def _resolve_path(path, default=None):
         path = path or default
         if isinstance(path, Path):
             return path.as_posix()
@@ -617,14 +618,14 @@ class Client:
                     f.write(pbs_script_text)
 
         # Transfer script to supercomputer using put_file()
-        ret = self.put_file(pbs_script_path, working_dir / remote_name)
+        ret = self.put_file(pbs_script_path, os.path.join(working_dir, remote_name))
 
         if 'success' in ret and ret['success'] == 'false':
             raise RuntimeError('An exception occurred while submitting job script: {}'.format(ret['error']))
 
         # Submit the script using call() with qsub command
         try:
-            job_id = self.call(f'qsub {remote_name}', working_dir)
+            job_id = self.call(f'qsub {remote_name}', working_dir=working_dir)
         except RuntimeError as e:
             raise RuntimeError('An exception occurred while submitting job script: {}'.format(str(e)))
 
