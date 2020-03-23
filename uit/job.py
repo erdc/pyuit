@@ -373,7 +373,8 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
         Job = PbsArrayJob
         script._array_indices = tuple(int(i) for i in re.split('[-:]', directives['J']))
     working_dir = working_dir
-    j = Job(script=script, client=uit_client, working_dir=working_dir)
+    j = Job(script=script, client=uit_client,)# working_dir=working_dir)
+    j._remote_workspace = working_dir
     j._job_id = job_id
     j._status = 'F'
     return j
