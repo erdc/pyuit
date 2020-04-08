@@ -197,7 +197,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     def panel(self):
         return pn.Column(
-            '<h1>Submit Job</h1>',
+            '# Submit Job',
             pn.layout.Tabs(
                 self.submit_view(),
                 self.pbs_options_view(),

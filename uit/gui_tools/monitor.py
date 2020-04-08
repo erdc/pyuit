@@ -117,7 +117,7 @@ class HpcJobMonitor(HpcConfigurable):
 
     def panel(self):
         return pn.Column(
-            pn.pane.HTML('<h1>Job Status</h1>'),
+            '# Job Status',
             pn.Row(
                 pn.panel(self.param.selected_job, width_policy='max'),
                 pn.Param(self.param.next_btn, widgets={'next_btn': {'button_type': 'success', 'width': 100}}),

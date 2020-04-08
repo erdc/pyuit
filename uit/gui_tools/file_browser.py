@@ -522,25 +522,22 @@ class FileViewer(param.Parameterized):
         )
 
     def panel(self):
-        return pn.Row(
+        return pn.Column(
             self.file_select.panel,
-            pn.Column(
-                pn.WidgetBox(
-                    pn.Param(
-                        self,
-                        parameters=['cmd', 'n', 'update_btn'],
-                        widgets={
-                            'cmd': {'width': 60},
-                            'n': pn.widgets.Spinner(value=self.n, width=100, name=self.param.n.label),
-                            'update_btn': {'button_type': 'primary', 'width': 100}
-                        },
-                        default_layout=pn.Row,
-                        show_name=False,
-                    ),
-                    width=350,
+            pn.WidgetBox(
+                pn.Param(
+                    self,
+                    parameters=['cmd', 'n', 'update_btn'],
+                    widgets={
+                        'cmd': {'width': 60},
+                        'n': pn.widgets.Spinner(value=self.n, width=100, name=self.param.n.label),
+                        'update_btn': {'button_type': 'primary', 'width': 100}
+                    },
+                    default_layout=pn.Row,
+                    show_name=False,
                 ),
-                self.view,
-                width_policy='max',
+                width=350,
             ),
+            self.view,
             width_policy='max',
         )

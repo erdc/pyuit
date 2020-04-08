@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import random
@@ -25,6 +26,8 @@ try:
     has_pandas = True
 except ImportError:
     has_pandas = False
+
+log = logging.getLogger(f'pyuit.{__name__}')
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
@@ -394,7 +397,9 @@ class Client:
         data = {'command': command, 'workingdir': working_dir}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
+        log.debug(r.text)
         resp = r.json()
+
         if full_response:
             return resp
         if resp.get('success') == 'true':
