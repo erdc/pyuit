@@ -210,6 +210,7 @@ class FileBrowser(param.Parameterized):
     path_text = param.String(label='', precedence=0.3)
     home = param.Action(lambda self: self.go_home(), label='🏠', precedence=0.1)
     up = param.Action(lambda self: self.move_up(), label='⬆️', precedence=0.2)
+    refresh_control = param.Action(lambda self: self.refresh(), label='🔄', precedence=0.25)
     callback = param.Action(lambda x: None, label='Select', precedence=0.4)
     file_listing = param.ListSelector(default=[], label='', precedence=0.5)
     patterns = param.List(precedence=-1, default=['*'])
@@ -241,7 +242,7 @@ class FileBrowser(param.Parameterized):
 
     @property
     def controls(self):
-        return ['home', 'up']
+        return ['home', 'up', 'refresh_control']
 
     @property
     def control_styles(self):
@@ -293,6 +294,9 @@ class FileBrowser(param.Parameterized):
                 self.make_options()
             if self.callback:
                 self.callback(True)
+
+    def refresh(self):
+        self.file_listing = ['.']
 
     @param.depends('path_text', watch=True)
     def validate(self):

@@ -182,7 +182,7 @@ class PbsJob:
 
     def _get_log(self, log_type, filename=None):
         try:
-            if self.status in ['F']:
+            if self.status in ['F', 'X']:
                 log_contents = self.client.call(f'cat {self._get_log_file_path(log_type)}')
             else:
                 log_contents = self.client.call(f'qpeek {self.job_id}')
@@ -224,7 +224,7 @@ class PbsJob:
         statuses = client.status(job_ids, as_df=as_df)
         status_dicts = statuses.to_dict(orient='records') if as_df else statuses
         for job, status in zip(jobs, status_dicts):
-            assert job.job_id.startswith(status['job_id'])  # job id can be cutoff in the status output
+            assert job.job_id.startswith(status['job_id'].split('.')[0])  # job id can be cutoff in the status output
             job._status = status['status']
         return statuses
 
@@ -243,8 +243,11 @@ class PbsJob:
 class PbsArrayJob(PbsJob):
     class PbsArraySubJob(PbsJob):
         def __init__(self, parent, job_index):
-            super().__init__(parent.script, parent.client, parent.working_dir)
+            super().__init__(parent.script, parent.client, parent.workspace)
             self.parent = parent
+            self._remote_workspace_id = self.parent._remote_workspace_id
+            self._remote_workspace = self.parent._remote_workspace
+            self.label = self.parent.label
             self._job_index = job_index
             self._job_id = self.parent.job_id.replace('[]', f'[{self.job_index}]')
 
@@ -372,9 +375,9 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
     if 'J' in directives:
         Job = PbsArrayJob
         script._array_indices = tuple(int(i) for i in re.split('[-:]', directives['J']))
-    working_dir = working_dir
-    j = Job(script=script, client=uit_client,)# working_dir=working_dir)
-    j._remote_workspace = working_dir
+    j = Job(script=script, client=uit_client,)
+    j._remote_workspace_id = working_dir.name.split('.', 1)[-1]
+    j.label = working_dir.parent.relative_to(uit_client.WORKDIR)
     j._job_id = job_id
     j._status = 'F'
     return j
