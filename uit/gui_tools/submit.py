@@ -148,11 +148,15 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def submit(self):
         pass
 
+    def pre_submit(self):
+        pass
+
     def _submit(self):
         if not self.param.submit_btn.constant:
-            self.param.submit_btn.constant = True
-            self.ready = True
-            return self.submit()
+            if self.pre_submit():
+                self.param.submit_btn.constant = True
+                self.ready = True
+                return self.submit()
 
     @property
     def pbs_script(self):
