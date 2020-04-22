@@ -134,12 +134,12 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
                 ),
             ),
             self.environment_variables_view,
-            name='Advanced',
+            name='Environment',
         )
 
 
 class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
-    submit_btn = param.Action(lambda self: self._submit(), label='Submit', precedence=10)
+    submit_btn = param.Action(lambda self: self._submit(), label='Submit', constant=True, precedence=10)
     job_name = param.String()
     uit_client = param.ClassSelector(Client)
     _pbs_script = param.ClassSelector(PbsScript, default=None)
@@ -183,6 +183,11 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     @property
     def execution_block(self):
         return ''
+
+    @param.depends('job_name', watch=True)
+    def is_submitable(self):
+        if self.job_name:
+            self.param.submit_btn.constant = False
 
     def submit_view(self):
         return pn.Column(
