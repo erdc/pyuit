@@ -367,6 +367,8 @@ class HpcPath(Path, PurePosixPath):
         if not self.is_absolute():
             self._str = str(self.uit_client.HOME / self)
         ls = self.uit_client.list_dir(self.parent.as_posix())
+        if 'dirs' not in ls:  # then ls is invalid
+            raise ValueError(f'Invalid file path {self.parent.as_posix()}')
         self._is_dir = False
         self._is_file = False
         self._ls = None
@@ -388,11 +390,17 @@ class HpcPath(Path, PurePosixPath):
             self._get_metadata()
         return self._is_file
 
+    def _get_file_list(self, file_meta_list, is_dir):
+        file_list = list()
+        for p in file_meta_list:
+            file_path = p['path'].rsplit('/')[0] + f'/{p["name"]}'
+            file_list.append(HpcPath(file_path, is_dir=is_dir, uit_client=self.uit_client))
+        return file_list
+
     def glob(self, pattern):
         result = list()
-        if 'dirs' in self.ls:  # then self.ls is valid
-            result.extend([HpcPath(p['path'], is_dir=True, uit_client=self.uit_client) for p in self.ls['dirs']])
-            result.extend([HpcPath(p['path'], is_dir=False, uit_client=self.uit_client) for p in self.ls['files']])
+        result.extend(self._get_file_list(self.ls['dirs'], is_dir=True))
+        result.extend(self._get_file_list(self.ls['files'], is_dir=False))
         return [r for r in result if r.match(pattern)]
 
 

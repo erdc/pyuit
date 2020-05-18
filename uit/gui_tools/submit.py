@@ -85,7 +85,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         else:
             return pn.layout.Spacer()
 
-    @param.depends('environment_variables', watch=True)
+    @param.depends('environment_variables')
     def environment_variables_view(self):
         self.env_names = list()
         self.env_values = list()
@@ -140,23 +140,40 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 
 class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     submit_btn = param.Action(lambda self: self._submit(), label='Submit', constant=True, precedence=10)
-    job_name = param.String()
+    validate_btn = param.Action(lambda self: self._validate(), label='Validate', constant=True, precedence=10)
+    disable_validation = param.Boolean()
+    validated = param.Boolean()
+    job_name = param.String(label='Job Name (Required)')
     uit_client = param.ClassSelector(Client)
     _pbs_script = param.ClassSelector(PbsScript, default=None)
     ready = param.Boolean(default=False, precedence=-1)
 
-    def submit(self):
+    def pre_validate(self):
         pass
 
     def pre_submit(self):
         pass
 
+    def submit(self):
+        return None
+
     def _submit(self):
         if not self.param.submit_btn.constant:
-            if self.pre_submit():
-                self.param.submit_btn.constant = True
-                self.ready = True
-                return self.submit()
+            self.param.submit_btn.constant = True
+            self.pre_submit()
+            result = self.submit()
+            self.ready = bool(result)
+            return result
+
+    def validate(self):
+        return True
+
+    def _validate(self):
+        if not self.param.validate_btn.constant:
+            self.param.validate_btn.constant = True
+            self.pre_validate()
+            result = self.validate()
+            self.validated = result
 
     @property
     def pbs_script(self):
@@ -186,18 +203,26 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @param.depends('job_name', watch=True)
     def is_submitable(self):
-        if self.job_name:
-            self.param.submit_btn.constant = False
+        self.param.submit_btn.constant = self.param.validate_btn.constant = not bool(self.job_name)
+
+    @param.depends('disable_validation', 'validated')
+    def action_button(self):
+        if self.disable_validation or self.validated:
+            button = 'submit_btn'
+            button_type = 'success'
+        else:
+            button = 'validate_btn'
+            button_type = 'primary'
+
+        return pn.Param(
+            self.param[button],
+            widgets={button: {'button_type': button_type, 'width': 200}}
+        )
 
     def submit_view(self):
         return pn.Column(
             self.view,
-            pn.Param(
-                self,
-                parameters=['submit_btn'],
-                widgets={'submit_btn': {'button_type': 'success', 'width': 200}},
-                show_name=False,
-            ),
+            self.action_button,
             name='Submit',
         )
 

@@ -126,3 +126,13 @@ class HpcJobMonitor(HpcConfigurable):
                 *self.tabs,
             ),
         )
+
+
+class HpcJobListMonitor(HpcJobMonitor):
+    jobs = param.List()
+
+    @param.depends('jobs', watch=True)
+    def update_selected_job(self):
+        self.param.selected_job.names = {j.job_id: j for j in self.jobs}
+        self.param.selected_job.objects = self.jobs
+        self.selected_job = self.jobs[0] if self.jobs else None
