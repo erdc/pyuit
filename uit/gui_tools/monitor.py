@@ -89,9 +89,9 @@ class HpcJobMonitor(HpcConfigurable):
             else pn.pane.GIF(resource_filename('panel', 'assets/spinner.gif'))
         return statuses
 
-    @param.depends('jobs')
+    @param.depends('selected_job')
     def status_panel(self):
-        if self.jobs:
+        if self.selected_job:
             return pn.Column(
                 self.statuses_panel,
                 pn.Param(self.param.update, widgets={'update': {'button_type': 'primary', 'width': 100}}),
@@ -117,7 +117,7 @@ class HpcJobMonitor(HpcConfigurable):
 
     def panel(self):
         return pn.Column(
-            pn.pane.HTML('<h1>Job Status</h1>'),
+            '# Job Status',
             pn.Row(
                 pn.panel(self.param.selected_job, width_policy='max'),
                 pn.Param(self.param.next_btn, widgets={'next_btn': {'button_type': 'success', 'width': 100}}),
@@ -126,3 +126,13 @@ class HpcJobMonitor(HpcConfigurable):
                 *self.tabs,
             ),
         )
+
+
+class HpcJobListMonitor(HpcJobMonitor):
+    jobs = param.List()
+
+    @param.depends('jobs', watch=True)
+    def update_selected_job(self):
+        self.param.selected_job.names = {j.job_id: j for j in self.jobs}
+        self.param.selected_job.objects = self.jobs
+        self.selected_job = self.jobs[0] if self.jobs else None

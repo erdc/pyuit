@@ -146,6 +146,11 @@ class PbsScript(object):
             return PbsDirective('-J', options), PbsDirective('-r', 'y')
 
     @property
+    def number_of_sub_jobs(self):
+        if self._array_indices is not None:
+            return self._array_indices[1] + 1
+
+    @property
     def job_array_indices(self):
         if self._array_indices is not None:
             indices = list(self._array_indices)

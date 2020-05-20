@@ -210,6 +210,7 @@ class FileBrowser(param.Parameterized):
     path_text = param.String(label='', precedence=0.3)
     home = param.Action(lambda self: self.go_home(), label='🏠', precedence=0.1)
     up = param.Action(lambda self: self.move_up(), label='⬆️', precedence=0.2)
+    refresh_control = param.Action(lambda self: self.refresh(), label='🔄', precedence=0.25)
     callback = param.Action(lambda x: None, label='Select', precedence=0.4)
     file_listing = param.ListSelector(default=[], label='', precedence=0.5)
     patterns = param.List(precedence=-1, default=['*'])
@@ -241,7 +242,7 @@ class FileBrowser(param.Parameterized):
 
     @property
     def controls(self):
-        return ['home', 'up']
+        return ['home', 'up', 'refresh_control']
 
     @property
     def control_styles(self):
@@ -293,6 +294,9 @@ class FileBrowser(param.Parameterized):
                 self.make_options()
             if self.callback:
                 self.callback(True)
+
+    def refresh(self):
+        self.file_listing = ['.']
 
     @param.depends('path_text', watch=True)
     def validate(self):
@@ -363,6 +367,8 @@ class HpcPath(Path, PurePosixPath):
         if not self.is_absolute():
             self._str = str(self.uit_client.HOME / self)
         ls = self.uit_client.list_dir(self.parent.as_posix())
+        if 'dirs' not in ls:  # then ls is invalid
+            raise ValueError(f'Invalid file path {self.parent.as_posix()}')
         self._is_dir = False
         self._is_file = False
         self._ls = None
@@ -384,11 +390,17 @@ class HpcPath(Path, PurePosixPath):
             self._get_metadata()
         return self._is_file
 
+    def _get_file_list(self, file_meta_list, is_dir):
+        file_list = list()
+        for p in file_meta_list:
+            file_path = p['path'].rsplit('/')[0] + f'/{p["name"]}'
+            file_list.append(HpcPath(file_path, is_dir=is_dir, uit_client=self.uit_client))
+        return file_list
+
     def glob(self, pattern):
         result = list()
-        if 'dirs' in self.ls:  # then self.ls is valid
-            result.extend([HpcPath(p['path'], is_dir=True, uit_client=self.uit_client) for p in self.ls['dirs']])
-            result.extend([HpcPath(p['path'], is_dir=False, uit_client=self.uit_client) for p in self.ls['files']])
+        result.extend(self._get_file_list(self.ls['dirs'], is_dir=True))
+        result.extend(self._get_file_list(self.ls['files'], is_dir=False))
         return [r for r in result if r.match(pattern)]
 
 
@@ -522,25 +534,22 @@ class FileViewer(param.Parameterized):
         )
 
     def panel(self):
-        return pn.Row(
+        return pn.Column(
             self.file_select.panel,
-            pn.Column(
-                pn.WidgetBox(
-                    pn.Param(
-                        self,
-                        parameters=['cmd', 'n', 'update_btn'],
-                        widgets={
-                            'cmd': {'width': 60},
-                            'n': pn.widgets.Spinner(value=self.n, width=100, name=self.param.n.label),
-                            'update_btn': {'button_type': 'primary', 'width': 100}
-                        },
-                        default_layout=pn.Row,
-                        show_name=False,
-                    ),
-                    width=350,
+            pn.WidgetBox(
+                pn.Param(
+                    self,
+                    parameters=['cmd', 'n', 'update_btn'],
+                    widgets={
+                        'cmd': {'width': 60},
+                        'n': pn.widgets.Spinner(value=self.n, width=100, name=self.param.n.label),
+                        'update_btn': {'button_type': 'primary', 'width': 100}
+                    },
+                    default_layout=pn.Row,
+                    show_name=False,
                 ),
-                self.view,
-                width_policy='max',
+                width=350,
             ),
+            self.view,
             width_policy='max',
         )

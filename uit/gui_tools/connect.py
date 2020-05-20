@@ -1,7 +1,12 @@
+import logging
+
 import param
 import panel as pn
+from pkg_resources import resource_filename
 
 from uit.uit import Client, HPC_SYSTEMS
+
+log = logging.getLogger(f'pyuit.{__name__}')
 
 
 class HpcAuthenticate(param.Parameterized):
@@ -52,7 +57,7 @@ class HpcConnect(param.Parameterized):
     system = param.ObjectSelector(default=HPC_SYSTEMS[1], objects=HPC_SYSTEMS)
     login_node = param.ObjectSelector(default=None, objects=[None], label='Login Node')
     exclude_nodes = param.ListSelector(default=list(), objects=[], label='Exclude Nodes')
-    connected = param.Boolean(default=False)
+    connected = param.Boolean(default=False, allow_None=True)
     connect_btn = param.Action(lambda self: self.connect(), label='Connect')
     disconnect_btn = param.Action(lambda self: self.disconnect(), label='Disconnect')
     connection_status = param.String(default='Not Connected', label='Status')
@@ -89,6 +94,11 @@ class HpcConnect(param.Parameterized):
             login_node=self.login_node,
             exclude_login_nodes=self.exclude_nodes,
         )
+        try:
+            self.connected = None
+            self.uit_client.call(':')
+        except Exception as e:
+            log.exception(e)
         self.connected = self.uit_client.connected
         self.ready = self.connected
 
@@ -99,13 +109,16 @@ class HpcConnect(param.Parameterized):
 
     @param.depends('connected')
     def view(self):
+        header = '# Connect to HPC System'
         connect_btn = pn.Param(
             self, parameters=['connect_btn'],
             widgets={'connect_btn': {'button_type': 'success', 'width': 100}},
             show_name=False
         )
 
-        if not self.connected:
+        if self.connected is None:
+            content = pn.pane.GIF(resource_filename('panel', 'assets/spinner.gif'))
+        elif self.connected is False:
             system_pn = pn.Column(
                 pn.panel(self, parameters=['system'], show_name=False),
                 connect_btn,
@@ -122,10 +135,7 @@ class HpcConnect(param.Parameterized):
                 name='Advanced Options',
             )
 
-            return pn.Column(
-                '<h1>Connect to HPC System</h1>',
-                pn.panel(pn.layout.Tabs(system_pn, advanced_pn)),
-            )
+            content = pn.layout.Tabs(system_pn, advanced_pn)
         else:
             self.param.connect_btn.label = 'Re-Connect'
             btns = pn.Param(
@@ -138,7 +148,13 @@ class HpcConnect(param.Parameterized):
                 show_name=False,
                 default_layout=pn.Row,
             )
-            return pn.Column(btns, pn.panel(self, parameters=['connection_status'], show_name=False, width=400))
+            return pn.Column(
+                header,
+                btns,
+                pn.panel(self, parameters=['connection_status'], show_name=False, width=400),
+            )
+
+        return pn.Column(header, content, width=500)
 
     def panel(self):
         return pn.panel(self.view)

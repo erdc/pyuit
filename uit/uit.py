@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import random
@@ -25,6 +26,8 @@ try:
     has_pandas = True
 except ImportError:
     has_pandas = False
+
+log = logging.getLogger(f'pyuit.{__name__}')
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
@@ -193,7 +196,8 @@ class Client:
             raise RuntimeError('"as_df" cannot be set to True unless the Pandas module is installed.')
         return pd.DataFrame.from_records(data, columns=columns)
 
-    def _resolve_path(self, path, default=None):
+    @staticmethod
+    def _resolve_path(path, default=None):
         path = path or default
         if isinstance(path, Path):
             return path.as_posix()
@@ -393,7 +397,9 @@ class Client:
         data = {'command': command, 'workingdir': working_dir}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
+        log.debug(r.text)
         resp = r.json()
+
         if full_response:
             return resp
         if resp.get('success') == 'true':
@@ -617,14 +623,14 @@ class Client:
                     f.write(pbs_script_text)
 
         # Transfer script to supercomputer using put_file()
-        ret = self.put_file(pbs_script_path, working_dir / remote_name)
+        ret = self.put_file(pbs_script_path, os.path.join(working_dir, remote_name))
 
         if 'success' in ret and ret['success'] == 'false':
             raise RuntimeError('An exception occurred while submitting job script: {}'.format(ret['error']))
 
         # Submit the script using call() with qsub command
         try:
-            job_id = self.call(f'qsub {remote_name}', working_dir)
+            job_id = self.call(f'qsub {remote_name}', working_dir=working_dir)
         except RuntimeError as e:
             raise RuntimeError('An exception occurred while submitting job script: {}'.format(str(e)))
 
