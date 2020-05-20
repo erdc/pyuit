@@ -10,7 +10,7 @@ cd $JOBDIR
 
 JOBID=`echo ${{PBS_JOBID}} | cut -d '.' -f 1 | cut -d '[' -f 1`
 
-if [ -z ${{PBS_ARRAY_INDEX+x}} ]; 
+if [ -z ${{PBS_ARRAY_INDEX+x}} ];
   then :
   else
     RUNDIR=$JOBDIR/run_$PBS_ARRAY_INDEX

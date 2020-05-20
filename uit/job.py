@@ -141,10 +141,10 @@ class PbsJob:
         self.script.execution_block = execution_block
 
     def _render_home_input_files(self):
-            return '\n'.join([f'cp ${{HOME}}/{f} .' for f in self.home_input_files])
+        return '\n'.join([f'cp ${{HOME}}/{f} .' for f in self.home_input_files])
 
     def _render_archive_input_files(self):
-            return '\n'.join([f'archive get - C ${{ARCHIVE_HOME}} {f}' for f in self.archive_input_files])
+        return '\n'.join([f'archive get - C ${{ARCHIVE_HOME}} {f}' for f in self.archive_input_files])
 
     def _schedule_cleanup(self):
         self.cleanup = False  # TODO rethink how cleanup should work
