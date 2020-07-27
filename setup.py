@@ -14,7 +14,7 @@ extras_require['tests'] = ['pytest', 'flake8']
 
 setup(
     name='pyuit',
-    version='0.3.0a23',
+    version='0.3.0a24',
     description="Python wrapper for DoD HPCMP UIT+ rest interface",
     author="Scott Christensen",
     author_email='scott.d.christensen@erdc.dren.mil',
@@ -27,10 +27,10 @@ setup(
     },
     install_requires=install_requires,
     extras_require=extras_require,
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     keywords='uit',
     classifiers=[
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
     ]
 )

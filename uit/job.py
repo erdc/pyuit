@@ -217,6 +217,24 @@ class PbsJob:
     def get_stderr_log(self, filename=None):
         return self._get_log('e', filename)
 
+    def get_custom_log(self, log_path, num_lines=None, head=False, filename=None):
+        log_path = self.resolve_path(log_path)
+        cmd = 'head' if head else 'tail'
+        if num_lines is None:
+            cmd = 'cat'
+        else:
+            cmd += f' -n {num_lines}'
+        try:
+            log_contents = self.client.call(f'{cmd} {log_path}')
+        except RuntimeError as e:
+            log_contents = str(e)
+
+        if filename is not None:
+            with Path(filename).open('w') as log:
+                log.write(log_contents)
+
+        return log_contents
+
     @classmethod
     def update_statuses(cls, jobs, as_df=False):
         client = jobs[0].client

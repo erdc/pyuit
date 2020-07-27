@@ -6,6 +6,7 @@ from pkg_resources import resource_filename
 
 from uit.uit import Client
 from uit.job import PbsJob
+from .file_browser import FileViewer
 
 from .configurable import HpcConfigurable
 
@@ -22,14 +23,16 @@ class HpcJobMonitor(HpcConfigurable):
     log = param.ObjectSelector(objects=[], label='Log File')
     custom_logs = param.List(default=[])
     num_log_lines = param.Integer(default=100, label='n')
+    file_viewer = param.ClassSelector(FileViewer)
     ready = param.Boolean()
     next_btn = param.Action(lambda self: self.next(), label='Next')
 
     def __init__(self, **params):
         super().__init__(**params)
         self.tabs = [
-            pn.panel(self.status_panel, name='Status'),
-            pn.panel(self.logs_panel, name='Logs'),
+            ('Status', self.status_panel),
+            ('Logs', self.logs_panel),
+            ('Files', self.file_browser_panel),
         ]
 
     def next(self):
@@ -72,7 +75,7 @@ class HpcJobMonitor(HpcConfigurable):
     @param.depends('active_sub_job')
     def x_log(self, log_file):
         try:
-            return self.get_log(lambda job: self.uit_client.call(f'tail -n {self.num_log_lines} {log_file}'))
+            return self.get_log(lambda job: job.get_custom_log(log_file, num_lines=self.num_log_lines))
         except RuntimeError as e:
             log.exception(e)
 
@@ -113,6 +116,21 @@ class HpcJobMonitor(HpcConfigurable):
         return pn.Column(
             pn.Param(self, parameters=['active_sub_job', 'log'], show_name=False, width=300),
             self.log_pane,
+        )
+
+    @param.depends('uit_client', watch=True)
+    def configure_file_viewer(self):
+        self.file_viewer = FileViewer(uit_client=self.uit_client)
+        self.file_viewer.configure_file_selector()
+
+    @param.depends('selected_job')
+    def file_browser_panel(self):
+        viewer = self.file_viewer.panel if self.file_viewer else pn.Spacer()
+        self.file_viewer.file_path = str(self.selected_job.working_dir)
+        return pn.Column(
+            viewer,
+            name='Files',
+            width_policy='max',
         )
 
     def panel(self):
