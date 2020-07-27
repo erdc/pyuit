@@ -492,8 +492,8 @@ class SelectFile(param.Parameterized):
 
 
 class FileViewer(param.Parameterized):
-    update_btn = param.Action(lambda self: self.cat_file(), label='Update', precedence=3)
-    n = param.Integer(default=100, bounds=(0, 10_000), precedence=2)
+    update_btn = param.Action(lambda self: self.get_file_contents(), label='Update', precedence=3)
+    n = param.Integer(default=500, bounds=(0, 10_000), precedence=2)
     cmd = param.ObjectSelector(default='head', objects=['head', 'tail'], label='Command', precedence=1)
     file_select = param.ClassSelector(SelectFile, default=SelectFile())
     file_path = param.String()
@@ -503,12 +503,12 @@ class FileViewer(param.Parameterized):
     @param.depends('uit_client', watch=True)
     def configure_file_selector(self):
         if self.uit_client.connected:
-            file_browser = HpcFileBrowser(uit_client=self.uit_client)
+            file_browser = HpcFileBrowser(uit_client=self.uit_client, delayed_init=True)
             self.file_select = SelectFile(file_browser=file_browser)
             self.file_select.toggle()
             self.configure_path()
 
-            self.file_select.param.watch(self.cat_file, 'file_path')
+            self.file_select.param.watch(self.get_file_contents, 'file_path')
 
     @param.depends('file_path', watch=True)
     def configure_path(self):
@@ -516,7 +516,7 @@ class FileViewer(param.Parameterized):
         self.file_select.file_browser.path_text = self.file_path
         self.file_select.update_file(True)
 
-    def cat_file(self, event=None):
+    def get_file_contents(self, event=None):
         if self.uit_client.connected:
             try:
                 self.file_contents = self.uit_client.call(f'{self.cmd} -n {self.n} {self.file_select.file_path}')
@@ -527,10 +527,14 @@ class FileViewer(param.Parameterized):
 
     @param.depends('update_btn')
     def view(self):
+        file_path = self.file_select.file_path
         return pn.Column(
-            pn.widgets.TextInput(value=self.file_select.file_path, disabled=True),
-            pn.pane.Str(self.file_contents),
-            width_policy='max'
+            pn.widgets.TextInput(value=file_path, disabled=True),
+            pn.widgets.Ace(value=self.file_contents, width_policy='max', height_policy='max', height=1000,
+                           readonly=True, filename=file_path),
+            width_policy='max',
+            height_policy='max',
+            max_height=1000,
         )
 
     def panel(self):
@@ -541,15 +545,17 @@ class FileViewer(param.Parameterized):
                     self,
                     parameters=['cmd', 'n', 'update_btn'],
                     widgets={
-                        'cmd': {'width': 60},
+                        'cmd': {'width': 100},
                         'n': pn.widgets.Spinner(value=self.n, width=100, name=self.param.n.label),
-                        'update_btn': {'button_type': 'primary', 'width': 100}
+                        'update_btn': {'button_type': 'primary', 'width': 100, 'align': 'end'}
                     },
                     default_layout=pn.Row,
                     show_name=False,
                 ),
-                width=350,
+                width=400,
             ),
             self.view,
             width_policy='max',
+            height_policy='max',
+            max_height=1000,
         )
