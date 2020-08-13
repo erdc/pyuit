@@ -141,7 +141,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     submit_btn = param.Action(lambda self: self._submit(), label='Submit', constant=True, precedence=10)
     validate_btn = param.Action(lambda self: self._validate(), label='Validate', constant=True, precedence=10)
-    disable_validation = param.Boolean()
+    disable_validation = param.Boolean(label='Override Validation')
     validated = param.Boolean()
     job_name = param.String(label='Job Name (Required)')
     uit_client = param.ClassSelector(Client)
@@ -174,6 +174,8 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             self.pre_validate()
             result = self.validate()
             self.validated = result
+            if not result:
+                self.param.validate_btn.constant = False
 
     @property
     def pbs_script(self):
