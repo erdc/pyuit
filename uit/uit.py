@@ -32,7 +32,7 @@ log = logging.getLogger(f'pyuit.{__name__}')
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
-HPC_SYSTEMS = ['jim', 'onyx']
+HPC_SYSTEMS = ['onyx']
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
 
 _auth_code = None
@@ -605,7 +605,7 @@ class Client:
         Returns:
             bool: True if job submitted successfully.
         """
-        working_dir = self._resolve_path(working_dir, self.WORKDIR)
+        working_dir = PurePosixPath(self._resolve_path(working_dir, self.WORKDIR))
 
         local_temp_dir = local_temp_dir or tempfile.gettempdir()
 
@@ -623,7 +623,7 @@ class Client:
                     f.write(pbs_script_text)
 
         # Transfer script to supercomputer using put_file()
-        ret = self.put_file(pbs_script_path, os.path.join(working_dir, remote_name))
+        ret = self.put_file(pbs_script_path, working_dir / remote_name)
 
         if 'success' in ret and ret['success'] == 'false':
             raise RuntimeError('An exception occurred while submitting job script: {}'.format(ret['error']))
