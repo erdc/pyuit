@@ -112,18 +112,23 @@ class HpcConnect(param.Parameterized):
     @param.depends('connected')
     def view(self):
         header = '# Connect to HPC System'
+        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
         connect_btn = pn.Param(
-            self, parameters=['connect_btn'],
-            widgets={'connect_btn': {'button_type': 'success', 'width': 100}},
-            show_name=False
-        )
+            self.param.connect_btn,
+            widgets={
+                'connect_btn': {
+                    'button_type': 'success',
+                    'width': 100,
+                }
+            },
+        )[0]
+        connect_btn.js_on_click(args={'btn': connect_btn, 'spn': spn}, code='btn.visible=false; spn.width=50;')
 
         if self.connected is None:
             content = pn.pane.GIF(resource_filename('panel', 'assets/spinner.gif'))
         elif self.connected is False:
             system_pn = pn.Column(
                 pn.panel(self, parameters=['system'], show_name=False),
-                connect_btn,
                 name='HPC System',
             )
             advanced_pn = pn.Column(
@@ -133,11 +138,10 @@ class HpcConnect(param.Parameterized):
                     widgets={'exclude_nodes': pn.widgets.CrossSelector},
                     show_name=False,
                 ),
-                connect_btn,
                 name='Advanced Options',
             )
 
-            content = pn.layout.Tabs(system_pn, advanced_pn)
+            content = pn.Column(pn.layout.Tabs(system_pn, advanced_pn), connect_btn, spn)
         else:
             self.param.connect_btn.label = 'Re-Connect'
             btns = pn.Param(
