@@ -190,8 +190,12 @@ class PbsJob:
                     log_contents = self.client.call(f'cat {self._get_log_file_path(log_type)}')
                 else:
                     index = {'o': 0, 'e': 1}[log_type]
-                    log_contents = log_contents.split('\n\n')[index].split('\n', 1)[1]
-        except RuntimeError as e:
+                    log_parts = log_contents.split(f'{self.job_id.split(".")[0]} STDERR')[index].split('\n', 1)
+                    try:
+                        log_contents = log_parts[1]
+                    except IndexError:
+                        log_contents = ''
+        except Exception as e:
             log_contents = str(e)
 
         if filename is not None:
