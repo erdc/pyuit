@@ -52,8 +52,6 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
     env_names = param.List()
     env_values = param.List()
     env_browser = param.List()
-    browse = param.Action(lambda self: self.toggle_file_browser(), label='📂')
-    browse_toggle = param.Boolean(default=False)
     browse_view = param.ClassSelector(pn.Row, default=pn.Row())
 
     def update_environ(self, *events):
@@ -97,20 +95,12 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
     def new_callback(new_selection, a, b):
         a.value = b.value[0]
 
-    @param.depends('browse_toggle')
-    def file_browser_view(self):
-        if self.browse_toggle:
-            return HpcFileBrowser(self.uit_client).panel
-        else:
-            return pn.layout.Spacer()
-
     @param.depends('environment_variables')
     def environment_variables_view(self):
         self.env_names = list()
         self.env_values = list()
         self.env_browser = list()
 
-        # Might need to create another list
         for i, (k, v) in enumerate(self.environment_variables.items()):
             name_widget = self.env_var_widget(val=k, tag=f'env_key_{i}')
             val_widget = self.env_var_widget(val=str(v), tag=f'env_val_{i}')
@@ -121,7 +111,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 
         self.env_names.append(self.env_var_widget(val=None, tag='env_key_-1', placeholder='NEW_ENV_VAR'))
         self.env_values.append(self.env_var_widget(val=None, tag='env_val_-1', placeholder=''))
-        self.env_browser.append(self.env_file_browser_widget(tag='env_browser_-1'))
+        self.env_browser.append(self.env_file_browser_widget(tag='env_browser_-1', disabled=True))
 
         self.env_names[0].name = 'Name'
         self.env_values[0].name = 'Value'
