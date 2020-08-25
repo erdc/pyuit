@@ -121,7 +121,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 
         self.env_names.append(self.env_var_widget(val=None, tag='env_key_-1', placeholder='NEW_ENV_VAR'))
         self.env_values.append(self.env_var_widget(val=None, tag='env_val_-1', placeholder=''))
-        self.env_browser.append(self.env_file_browser_widget(tag=f'env_browser_-1'))
+        self.env_browser.append(self.env_file_browser_widget(tag='env_browser_-1'))
 
         self.env_names[0].name = 'Name'
         self.env_values[0].name = 'Value'
