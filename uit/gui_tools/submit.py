@@ -1,5 +1,6 @@
 import param
 import panel as pn
+from functools import partial
 
 from .file_browser import HpcFileBrowser
 from .configurable import HpcConfigurable
@@ -50,8 +51,8 @@ class PbsScriptInputs(param.Parameterized):
 class PbsScriptAdvancedInputs(HpcConfigurable):
     env_names = param.List()
     env_values = param.List()
-    browse = param.Action(lambda self: self.toggle_file_browser(), label='📂')
-    browse_toggle = param.Boolean(default=False)
+    env_browser = param.List()
+    browse_view = param.ClassSelector(pn.Row, default=pn.Row())
 
     def update_environ(self, *events):
         for event in events:
@@ -75,28 +76,42 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         widget.param.watch(self.update_environ, ['value'], onlychanged=True)
         return widget
 
-    def toggle_file_browser(self):
-        self.browse_toggle = not self.browse_toggle
+    @param.depends()
+    def env_file_browser_widget(self, tag, **kwargs):
+        widget = pn.widgets.Button(name='📂', css_classes=[tag], width=30, align='end', **kwargs)
+        widget.on_click(self.toggle_file_browser)
+        return widget
 
-    @param.depends('browse_toggle')
-    def file_browser_view(self):
-        if self.browse_toggle:
-            return HpcFileBrowser(self.uit_client).panel
-        else:
-            return pn.layout.Spacer()
+    def toggle_file_browser(self, *events):
+        for event in events:
+            _, is_key, i = event.obj.css_classes[0].split('_')
+            i = int(i)
+            new_val = self.env_values[i]
+            new_browser_pn = HpcFileBrowser(self.uit_client)
+            new_browser_pn.callback = partial(self.new_callback, a=new_val, b=new_browser_pn)
+            self.browse_view[:] = [new_browser_pn.panel]
+
+    @staticmethod
+    def new_callback(new_selection, a, b):
+        a.value = b.value[0]
 
     @param.depends('environment_variables')
     def environment_variables_view(self):
         self.env_names = list()
         self.env_values = list()
+        self.env_browser = list()
+
         for i, (k, v) in enumerate(self.environment_variables.items()):
             name_widget = self.env_var_widget(val=k, tag=f'env_key_{i}')
             val_widget = self.env_var_widget(val=str(v), tag=f'env_val_{i}')
+            browser_widget = self.env_file_browser_widget(tag=f'env_browser_{i}')
             self.env_names.append(name_widget)
             self.env_values.append(val_widget)
+            self.env_browser.append(browser_widget)
 
         self.env_names.append(self.env_var_widget(val=None, tag='env_key_-1', placeholder='NEW_ENV_VAR'))
-        self.env_values.append(self.env_var_widget(val=None, tag='env_val_-1', disabled=True))
+        self.env_values.append(self.env_var_widget(val=None, tag='env_val_-1', placeholder=''))
+        self.env_browser.append(self.env_file_browser_widget(tag='env_browser_-1', disabled=True))
 
         self.env_names[0].name = 'Name'
         self.env_values[0].name = 'Value'
@@ -104,13 +119,10 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         return pn.Column(
             '<h3>Environment Variables</h3>',
             pn.Column(
-                *[pn.Row(k, v, width_policy='max') for k, v in zip(self.env_names, self.env_values)],
+                *[pn.Row(k, v, b, width_policy='max') for k, v, b in
+                  zip(self.env_names, self.env_values, self.env_browser)],
             ),
-            pn.Row(
-                '<h4>File Browser</h4>',
-                pn.Param(self, parameters=['browse'], widgets={'browse': {'width': 30}}, show_name=False),
-            ),
-            self.file_browser_view,
+            self.browse_view,
         )
 
     def advanced_options_view(self):
