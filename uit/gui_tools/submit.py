@@ -14,7 +14,7 @@ class PbsScriptInputs(param.Parameterized):
     node_type = param.ObjectSelector(default='', objects=[], precedence=5)
     nodes = param.Integer(default=1, bounds=(1, 100), precedence=5.1)
     processes_per_node = param.ObjectSelector(default=1, objects=[], precedence=5.2)
-    wall_time = param.String(default='00:05:00', precedence=6)
+    wall_time = param.String(default='01:00:00', precedence=6)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
 
@@ -30,6 +30,13 @@ class PbsScriptInputs(param.Parameterized):
         self.node_type = self.param.node_type.objects[0]
         self.param.queue.objects = self.uit_client.get_queues()
         self.queue = self.queue if self.queue in self.param.queue.objects else self.param.queue.objects[0]
+
+    @param.depends('queue', watch=True)
+    def update_queue_depended_bounds(self):
+        if self.queue == 'debug':
+            self.param.nodes.bounds = (1, 1)
+            self.nodes = 1
+            self.wall_time = '00:10:00'
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):
@@ -153,6 +160,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     submit_btn = param.Action(lambda self: self._submit(), label='Submit', constant=True, precedence=10)
     validate_btn = param.Action(lambda self: self._validate(), label='Validate', constant=True, precedence=10)
+    cancel_btn = param.Action(lambda self: self.cancel(), label='Cancel', precedence=10)
     disable_validation = param.Boolean(label='Override Validation')
     validated = param.Boolean()
     job_name = param.String(label='Job Name (Required)')
@@ -167,7 +175,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         pass
 
     def submit(self):
-        return None
+        return False
 
     def _submit(self):
         if not self.param.submit_btn.constant:
@@ -184,10 +192,22 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         if not self.param.validate_btn.constant:
             self.param.validate_btn.constant = True
             self.pre_validate()
-            result = self.validate()
-            self.validated = result
-            if not result:
+            is_valid = self.validate()
+            self.validated = is_valid
+            if is_valid:
+                param.depends('environment_variables', 'load_modules', 'unload_modules', watch=True)(self.un_validate)  # TODO: this is not working
+            else:
                 self.param.validate_btn.constant = False
+
+    @param.depends('environment_variables', 'load_modules', 'unload_modules', watch=True)
+    def un_validate(self):
+        if self.validated:
+            self.cancel()
+            self.validated = False
+            self.is_submitable()
+
+    def cancel(self):
+        pass
 
     @property
     def pbs_script(self):
@@ -217,7 +237,10 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @param.depends('job_name', watch=True)
     def is_submitable(self):
-        self.param.submit_btn.constant = self.param.validate_btn.constant = not bool(self.job_name)
+        valid_job_name = False
+        if bool(self.job_name) and ' ' not in self.job_name:
+            valid_job_name = True
+        self.param.submit_btn.constant = self.param.validate_btn.constant = not valid_job_name
 
     @param.depends('disable_validation', 'validated')
     def action_button(self):
@@ -228,10 +251,23 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             button = 'validate_btn'
             button_type = 'primary'
 
-        return pn.Param(
+        action_btn = pn.Param(
             self.param[button],
             widgets={button: {'button_type': button_type, 'width': 200}}
-        )
+        )[0]
+        cancel_btn = pn.Param(
+            self.param.cancel_btn,
+            widgets={'cancel_btn': {'button_type': 'danger', 'width': 200}}
+        )[0]
+
+        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+
+        args = {'action_btn': action_btn, 'cancel_btn': cancel_btn, 'spn': spn}
+        code = 'action_btn.visible=false; cancel_btn.visible=false; spn.width=50;'
+        action_btn.js_on_click(args=args, code=code)
+        cancel_btn.js_on_click(args=args, code=code)
+
+        return pn.Row(action_btn, cancel_btn, spn)
 
     def submit_view(self):
         return pn.Column(
@@ -241,7 +277,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         )
 
     def view(self):
-        return pn.panel(self.param.job_name),
+        return pn.Param(self.param.job_name),
 
     def panel(self):
         return pn.Column(
