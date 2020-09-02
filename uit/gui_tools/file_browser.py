@@ -6,6 +6,7 @@ from functools import wraps
 
 import param
 import panel as pn
+import panel.models.ace  # noqa: F401
 
 from uit.uit import Client
 
@@ -521,7 +522,8 @@ class FileViewer(param.Parameterized):
             try:
                 self.file_contents = self.uit_client.call(f'{self.cmd} -n {self.n} {self.file_select.file_path}')
             except Exception as e:
-                #                 self.file_contents = f'ERROR!: {e}'
+                log.debug(e)
+                # self.file_contents = f'ERROR!: {e}'
                 self.file_contents = ''
             self.param.trigger('update_btn')
 
