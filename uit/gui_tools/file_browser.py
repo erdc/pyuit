@@ -257,16 +257,28 @@ class FileBrowser(param.Parameterized):
 
     @property
     def panel(self):
-        return pn.Column(
+        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+        select_btn = pn.Param(
+            self.param.callback,
+            widgets={'callback': {'width': 100, 'button_type': 'success'}}
+        )[0]
+        select_btn.js_on_click(args={'btn': select_btn, 'spn': spn}, code='btn.visible=true; spn.width=50;')
+
+        browser_bar = pn.Row(
             pn.Param(
                 self,
-                parameters=self.controls + ['path_text', 'callback'],
+                parameters=self.controls + ['path_text'],
                 widgets=self.control_styles,
                 default_layout=pn.Row,
                 width_policy='max',
                 show_name=False,
                 margin=0,
             ),
+            select_btn, spn
+        )
+
+        return pn.Column(
+            browser_bar,
             self.param.show_hidden,
             pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'),
             width_policy='max',
@@ -467,25 +479,50 @@ class SelectFile(param.Parameterized):
             self.file_browser.init()
             return self.file_browser.panel
 
-    def input_row(self):
-        return pn.Param(
-            self,
-            parameters=['file_path', 'browse_toggle'],
-            widgets={
-                'file_path': {'width_policy': 'max', 'show_name': False},
-                'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
-            },
-            default_layout=pn.Row,
-            show_name=False,
-            width_policy='max',
-            margin=0,
-        )
+    # def input_row(self):
+    #     return pn.Param(
+    #         self,
+    #         parameters=['file_path'],
+    #         widgets={
+    #             'file_path': {'width_policy': 'max', 'show_name': False},
+    #             # 'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
+    #         },
+    #         default_layout=pn.Row,
+    #         show_name=False,
+    #         width_policy='max',
+    #         margin=0,
+    #     )
 
     @property
     def panel(self):
+        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+
+        browse_toggle = pn.Param(
+            self.param.browse_toggle,
+            widgets={'browse_toggle': {'width': 100, 'button_type': 'primary'}}
+        )[0]
+        browse_toggle.js_on_click(args={'btn': browse_toggle, 'spn': spn}, code='btn.visible=true; spn.width=50;')
+
+        input_row = pn.Row(
+            pn.Param(
+                self,
+                parameters=['file_path'],
+                widgets={
+                    'file_path': {'width_policy': 'max', 'show_name': False},
+                    # 'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
+                },
+                default_layout=pn.Row,
+                show_name=False,
+                width_policy='max',
+                margin=0,
+            ),
+            browse_toggle, spn
+        )
+
         self.param.file_path.label = self.title
+
         return pn.Column(
-            self.input_row,
+            input_row,
             pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
             self.file_browser_panel,
             width_policy='max'
