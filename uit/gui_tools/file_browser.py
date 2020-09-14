@@ -378,8 +378,33 @@ class HpcPath(Path, PurePosixPath):
         if self.name in (d['name'] for d in ls['dirs']):
             self._is_dir = True
             self._ls = self.uit_client.list_dir(self.as_posix())
+            if 'error' in self._ls:
+                self.parse_list_dir()
         elif self.name in (f['name'] for f in ls['files']):
             self._is_file = True
+
+    def parse_list_dir(self):
+        TYPES = {'d': 'dir', '-': 'file', 'l': 'link'}
+        base_path = self.as_posix()
+        parsed_ls = {'path': base_path, 'dirs': [], 'files': [], 'links': []}
+        ls = self.uit_client.call(f'ls -l {base_path}')
+        for f in ls.splitlines()[1:]:
+            parts = f.split()
+            perms, _, owner, group, size, mon, day, time, filename = parts[:9]
+            metadata = {
+                'owner': owner,
+                'path': f'{base_path}/{filename}',
+                'size': int(size),
+                'lastmodified': f'{mon} {day} {time}',
+                'name': filename,
+                'perms': perms,
+                'type': TYPES[perms[0]],
+                'group': group
+            }
+            if perms.startswith('l'):
+                metadata['link'] = parts[-1]
+            parsed_ls[metadata['type'] + 's'].append(metadata)
+        self._ls = parsed_ls
 
     def is_dir(self):
         if self._is_dir is None:
