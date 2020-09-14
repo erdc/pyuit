@@ -69,3 +69,6 @@ target/
 
 # ViM Files
 *.swp
+
+# VS Code Projects
+.vscode
