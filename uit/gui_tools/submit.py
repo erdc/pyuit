@@ -198,6 +198,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 param.depends('environment_variables', 'load_modules', 'unload_modules', watch=True)(self.un_validate)  # TODO: this is not working
             else:
                 self.param.validate_btn.constant = False
+                self.param.trigger('validated')
 
     @param.depends('environment_variables', 'load_modules', 'unload_modules', watch=True)
     def un_validate(self):
