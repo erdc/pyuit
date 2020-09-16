@@ -504,20 +504,6 @@ class SelectFile(param.Parameterized):
             self.file_browser.init()
             return self.file_browser.panel
 
-    # def input_row(self):
-    #     return pn.Param(
-    #         self,
-    #         parameters=['file_path'],
-    #         widgets={
-    #             'file_path': {'width_policy': 'max', 'show_name': False},
-    #             # 'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
-    #         },
-    #         default_layout=pn.Row,
-    #         show_name=False,
-    #         width_policy='max',
-    #         margin=0,
-    #     )
-
     @property
     def panel(self):
         spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
