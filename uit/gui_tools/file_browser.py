@@ -6,7 +6,7 @@ from functools import wraps
 
 import param
 import panel as pn
-import panel.models.ace  # noqa: F401
+# import panel.models.ace  # noqa: F401
 
 from uit.uit import Client
 
@@ -591,6 +591,8 @@ class FileViewer(param.Parameterized):
 
     @param.depends('update_btn')
     def view(self):
+        import panel.models.ace  # noqa: F401
+
         file_path = self.file_select.file_path
         return pn.Column(
             pn.widgets.TextInput(value=file_path, disabled=True),
