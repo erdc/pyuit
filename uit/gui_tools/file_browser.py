@@ -514,7 +514,7 @@ class SelectFile(param.Parameterized):
         )[0]
         browse_toggle.js_on_click(args={'btn': browse_toggle, 'spn': spn}, code='btn.visible=true; spn.width=50;')
 
-        input_row = pn.Row(
+        filepath_row = pn.Row(
             pn.Param(
                 self,
                 parameters=['file_path'],
@@ -529,11 +529,10 @@ class SelectFile(param.Parameterized):
             ),
             browse_toggle, spn
         )
-
         self.param.file_path.label = self.title
 
         return pn.Column(
-            input_row,
+            filepath_row,
             pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
             self.file_browser_panel,
             width_policy='max'
