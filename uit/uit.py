@@ -39,6 +39,9 @@ _auth_code = None
 _server = None
 
 
+class UITError(RuntimeError): pass
+
+
 class Client:
     """Provides a python abstraction for interacting with the UIT API.
 
@@ -57,20 +60,9 @@ class Client:
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
 
-        # Set arg-based attributes
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.config_file = config_file
-        self.session_id = session_id
-        self.scope = scope
-        self.token = token
-        self.port = port
-
-        # Set attribute defaults
-        self.connected = False
-
         # Set private attribute defaults
         self._auth_code = None
+        self._token = None
         self._headers = None
         self._login_node = None
         self._login_nodes = None
@@ -83,6 +75,18 @@ class Client:
         self._username = None
         self._callback = None
         self._available_modules = None
+
+        # Set arg-based attributes
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.config_file = config_file
+        self.session_id = session_id
+        self.scope = scope
+        self.token = token
+        self.port = port
+
+        # Set attribute defaults
+        self.connected = False
 
         # Environmental variable cache
         self.env = HpcEnv(self)
@@ -143,6 +147,16 @@ class Client:
         return self._headers
 
     @property
+    def token(self):
+        return self._token
+
+    @token.setter
+    def token(self, token):
+        self._token = token
+        if token is not None:
+            self.get_userinfo()
+
+    @property
     def login_node(self):
         return self._login_node
 
@@ -189,7 +203,7 @@ class Client:
             try:
                 self._callback(*args)
             except Exception as e:
-                print(e)
+                log.exception(e)
 
     def _as_df(self, data, columns=None):
         if not has_pandas:
@@ -217,7 +231,7 @@ class Client:
         # check if we have available tokens/refresh tokens
 
         if self.token:
-            print('access token available, no auth needed')
+            log.info('access token available, no auth needed')
             self._do_callback(True)
             return
 
@@ -236,7 +250,7 @@ class Client:
         import webbrowser
         webbrowser.open(auth_url)
 
-    def connect(self, system=None, login_node=None, exclude_login_nodes=()):
+    def connect(self, system=None, login_node=None, exclude_login_nodes=(), retry_on_failure=False, num_retries=3):
         """Connect this client to the UIT servers.
 
         Args:
@@ -249,9 +263,6 @@ class Client:
         # populate userinfo and header info
         if self.token is None:
             raise RuntimeError('No Valid Access Tokens Found, Please run authenticate() function and try again')
-
-        # retrieve user info
-        self.get_userinfo()
 
         if all([system, login_node]) or not any([system, login_node]):
             raise ValueError('Please specify at least one of system or login_node and not both')
@@ -271,8 +282,26 @@ class Client:
         self._uit_url = self._uit_urls[login_node]
         self.connected = True
 
-        msg = 'Connected successfully to {} on {}'.format(login_node, system)
-        return msg
+        try:
+            self.call(':')
+        except UITError as e:
+            self.connected = False
+            msg = f'Error while connecting to node {login_node}: {e}'
+            log.info(msg)
+            if retry_on_failure and num_retries > 0:
+                log.debug(f'Retrying connection {num_retries} more time(s)')
+                num_retries -= 1
+                exclude_login_nodes = list(exclude_login_nodes) + [login_node]
+                return self.connect(
+                    system=system, exclude_login_nodes=exclude_login_nodes,
+                    retry_on_failure=retry_on_failure, num_retries=num_retries
+                )
+            else:
+                raise UITError(msg)
+        else:
+            msg = 'Connected successfully to {} on {}'.format(login_node, system)
+            log.info(msg)
+            return msg
 
     def get_auth_url(self):
         """Generate Authorization URL with UIT Server.
@@ -324,7 +353,7 @@ class Client:
 
         # check the response
         if token.status_code == requests.codes.ok:
-            print('Access Token request succeeded.')
+            log.info('Access Token request succeeded.')
         else:
             raise IOError('Token request failed.')
 
@@ -405,7 +434,7 @@ class Client:
         if resp.get('success') == 'true':
             return resp.get('stdout') + resp.get('stderr')
         elif raise_on_error:
-            raise RuntimeError('UIT Command failed with response: ', resp)
+            raise UITError(resp['error'])
         else:
             return 'ERROR!\n' + resp.get('stdout') + resp.get('stderr')
 
@@ -574,7 +603,7 @@ class Client:
                     k, v = l.split('=', 1)
                     d[k.strip()] = v.strip()
                 except ValueError:
-                    print('ERROR', l)
+                    log.exception('ERROR', l)
             d['Variable_List'] = dict(kv.split('=') for kv in d.get('Variable_List').split(','))
             statuses[lines[0]] = d
         return statuses

@@ -2,9 +2,8 @@ import logging
 
 import param
 import panel as pn
-from pkg_resources import resource_filename
 
-from uit.uit import Client, HPC_SYSTEMS
+from uit.uit import Client, HPC_SYSTEMS, UITError
 
 log = logging.getLogger(f'pyuit.{__name__}')
 
@@ -71,10 +70,11 @@ class HpcConnect(param.Parameterized):
         super().__init__(**params)
         self.uit_client = uit_client or Client()
         self.update_node_options()
+        self.advanced_pn = None
 
     @param.depends('system', watch=True)
     def update_node_options(self):
-        options = [f'{self.system}{i:02d}' for i in range(1, 8)]
+        options = self.uit_client.login_nodes[self.system]
         self.param.exclude_nodes.objects = options
         options = options.copy()
         options.insert(0, None)
@@ -84,6 +84,16 @@ class HpcConnect(param.Parameterized):
     @param.depends('login_node', watch=True)
     def update_exclude_nodes_visibility(self):
         self.param.exclude_nodes.precedence = 1 if self.login_node is None else -1
+        if self.login_node is None:
+            self.advanced_pn.extend([
+                self.param.exclude_nodes.label,
+                pn.Param(
+                    self.param.exclude_nodes,
+                    widgets={'exclude_nodes': pn.widgets.CrossSelector},
+                ),
+            ])
+        else:
+            self.advanced_pn[:] = self.advanced_pn[:1]
 
     @param.depends('_next_stage', watch=True)
     def update_next_stage(self):
@@ -91,22 +101,27 @@ class HpcConnect(param.Parameterized):
 
     def connect(self):
         system = None if self.login_node is not None else self.system
-        self.connection_status = self.uit_client.connect(
-            system=system,
-            login_node=self.login_node,
-            exclude_login_nodes=self.exclude_nodes,
-        )
         try:
             self.connected = None
-            self.uit_client.call(':')
-        except Exception as e:
+            retry = self.login_node is None
+            self.connection_status = self.uit_client.connect(
+                system=system,
+                login_node=self.login_node,
+                exclude_login_nodes=self.exclude_nodes,
+                retry_on_failure=retry,
+            )
+        except UITError as e:
             log.exception(e)
-        self.connected = self.uit_client.connected
-        self.ready = self.connected
+            self.exclude_nodes.append(self.uit_client.login_node)
+            self.disconnect()
+        else:
+            self.connected = self.uit_client.connected
+            self.ready = self.connected
 
     def disconnect(self):
         self.param.connect_btn.label = 'Connect'
         self.connection_status = 'Not Connected'
+        self.login_node = None
         self.connected = False
 
     @param.depends('connected')
@@ -125,23 +140,22 @@ class HpcConnect(param.Parameterized):
         connect_btn.js_on_click(args={'btn': connect_btn, 'spn': spn}, code='btn.visible=false; spn.width=50;')
 
         if self.connected is None:
-            content = pn.pane.GIF(resource_filename('panel', 'assets/spinner.gif'))
+            content = spn
         elif self.connected is False:
             system_pn = pn.Column(
                 pn.panel(self, parameters=['system'], show_name=False),
                 name='HPC System',
             )
-            advanced_pn = pn.Column(
-                pn.panel(
-                    self,
-                    parameters=['login_node', 'exclude_nodes'],
-                    widgets={'exclude_nodes': pn.widgets.CrossSelector},
-                    show_name=False,
-                ),
+            self.advanced_pn = pn.panel(
+                self,
+                parameters=['login_node', 'exclude_nodes'],
+                widgets={'exclude_nodes': pn.widgets.CrossSelector},
+                show_name=False,
                 name='Advanced Options',
             )
-
-            content = pn.Column(pn.layout.Tabs(system_pn, advanced_pn), connect_btn, spn)
+            if self.login_node is None:
+                self.advanced_pn.insert(1, self.param.exclude_nodes.label)
+            content = pn.Column(pn.layout.Tabs(system_pn, self.advanced_pn), connect_btn, spn)
         else:
             self.param.connect_btn.label = 'Re-Connect'
             btns = pn.Param(
