@@ -510,7 +510,7 @@ class SelectFile(param.Parameterized):
 
         browse_toggle = pn.Param(
             self.param.browse_toggle,
-            widgets={'browse_toggle': {'width': 100, 'button_type': 'primary'}}
+            widgets={'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}}
         )[0]
         browse_toggle.js_on_click(args={'btn': browse_toggle, 'spn': spn}, code='btn.visible=true; spn.width=50;')
 
@@ -520,7 +520,6 @@ class SelectFile(param.Parameterized):
                 parameters=['file_path'],
                 widgets={
                     'file_path': {'width_policy': 'max', 'show_name': False},
-                    # 'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
                 },
                 default_layout=pn.Row,
                 show_name=False,
