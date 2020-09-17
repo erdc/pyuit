@@ -71,6 +71,11 @@ class HpcConnect(param.Parameterized):
         self.uit_client = uit_client or Client()
         self.update_node_options()
         self.advanced_pn = None
+        self.system_pn = pn.Column(
+            pn.panel(self, parameters=['system'], show_name=False),
+            pn.Spacer(),
+            name='HPC System',
+        )
 
     @param.depends('system', watch=True)
     def update_node_options(self):
@@ -114,6 +119,8 @@ class HpcConnect(param.Parameterized):
             log.exception(e)
             self.exclude_nodes.append(self.uit_client.login_node)
             self.disconnect()
+            self.system_pn[-1] = pn.pane.Alert(f'{e}<br/>Try connecting again.'.format(alert_type='danger'),
+                                               alert_type='danger', width=500)
         else:
             self.connected = self.uit_client.connected
             self.ready = self.connected
@@ -121,6 +128,7 @@ class HpcConnect(param.Parameterized):
     def disconnect(self):
         self.param.connect_btn.label = 'Connect'
         self.connection_status = 'Not Connected'
+        self.system_pn[-1] = pn.Spacer()
         self.login_node = None
         self.connected = False
 
@@ -142,10 +150,6 @@ class HpcConnect(param.Parameterized):
         if self.connected is None:
             content = spn
         elif self.connected is False:
-            system_pn = pn.Column(
-                pn.panel(self, parameters=['system'], show_name=False),
-                name='HPC System',
-            )
             self.advanced_pn = pn.panel(
                 self,
                 parameters=['login_node', 'exclude_nodes'],
@@ -155,7 +159,7 @@ class HpcConnect(param.Parameterized):
             )
             if self.login_node is None:
                 self.advanced_pn.insert(1, self.param.exclude_nodes.label)
-            content = pn.Column(pn.layout.Tabs(system_pn, self.advanced_pn), connect_btn, spn)
+            content = pn.Column(pn.layout.Tabs(self.system_pn, self.advanced_pn), connect_btn, spn)
         else:
             self.param.connect_btn.label = 'Re-Connect'
             btns = pn.Param(
