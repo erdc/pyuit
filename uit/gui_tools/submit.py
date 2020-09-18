@@ -12,7 +12,7 @@ class PbsScriptInputs(param.Parameterized):
     hpc_subproject = param.ObjectSelector(default=None, precedence=3)
     workdir = param.String(default='', precedence=4)
     node_type = param.ObjectSelector(default='', objects=[], precedence=5)
-    nodes = param.Integer(default=1, bounds=(1, 100), precedence=5.1)
+    nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1)
     processes_per_node = param.ObjectSelector(default=1, objects=[], precedence=5.2)
     wall_time = param.String(default='01:00:00', precedence=6)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
@@ -34,8 +34,6 @@ class PbsScriptInputs(param.Parameterized):
     @param.depends('queue', watch=True)
     def update_queue_depended_bounds(self):
         if self.queue == 'debug':
-            self.param.nodes.bounds = (1, 1)
-            self.nodes = 1
             self.wall_time = '00:10:00'
 
     @param.depends('node_type', watch=True)
