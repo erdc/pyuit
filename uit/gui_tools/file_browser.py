@@ -216,8 +216,8 @@ class FileBrowser(param.Parameterized):
     file_listing = param.ListSelector(default=[], label='', precedence=0.5)
     patterns = param.List(precedence=-1, default=['*'])
     show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
-    spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
-    show_loading = param.Boolean(default=False)
+    # spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
+    # show_loading = param.Boolean(default=False)
 
 
     def __init__(self, delayed_init=False, **params):
@@ -259,22 +259,22 @@ class FileBrowser(param.Parameterized):
         return styles
 
 
-    @param.depends('show_loading', 'file_listing', 'path_text')
-    def loading(self):
-        if isinstance(self.file_listing, list):
-            print(str(self.path_text))
-            # print(type(self.file_listing[0]))
+    # @param.depends('show_loading', 'file_listing', 'path_text')
+    # def loading(self):
+    #     if isinstance(self.file_listing, list):
+    #         print(str(self.path_text))
+    #         # print(type(self.file_listing[0]))
 
-            if len(self.file_listing) > 0:
-                # print(self.param.file_listing.objects)
-                print(self.file_listing[0]) # selected
-                if str(self.path_text).endswith(str(self.file_listing[0])):
-                    self.show_loading = False
-        if self.show_loading:
-            return pn.Column(self.spn)
+    #         if len(self.file_listing) > 0:
+    #             # print(self.param.file_listing.objects)
+    #             print(self.file_listing[0]) # selected
+    #             if str(self.path_text).endswith(str(self.file_listing[0])):
+    #                 self.show_loading = False
+    #     if self.show_loading:
+    #         return pn.Column(self.spn)
 
-    def toggle_loading(self, event=None):
-        self.show_loading = True
+    # def toggle_loading(self, event=None):
+    #     self.show_loading = True
 
     @property
     def panel(self):
@@ -472,6 +472,8 @@ class HpcFileBrowser(FileBrowser):
     path = param.ClassSelector(HpcPath)
     workdir = param.Action(lambda self: self.go_to_workdir(), label='⚙️', precedence=0.15)
     uit_client = param.ClassSelector(Client)
+    show_loading = param.Boolean(default=False)
+
 
     def __init__(self, uit_client, **params):
         params['uit_client'] = uit_client
@@ -498,6 +500,23 @@ class HpcFileBrowser(FileBrowser):
     def go_to_workdir(self):
         self.path = self._new_path(self.uit_client.WORKDIR)
 
+    def toggle_loading(self, event=None):
+        self.show_loading = True
+
+    @param.depends('show_loading')
+    def loading(self):
+        # if isinstance(self.file_listing, list):
+        #     print(str(self.path_text))
+        #     # print(type(self.file_listing[0]))
+
+        #     if len(self.file_listing) > 0:
+        #         # print(self.param.file_listing.objects)
+        #         print(self.file_listing[0]) # selected
+        #         if str(self.path_text).endswith(str(self.file_listing[0])):
+        #             self.show_loading = False
+        if self.show_loading:
+            return pn.Column(self.spn)
+
 
 
 class SelectFile(param.Parameterized):
@@ -507,6 +526,8 @@ class SelectFile(param.Parameterized):
     file_browser = param.ClassSelector(FileBrowser)
     title = param.String(default='File Path')
     help_text = param.String()
+    spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
+    show_loading = param.Boolean(default=False)
 
     def __init__(self, **params):
         super().__init__(**params)
@@ -531,34 +552,51 @@ class SelectFile(param.Parameterized):
             self.file_browser.init()
             return self.file_browser.panel
 
+    @param.depends('show_loading', 'file_browser', 'file_path')
+    def loading(self):
+        # if isinstance(self.file_listing, list):
+        #     print(str(self.path_text))
+        #     # print(type(self.file_listing[0]))
+
+        #     if len(self.file_listing) > 0:
+        #         # print(self.param.file_listing.objects)
+        #         print(self.file_listing[0]) # selected
+        #         if str(self.path_text).endswith(str(self.file_listing[0])):
+        #             self.show_loading = False
+        if self.show_loading:
+            return pn.Column(self.spn)
+
+    def toggle_loading(self, event=None):
+        self.show_loading = True
+
     @property
     def panel(self):
-        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
 
         browse_toggle = pn.Param(
             self.param.browse_toggle,
             widgets={'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}}
         )[0]
-        browse_toggle.js_on_click(args={'btn': browse_toggle, 'spn': spn}, code='btn.visible=true; spn.width=50;')
+        browse_toggle.on_click(self.toggle_loading)
 
-        filepath_row = pn.Row(
-            pn.Param(
-                self,
-                parameters=['file_path'],
-                widgets={
-                    'file_path': {'width_policy': 'max', 'show_name': False},
-                },
-                default_layout=pn.Row,
-                show_name=False,
-                width_policy='max',
-                margin=0,
-            ),
-            browse_toggle, spn
-        )
+
+        
         self.param.file_path.label = self.title
 
         return pn.Column(
-            filepath_row,
+            pn.Row(
+                pn.Param(
+                    self,
+                    parameters=['file_path'],
+                    widgets={
+                        'file_path': {'width_policy': 'max', 'show_name': False},
+                    },
+                    default_layout=pn.Row,
+                    show_name=False,
+                    width_policy='max',
+                    margin=0,
+                ),
+                browse_toggle, self.loading
+            ),
             pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
             self.file_browser_panel,
             width_policy='max'
