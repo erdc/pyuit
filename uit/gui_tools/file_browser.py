@@ -216,6 +216,9 @@ class FileBrowser(param.Parameterized):
     file_listing = param.ListSelector(default=[], label='', precedence=0.5)
     patterns = param.List(precedence=-1, default=['*'])
     show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
+    spn2 = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
+    show_loading = param.Boolean(default=False)
+
 
     def __init__(self, delayed_init=False, **params):
         self.delayed_init = delayed_init
@@ -255,14 +258,31 @@ class FileBrowser(param.Parameterized):
         )
         return styles
 
+
+    @param.depends('show_loading', 'file_listing', 'path_text')
+    def loading(self):
+        if isinstance(self.file_listing, list):
+            print(str(self.path_text))
+            # print(type(self.file_listing[0]))
+
+            if len(self.file_listing) > 0:
+                # print(self.param.file_listing.objects)
+                print(self.file_listing[0]) # selected
+                if str(self.path_text).endswith(str(self.file_listing[0])):
+                    self.show_loading = False
+        if self.show_loading:
+            return pn.Column(self.spn2)
+
+    def toggle_loading(self, event=None):
+        self.show_loading = True
+
     @property
     def panel(self):
-        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
         select_btn = pn.Param(
             self.param.callback,
             widgets={'callback': {'width': 100, 'button_type': 'success'}}
         )[0]
-        select_btn.js_on_click(args={'btn': select_btn, 'spn': spn}, code='btn.visible=true; spn.width=50;')
+        select_btn.on_click(self.toggle_loading)
 
         browser_bar = pn.Row(
             pn.Param(
@@ -274,18 +294,26 @@ class FileBrowser(param.Parameterized):
                 show_name=False,
                 margin=0,
             ),
-            select_btn, spn
+            select_btn,
         )
-        file_listing_wgt = pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max')
 
         return pn.Column(
             browser_bar,
             self.param.show_hidden,
-            file_listing_wgt,
+            self.param.file_listing,
+            self.loading,
             width_policy='max',
             margin=0,
         )
 
+    # def update_browser_bar(self):
+    #     wg = pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max')
+    #     wg.param.watch(self.show_spinner, 'value')
+
+    # def show_spinner(self, event):
+    #     browser_bar[2] = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+    #     self.param.trigger('path')
+        
     @property
     def value(self):
         if self.file_listing:
@@ -472,6 +500,7 @@ class HpcFileBrowser(FileBrowser):
     @HpcPath._ensure_connected
     def go_to_workdir(self):
         self.path = self._new_path(self.uit_client.WORKDIR)
+
 
 
 class SelectFile(param.Parameterized):
