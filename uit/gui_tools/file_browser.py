@@ -276,11 +276,12 @@ class FileBrowser(param.Parameterized):
             ),
             select_btn, spn
         )
+        file_listing_wgt = pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max')
 
         return pn.Column(
             browser_bar,
             self.param.show_hidden,
-            pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'),
+            file_listing_wgt,
             width_policy='max',
             margin=0,
         )
