@@ -216,7 +216,7 @@ class FileBrowser(param.Parameterized):
     file_listing = param.ListSelector(default=[], label='', precedence=0.5)
     patterns = param.List(precedence=-1, default=['*'])
     show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
-    spn2 = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
+    spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
     show_loading = param.Boolean(default=False)
 
 
@@ -271,7 +271,7 @@ class FileBrowser(param.Parameterized):
                 if str(self.path_text).endswith(str(self.file_listing[0])):
                     self.show_loading = False
         if self.show_loading:
-            return pn.Column(self.spn2)
+            return pn.Column(self.spn)
 
     def toggle_loading(self, event=None):
         self.show_loading = True
