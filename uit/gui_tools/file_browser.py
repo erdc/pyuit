@@ -284,24 +284,21 @@ class FileBrowser(param.Parameterized):
         )[0]
         select_btn.on_click(self.toggle_loading)
 
-        browser_bar = pn.Row(
-            pn.Param(
-                self,
-                parameters=self.controls + ['path_text'],
-                widgets=self.control_styles,
-                default_layout=pn.Row,
-                width_policy='max',
-                show_name=False,
-                margin=0,
-            ),
-            select_btn,
-        )
-
         return pn.Column(
-            browser_bar,
+            pn.Row(
+                pn.Param(
+                    self,
+                    parameters=self.controls + ['path_text'],
+                    widgets=self.control_styles,
+                    default_layout=pn.Row,
+                    width_policy='max',
+                    show_name=False,
+                    margin=0,
+                ),
+            select_btn, self.loading,
+            ),
             self.param.show_hidden,
-            self.param.file_listing,
-            self.loading,
+            pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'),
             width_policy='max',
             margin=0,
         )
