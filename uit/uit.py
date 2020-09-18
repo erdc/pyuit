@@ -434,7 +434,7 @@ class Client:
         if resp.get('success') == 'true':
             return resp.get('stdout') + resp.get('stderr')
         elif raise_on_error:
-            raise UITError(resp['error'])
+            raise UITError(resp.get('error', resp.get('stderr', resp)))
         else:
             return 'ERROR!\n' + resp.get('stdout') + resp.get('stderr')
 
