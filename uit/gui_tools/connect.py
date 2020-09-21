@@ -79,12 +79,13 @@ class HpcConnect(param.Parameterized):
 
     @param.depends('system', watch=True)
     def update_node_options(self):
-        options = self.uit_client.login_nodes[self.system]
-        self.param.exclude_nodes.objects = options
-        options = options.copy()
-        options.insert(0, None)
-        self.param.login_node.objects = options
-        self.param.login_node.names = {'Random': None}
+        if self.uit_client.login_nodes:
+            options = self.uit_client.login_nodes[self.system]
+            self.param.exclude_nodes.objects = options
+            options = options.copy()
+            options.insert(0, None)
+            self.param.login_node.objects = options
+            self.param.login_node.names = {'Random': None}
 
     @param.depends('login_node', watch=True)
     def update_exclude_nodes_visibility(self):
