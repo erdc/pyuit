@@ -79,7 +79,7 @@ class HpcConnect(param.Parameterized):
 
     @param.depends('system', watch=True)
     def update_node_options(self):
-        if self.uit_client.login_nodes:
+        if self.uit_client.login_nodes: # Required after latest updates to master branch
             options = self.uit_client.login_nodes[self.system]
             self.param.exclude_nodes.objects = options
             options = options.copy()
