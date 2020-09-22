@@ -4,6 +4,8 @@ import logging
 from pathlib import Path, PurePosixPath
 from functools import wraps
 
+import threading 
+
 import param
 import panel as pn
 # import panel.models.ace  # noqa: F401
@@ -256,26 +258,21 @@ class FileBrowser(param.Parameterized):
             path_text={'width_policy': 'max'},
             callback={'width': 100, 'button_type': 'success'},
         )
-        return styles
-
+        return styles        
 
     @param.depends('show_loading', 'file_listing', 'path_text')
     def loading(self):
-        if isinstance(self.file_listing, list):
-            # print(str(self.path_text))
-            # print(type(self.file_listing[0]))
-
-            if len(self.file_listing) > 0:
-                # print(self.param.file_listing.objects)
-                # print(self.file_listing[0]) # selected
-                if str(self.path_text).endswith(str(self.file_listing[0])):
-                    self.show_loading = False
         if self.show_loading:
             return pn.Column(self.spn)
 
     def toggle_loading(self, event=None):
         self.show_loading = True
+        timer = threading.Timer(4.0, self.set_false)
+        timer.start()
 
+    def set_false(self):
+        self.show_loading = False
+  
     @property
     def panel(self):
         select_btn = pn.Param(
@@ -285,7 +282,6 @@ class FileBrowser(param.Parameterized):
         select_btn.on_click(self.toggle_loading)
 
         wgt = pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max')
-        # pn.Param(self.param.file_listing, widgets={'file_listing': pn.widgets.FileSelector}, width_policy='max')
 
         return pn.Column(
             pn.Row(
@@ -306,13 +302,6 @@ class FileBrowser(param.Parameterized):
             margin=0,
         )
 
-    # def update_browser_bar(self):
-    #     wg = pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max')
-    #     wg.param.watch(self.show_spinner, 'value')
-
-    # def show_spinner(self, event):
-    #     browser_bar[2] = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
-    #     self.param.trigger('path')
         
     @property
     def value(self):
@@ -537,18 +526,13 @@ class SelectFile(param.Parameterized):
 
     @param.depends('show_loading', 'file_browser', 'file_path')
     def loading(self):
-        print("str(self.file_path " + str(self.file_path))
-        # print("str(self.file_browser[0] " + str(self.file_browser[0]))
-        if isinstance(self.file_browser, Path):
-            # print(str(self.file_path))
-            # print(type(self.file_listing[0]))
-            if len(self.file_browser) > 0:
-                # print(self.param.file_listing.objects)
-                # print("self.file_browser[0] " + self.file_browser[0]) # selected item
-                if str(self.file_path).endswith(str(self.file_browser[0])):
-                    self.show_loading = False
         if self.show_loading:
             return pn.Column(self.spn)
+
+    @param.depends('show_loading', 'loading')
+    def timed_spinner(self):
+        timer = threading.Timer(3.0, self.loading)
+        timer.start()
 
     def toggle_loading(self, event=None):
         self.show_loading = True
@@ -576,7 +560,7 @@ class SelectFile(param.Parameterized):
                     width_policy='max',
                     margin=0,
                 ),
-                browse_toggle, self.loading,
+                browse_toggle, self.timed_spinner,
             ),
             pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
             self.file_browser_panel,
