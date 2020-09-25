@@ -71,4 +71,7 @@ target/
 *.swp
 
 # VS Code Projects
-.vscode
+.vscode/
+
+# Jupyter Notebook
+*/.ipynb_checkpoints/
