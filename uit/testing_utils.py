@@ -62,12 +62,22 @@ class MockClient(Client):
                    'hours_remaining', 'percent_remaining', 'background_hours_used']
         return [{k: 'mock' for k in columns}]
 
-    def call(self, *args, **kwargs):
+    def call(self, command, *args, **kwargs):
+        cmd_args = command.split()
         try:
-            completed_process = run(args[0].split(), capture_output=True)
+            completed_process = run(cmd_args, capture_output=True)
             return completed_process.stdout.decode('utf-8')
         except:
+            try:  # For Windows
+                if cmd_args[0] == 'cat':
+                    with open(cmd_args[1]) as f:
+                        return f.read()
+            except:
+                pass
             return ''
+
+    def get_file(self, *args, **kwargs):
+        pass
 
     def put_file(self, *args, **kwargs):
         pass
