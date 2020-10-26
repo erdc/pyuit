@@ -1,4 +1,4 @@
-from uit import Client
+from uit import Client, PbsScript, PbsJob, PbsArrayJob
 from pathlib import Path
 from subprocess import run
 
@@ -93,3 +93,15 @@ class MockClient(Client):
 
 
 mock_client = MockClient()
+
+mock_script = PbsScript('mock_script', 'mock_project_id', 1, 44, 'mock_max_time')
+
+mock_job = PbsJob(mock_script)
+
+mock_array_job = PbsArrayJob(
+    script=PbsScript('mock_script', 'mock_project_id', 1, 44, 'mock_max_time', array_indices=(0, 2)),
+    client=mock_client,
+    label='mock',
+)
+mock_array_job._job_id = '0[]'
+mock_array_job._remote_workspace_id = 'mock_workspace'
