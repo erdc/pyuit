@@ -285,6 +285,6 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 self.submit_view(),
                 self.pbs_options_view(),
                 self.advanced_options_view(),
-                default=1,
+                active=1,
             ),
         )

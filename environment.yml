@@ -20,7 +20,7 @@ dependencies:
   - jupyterlab
   - nodejs
   - pandas
-  - panel>=0.8
+  - panel
   - param
   - holoviews
 
