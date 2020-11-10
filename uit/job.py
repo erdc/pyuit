@@ -2,10 +2,14 @@ import re
 import os
 from datetime import datetime
 from pathlib import PurePosixPath, Path
+import logging
 
 from .uit import Client
 from .pbs_script import PbsScript, NODE_ARGS
 from .execution_block import EXECUTION_BLOCK_TEMPLATE
+
+
+log = logging.getLogger(__name__)
 
 
 class PbsJob:
@@ -121,6 +125,23 @@ class PbsJob:
                              working_dir=working_dir)
 
         return self.job_id
+
+    def terminate(self):
+        return self._execute('qdel')
+
+    def hold(self):
+        return self._execute('qhold')
+
+    def release(self):
+        return self._execute('qrls')
+
+    def _execute(self, cmd):
+        try:
+            self.client.call(command=f'{cmd} {self.job_id}', working_dir=self.working_dir)
+            return True
+        except Exception as e:
+            log.exception(e)
+            return False
 
     def _transfer_files(self):
         # Transfer any files listed in transfer_input_files to working_dir on supercomputer

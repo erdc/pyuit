@@ -1,6 +1,7 @@
 from uit import Client, PbsScript, PbsJob, PbsArrayJob
 from pathlib import Path
 from subprocess import run
+import shutil
 
 
 class MockClient(Client):
@@ -79,8 +80,8 @@ class MockClient(Client):
     def get_file(self, *args, **kwargs):
         pass
 
-    def put_file(self, *args, **kwargs):
-        pass
+    def put_file(self, local_path, remote_path=None):
+        shutil.copy(local_path, remote_path)
 
     def submit(self, *args, **kwargs):
         pass
@@ -96,7 +97,7 @@ mock_client = MockClient()
 
 mock_script = PbsScript('mock_script', 'mock_project_id', 1, 44, 'mock_max_time')
 
-mock_job = PbsJob(mock_script)
+mock_job = PbsJob(mock_script, client=mock_client, label='mock')
 
 mock_array_job = PbsArrayJob(
     script=PbsScript('mock_script', 'mock_project_id', 1, 44, 'mock_max_time', array_indices=(0, 2)),

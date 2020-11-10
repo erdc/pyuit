@@ -212,15 +212,17 @@ class FileBrowser(param.Parameterized):
     home = param.Action(lambda self: self.go_home(), label='🏠', precedence=0.1)
     up = param.Action(lambda self: self.move_up(), label='⬆️', precedence=0.2)
     refresh_control = param.Action(lambda self: self.refresh(), label='🔄', precedence=0.25)
-    callback = param.Action(lambda x: None, label='Select', precedence=0.4)
+    callback = param.Action(lambda x: None, precedence=-1)
     file_listing = param.ListSelector(default=[], label='', precedence=0.5)
     patterns = param.List(precedence=-1, default=['*'])
     show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
+    _disabled = param.Boolean(default=False, precedence=-1)
 
-    def __init__(self, delayed_init=False, **params):
+    def __init__(self, delayed_init=False, disabled=False, **params):
         self.delayed_init = delayed_init
         super().__init__(**params)
         self._initialize_path()
+        self.disabled = disabled
 
     def init(self):
         self.delayed_init = False
@@ -235,11 +237,19 @@ class FileBrowser(param.Parameterized):
 
         if not self.path:
             self.go_home()
-        else:
-            self.make_options()
 
     def _new_path(self, path):
         return Path(path)
+
+    @property
+    def disabled(self):
+        return self._disabled
+
+    @disabled.setter
+    def disabled(self, disabled):
+        for p in self.controls + ['file_listing', 'path_text', 'show_hidden']:
+            self.param[p].constant = disabled
+        self._disabled = disabled
 
     @property
     def controls(self):
@@ -251,16 +261,15 @@ class FileBrowser(param.Parameterized):
 
         styles.update(
             path_text={'width_policy': 'max'},
-            callback={'width': 100, 'button_type': 'success'},
         )
         return styles
 
-    @property
+    @param.depends('_disabled')
     def panel(self):
         return pn.Column(
             pn.Param(
                 self,
-                parameters=self.controls + ['path_text', 'callback'],
+                parameters=self.controls + ['path_text'],
                 widgets=self.control_styles,
                 default_layout=pn.Row,
                 width_policy='max',
@@ -280,21 +289,29 @@ class FileBrowser(param.Parameterized):
         else:
             return [self.path.as_posix()]
 
+    def do_callback(self, changed=True):
+        if self.callback:
+            self.callback(changed)
+
     def go_home(self):
         self.path = Path.cwd()
+        self.file_listing = []
+        self.do_callback()
 
     def move_up(self):
         self.path = self.path.parent
+        self.file_listing = []
+        self.do_callback()
 
     @param.depends('file_listing', watch=True)
     def move_down(self):
-        for filename in self.file_listing:
+        if self.file_listing:
+            filename = self.file_listing[0]
             fn = self.path / filename
             if fn.is_dir():
                 self.path = fn
-                self.make_options()
-            if self.callback:
-                self.callback(True)
+                self.file_listing = []
+            self.do_callback()
 
     def refresh(self):
         self.file_listing = ['.']
@@ -307,6 +324,7 @@ class FileBrowser(param.Parameterized):
             self.path = path
         elif path and path.is_file():
             self.path = path.parent
+            self.param.set_param(file_listing=[path.name])
         else:
             log.warning(f'Invalid Directory: {path}')
 
@@ -323,7 +341,6 @@ class FileBrowser(param.Parameterized):
         except Exception as e:
             log.exception(str(e))
 
-        self.file_listing = []
         self.param.file_listing.objects = sorted(selected)
 
 
@@ -335,6 +352,7 @@ class HpcPath(Path, PurePosixPath):
     def _init(self, template=None, is_dir=None, uit_client=None):
         super()._init(template=template)
         self._is_dir = is_dir
+        self._is_file = None
         self._ls = []
         self.uit_client = uit_client
 
@@ -455,10 +473,14 @@ class HpcFileBrowser(FileBrowser):
     @HpcPath._ensure_connected
     def go_home(self):
         self.path = self._new_path(self.uit_client.HOME)
+        self.file_listing = []
+        self.do_callback()
 
     @HpcPath._ensure_connected
     def go_to_workdir(self):
         self.path = self._new_path(self.uit_client.WORKDIR)
+        self.file_listing = []
+        self.do_callback()
 
 
 class SelectFile(param.Parameterized):
@@ -469,9 +491,22 @@ class SelectFile(param.Parameterized):
     title = param.String(default='File Path')
     help_text = param.String()
 
-    def __init__(self, **params):
+    def __init__(self, disabled=False, **params):
         super().__init__(**params)
         self.file_browser = self.file_browser or FileBrowser(delayed_init=True)
+        self._disabled = False
+        self.disabled = disabled
+
+    @property
+    def disabled(self):
+        return self._disabled
+
+    @disabled.setter
+    def disabled(self, disabled):
+        self._disabled = disabled
+        for p in ['file_path', 'browse_toggle']:
+            self.param[p].constant = disabled
+        self.file_browser.disabled = disabled
 
     @param.depends('file_browser', watch=True)
     def update_callback(self):
@@ -479,18 +514,24 @@ class SelectFile(param.Parameterized):
 
     def update_file(self, new_selection):
         if new_selection:
-            self.file_path = self.file_browser.value[0]
+            self.param.set_param(file_path=self.file_browser.value[0])
 
     def toggle(self):
         self.show_browser = not self.show_browser
-        self.param.browse_toggle.label = 'Hide' if self.show_browser else 'Browse'
+
+    @param.depends('file_path', watch=True)
+    def initialize_file_browser(self):
+        if self.show_browser:
+            self.file_browser.path_text = self.file_path
+            self.file_browser.init()
 
     @param.depends('show_browser')
     def file_browser_panel(self):
         if self.show_browser:
-            self.file_browser.path_text = self.file_path
-            self.file_browser.init()
+            self.initialize_file_browser()
+            self.param.browse_toggle.label = 'Hide'
             return self.file_browser.panel
+        self.param.browse_toggle.label = 'Browse'
 
     def input_row(self):
         return pn.Param(
