@@ -26,6 +26,7 @@ class HpcJobMonitor(HpcConfigurable):
     file_viewer = param.ClassSelector(FileViewer)
     ready = param.Boolean()
     next_btn = param.Action(lambda self: self.next(), label='Next')
+    terminate_btn = param.Action(lambda self: self.terminate_job(), label='Terminate')
 
     def __init__(self, **params):
         super().__init__(**params)
@@ -37,6 +38,10 @@ class HpcJobMonitor(HpcConfigurable):
 
     def next(self):
         self.ready = True
+
+    def terminate_job(self):
+        self.selected_job.terminate()
+        self.param.terminate_btn.constant = True
 
     @param.output(finished_job_ids=list)
     def finished_jobs(self):
@@ -56,11 +61,13 @@ class HpcJobMonitor(HpcConfigurable):
         objects = [j for j in sub_jobs if j.status != 'Q']
         self.param.active_sub_job.names = {j.job_id: j for j in objects}
         self.param.active_sub_job.objects = objects
+        active_jobs = any([j for j in sub_jobs if j.status in ('Q', 'R')])
+        self.param.terminate_btn.constant = not active_jobs
         if objects:
             self.active_sub_job = objects[0]
 
     @param.depends('active_sub_job', watch=True)
-    def udpate_log(self):
+    def update_log(self):
         self.param.log.objects = ['stdout', 'stderr'] + [self.active_sub_job.resolve_path(p) for p in self.custom_logs]
         self.log = 'stdout'
 
@@ -126,7 +133,8 @@ class HpcJobMonitor(HpcConfigurable):
     @param.depends('selected_job')
     def file_browser_panel(self):
         viewer = self.file_viewer.panel if self.file_viewer else pn.Spacer()
-        self.file_viewer.file_path = str(self.selected_job.working_dir)
+        if self.selected_job is not None:
+           self.file_viewer.file_path = str(self.selected_job.working_dir)
         return pn.Column(
             viewer,
             name='Files',
@@ -139,6 +147,7 @@ class HpcJobMonitor(HpcConfigurable):
             pn.Row(
                 pn.panel(self.param.selected_job, width_policy='max'),
                 pn.Param(self.param.next_btn, widgets={'next_btn': {'button_type': 'success', 'width': 100}}),
+                pn.Param(self.param.terminate_btn, widgets={'terminate_btn': {'button_type': 'danger', 'width': 100}}),
             ),
             pn.layout.Tabs(
                 *self.tabs,
