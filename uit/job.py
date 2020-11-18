@@ -1,5 +1,4 @@
 import re
-import os
 from datetime import datetime
 from pathlib import PurePosixPath, Path
 import logging
@@ -25,6 +24,7 @@ class PbsJob:
         self.label = label
         self._job_id = None
         self._status = None
+        self._qstat = None
         self._remote_workspace_id = None
         self._remote_workspace = None
 
@@ -48,6 +48,10 @@ class PbsJob:
     @property
     def working_dir(self):
         return self.client.WORKDIR / self.remote_workspace_suffix
+
+    @property
+    def run_dir(self):
+        return self.working_dir
 
     @property
     def remote_workspace_id(self):
@@ -89,6 +93,10 @@ class PbsJob:
     @property
     def status(self):
         return self._status
+
+    @property
+    def qstat(self):
+        return self._qstat
 
     def submit(self, working_dir=None, remote_name=None, local_temp_dir=''):
         """Submit a Job to HPC queue.
@@ -195,6 +203,7 @@ class PbsJob:
 
     def update_status(self):
         status = self.client.status(self.job_id)[0]
+        self._qstat = status
         self._status = status['status']
         return self.status
 
@@ -234,7 +243,7 @@ class PbsJob:
         path = PurePosixPath(path)
         if path.is_absolute():
             return path
-        return self.working_dir / path
+        return self.run_dir / path
 
     def get_stdout_log(self, filename=None):
         return self._get_log('o', filename)
@@ -269,6 +278,7 @@ class PbsJob:
         for job, status in zip(jobs, status_dicts):
             assert job.job_id.startswith(status['job_id'].split('.')[0])  # job id can be cutoff in the status output
             job._status = status['status']
+            job._qstat = status
         return statuses
 
     @classmethod
@@ -298,6 +308,10 @@ class PbsArrayJob(PbsJob):
         def job_index(self):
             return self._job_index
 
+        @property
+        def run_dir(self):
+            return self.working_dir / f'run_{self.job_index}'
+
         def submit(self, **kwargs):
             raise AttributeError('ArraySubJobs cannot be submitted. Submit must be called on the parent.')
 
@@ -318,9 +332,9 @@ class PbsArrayJob(PbsJob):
         self._sub_jobs = None
 
     def update_status(self):
-        status = self.client.status(self.job_id)[0]
-        self._status = status['status']
-        return self.status
+        all_jobs = [self] + self.sub_jobs
+        self.update_statuses(all_jobs)
+        self._qstat = {j.job_id: j.qstat for j in all_jobs}
 
     def _get_log(self, log_type, filename=None):
         raise AttributeError('Cannot get the log on a PbsArrayJob. You must access logs on the sub-jobs.')
@@ -347,7 +361,8 @@ def get_active_jobs(uit_client):
 
         for job_id, status in statuses.items():
             j = get_job_from_full_status(job_id, status, uit_client)
-            jobs.append(j)
+            if j is not None:
+                jobs.append(j)
     return jobs
 
 
@@ -372,8 +387,14 @@ def get_job_from_full_status(job_id, status, uit_client):
     if status.get('array'):
         Job = PbsArrayJob
         script._array_indices = tuple(int(i) for i in status['array_indices_submitted'].split('-'))
-    working_dir = os.path.dirname(status['Output_Path'].split(':')[1])
-    j = Job(script=script, client=uit_client, working_dir=working_dir)
+    try:
+        working_dir = PurePosixPath(status['Output_Path'].split(':')[1]).parent.relative_to(uit_client.WORKDIR)
+    except:
+        return
+    label = working_dir.parent.as_posix()
+    remote_workspace_id = working_dir.name.split('.', 1)[1]
+    j = Job(script=script, client=uit_client, label=label)
+    j._remote_workspace_id = remote_workspace_id
     j._job_id = job_id
     j._status = status['job_state']
     return j
@@ -418,7 +439,9 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
     if 'J' in directives:
         Job = PbsArrayJob
         script._array_indices = tuple(int(i) for i in re.split('[-:]', directives['J']))
-    j = Job(script=script, client=uit_client,)
+        if not job_id.endswith('[]'):
+            job_id += '[]'
+    j = Job(script=script, client=uit_client)
     j._remote_workspace_id = working_dir.name.split('.', 1)[-1]
     j.label = working_dir.parent.relative_to(uit_client.WORKDIR)
     j._job_id = job_id

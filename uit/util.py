@@ -7,10 +7,11 @@
 ********************************************************************************
 """
 from functools import wraps
+from time import sleep
 from .exceptions import DpRouteError
 
 
-def robust(retries=3):
+def robust(retries=5):
     """
     Robust wrapper for client methods. Will retry, reties times if failed due to DP routing error.
     """  # noqa: E501
@@ -34,7 +35,7 @@ def robust(retries=3):
                     else:
                         # Raise other Runtime Errors
                         raise
-
+                sleep(1)
             kwarg_str = ', '.join(['{}="{}"'.format(k, v) for k, v in kwargs.items()])
             if 'DP Route error' in str(last_exception):
                 raise DpRouteError('Max number of retries reached without success for '

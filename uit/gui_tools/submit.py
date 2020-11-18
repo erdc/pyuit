@@ -3,7 +3,7 @@ import panel as pn
 from functools import partial
 
 from .file_browser import HpcFileBrowser
-from .configurable import HpcConfigurable
+from .utils import HpcConfigurable
 from ..uit import Client, QUEUES
 from ..pbs_script import NODE_TYPES, factors, PbsScript
 
@@ -273,6 +273,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             self.view,
             self.action_button,
             name='Submit',
+            sizing_mode='stretch_both',
         )
 
     def view(self):
@@ -286,5 +287,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 self.pbs_options_view(),
                 self.advanced_options_view(),
                 active=1,
+                sizing_mode='stretch_both',
             ),
+            sizing_mode='stretch_both',
         )

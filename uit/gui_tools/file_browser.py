@@ -278,7 +278,7 @@ class FileBrowser(param.Parameterized):
             ),
             self.param.show_hidden,
             pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'),
-            width_policy='max',
+            sizing_mode='stretch_width',
             margin=0,
         )
 
@@ -483,7 +483,7 @@ class HpcFileBrowser(FileBrowser):
         self.do_callback()
 
 
-class SelectFile(param.Parameterized):
+class FileSelector(param.Parameterized):
     file_path = param.String(default='')
     show_browser = param.Boolean(default=False)
     browse_toggle = param.Action(lambda self: self.toggle(), label='Browse')
@@ -523,7 +523,7 @@ class SelectFile(param.Parameterized):
     def initialize_file_browser(self):
         if self.show_browser:
             self.file_browser.path_text = self.file_path
-            self.file_browser.init()
+            # self.file_browser.init()
 
     @param.depends('show_browser')
     def file_browser_panel(self):
@@ -554,15 +554,21 @@ class SelectFile(param.Parameterized):
             self.input_row,
             pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
             self.file_browser_panel,
-            width_policy='max'
+            sizing_mode='stretch_width',
         )
+
+
+class SelectFile(FileSelector):
+    def __init__(self, **params):
+        print('SelectFile is deprecated. Please use FileSelector instead.')
+        super().__init__(**params)
 
 
 class FileViewer(param.Parameterized):
     update_btn = param.Action(lambda self: self.get_file_contents(), label='Update', precedence=3)
     n = param.Integer(default=500, bounds=(0, 10_000), precedence=2)
     cmd = param.ObjectSelector(default='head', objects=['head', 'tail'], label='Command', precedence=1)
-    file_select = param.ClassSelector(SelectFile, default=SelectFile())
+    file_select = param.ClassSelector(FileSelector, default=FileSelector())
     file_path = param.String()
     file_contents = param.String()
     uit_client = param.ClassSelector(Client)
@@ -571,7 +577,7 @@ class FileViewer(param.Parameterized):
     def configure_file_selector(self):
         if self.uit_client.connected:
             file_browser = HpcFileBrowser(uit_client=self.uit_client, delayed_init=True)
-            self.file_select = SelectFile(file_browser=file_browser)
+            self.file_select = FileSelector(file_browser=file_browser)
             self.file_select.toggle()
             self.configure_path()
 
@@ -580,8 +586,7 @@ class FileViewer(param.Parameterized):
     @param.depends('file_path', watch=True)
     def configure_path(self):
         self.file_path = self.file_path or str(self.uit_client.WORKDIR)
-        self.file_select.file_browser.path_text = self.file_path
-        self.file_select.update_file(True)
+        self.file_select.file_path = self.file_path
 
     def get_file_contents(self, event=None):
         if self.uit_client.connected:
@@ -598,11 +603,9 @@ class FileViewer(param.Parameterized):
         file_path = self.file_select.file_path
         return pn.Column(
             pn.widgets.TextInput(value=file_path, disabled=True),
-            pn.widgets.Ace(value=self.file_contents, width_policy='max', height_policy='max', height=1000,
+            pn.widgets.Ace(value=self.file_contents, min_height=500, sizing_mode='stretch_both',
                            readonly=True, filename=file_path),
-            width_policy='max',
-            height_policy='max',
-            max_height=1000,
+            sizing_mode='stretch_both',
         )
 
     def panel(self):
@@ -623,7 +626,5 @@ class FileViewer(param.Parameterized):
                 width=400,
             ),
             self.view,
-            width_policy='max',
-            height_policy='max',
-            max_height=1000,
+            sizing_mode='stretch_both',
         )
