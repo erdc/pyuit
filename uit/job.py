@@ -302,11 +302,17 @@ class PbsArrayJob(PbsJob):
             self._remote_workspace = self.parent._remote_workspace
             self.label = self.parent.label
             self._job_index = job_index
-            self._job_id = self.parent.job_id.replace('[]', f'[{self.job_index}]')
+            self._job_id = None
 
         @property
         def job_index(self):
             return self._job_index
+
+        @property
+        def job_id(self):
+            if self._job_id is None and self.parent.job_id is not None:
+                self._job_id = self.parent.job_id.replace('[]', f'[{self.job_index}]')
+            return self._job_id
 
         @property
         def run_dir(self):
@@ -348,7 +354,7 @@ class PbsArrayJob(PbsJob):
 
     @property
     def sub_jobs(self):
-        if self._sub_jobs is None and self.job_id is not None:
+        if self._sub_jobs is None:
             self._sub_jobs = [self.PbsArraySubJob(self, job_index) for job_index in self.script.job_array_indices]
         return self._sub_jobs
 

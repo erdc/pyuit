@@ -1,8 +1,8 @@
 EXECUTION_BLOCK_TEMPLATE = '''
 ## Execution Block ----------------------------------------
-echo -e "-------------------------\n"
-echo -e "Starting Execute Block...\n"
-echo -e "-------------------------\n"
+echo -e "-------------------------"
+echo -e "Starting Execute Block..."
+echo -e "-------------------------"
 
 # Configure Job/Run Dirs
 JOBDIR=$PBS_O_WORKDIR
@@ -11,7 +11,8 @@ cd $JOBDIR
 JOBID=`echo ${{PBS_JOBID}} | cut -d '.' -f 1 | cut -d '[' -f 1`
 
 if [ -z ${{PBS_ARRAY_INDEX+x}} ];
-  then :
+  then
+    RUNDIR=$JOBDIR
   else
     RUNDIR=$JOBDIR/run_$PBS_ARRAY_INDEX
     mkdir -p ${{RUNDIR}}
@@ -30,7 +31,7 @@ fi
 ## Cleanup ------------------------------------------------
 # Cleanup is handled by a co-submitted script that has this script as its dependency.
 
-echo -e "-------------------------\n"
-echo -e "Finished Execute Block...\n"
-echo -e "-------------------------\n"
+echo -e "-------------------------"
+echo -e "Finished Execute Block..."
+echo -e "-------------------------"
 '''

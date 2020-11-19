@@ -207,6 +207,7 @@ class LogsTab(TabView):
     log = param.ObjectSelector(objects=[], label='Log File', precedence=0.2)
     custom_logs = param.List(default=[])
     num_log_lines = param.Integer(default=100, label='n')
+    refresh_btn = param.Action(lambda self: self.param.trigger('log'), label='Refresh')
 
     def __init__(self, **params):
         super().__init__(**params)
@@ -234,12 +235,21 @@ class LogsTab(TabView):
 
     @param.depends('parent.active_job', 'log')
     def log_pane(self):
+        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+        refresh_btn = pn.Param(
+            self.param.refresh_btn, widgets={'refresh_btn': {'button_type': 'primary', 'width': 100}}
+        )[0]
+        refresh_btn.js_on_click(args={'btn': refresh_btn, 'spn': spn}, code='btn.visible=false; spn.width=50;')
         if self.log == 'stdout':
-            return self.get_log(lambda job: job.get_stdout_log())
+            log_content = self.get_log(lambda job: job.get_stdout_log())
         elif self.log == 'stderr':
-            return self.get_log(lambda job: job.get_stderr_log())
+            log_content = self.get_log(lambda job: job.get_stderr_log())
         else:
-            return self.x_log(self.log)
+            log_content = self.x_log(self.log)
+        return pn.Column(
+            refresh_btn, spn,
+            log_content,
+        )
 
     def panel(self):
         return pn.Column(
@@ -265,7 +275,7 @@ class FileViewerTab(TabView):
     @param.depends('parent.selected_job', watch=True)
     def update_file_path(self):
         if self.file_viewer:
-            self.file_viewer.file_path = str(self.run_dir)
+            self.file_viewer.file_path = str(self.selected_job.run_dir)
 
     def view(self):
         panel = self.file_viewer.panel()
@@ -278,32 +288,55 @@ class FileViewerTab(TabView):
 
 class StatusTab(TabView):
     title = param.String(default='Status')
-    update = param.Action(lambda self: self.update_statuses())
-    statuses = param.DataFrame()
+    statuses = param.DataFrame(precedence=0.1)
+    update = param.Action(lambda self: self.update_statuses(), precedence=0.2)
+    terminate_btn = param.Action(lambda self: self.terminate_job(), label='Terminate', precedence=0.3)
 
     @param.depends('parent.selected_job', watch=True)
     def update_statuses(self):
         if self.selected_job is not None:
             if self.is_array:
                 self.statuses = None
-                sub_jobs = self.selected_job.sub_jobs
-                self.statuses = PbsJob.update_statuses(sub_jobs, as_df=True)
+                jobs = [self.selected_job] + self.selected_job.sub_jobs
+                self.statuses = PbsJob.update_statuses(jobs, as_df=True)
             else:
                 self.statuses = self.uit_client.status(self.selected_job.job_id, as_df=True)
+            self.update_terminate_btn()
+
+    def terminate_job(self):
+        self.selected_job.terminate()
+        self.update_statuses()
+
+    def update_terminate_btn(self):
+        self.param.terminate_btn.constant = self.selected_job.status not in ('Q', 'R', 'B')
 
     @param.depends('statuses')
     def statuses_panel(self):
-        return pn.Column(self.statuses, min_width=1300, sizing_mode='stretch_width') \
-            if self.statuses is not None \
-            else pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
+        if self.statuses is not None:
+            return pn.Column(
+                pn.Param(
+                    self.param.statuses,
+                    widgets={'statuses': {'show_index': False, 'width': 1300}},
+                ),
+                pn.Param(
+                    self,
+                    parameters=['update', 'terminate_btn'],
+                    widgets={
+                        'update': {'button_type': 'primary', 'width': 100},
+                        'terminate_btn': {'button_type': 'danger', 'width': 100},
+                    },
+                    show_name=False,
+                    default_layout=pn.Row,
+                ),
+                sizing_mode='stretch_width',
+            )
+        else:
+            return pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
 
     @param.depends('parent.selected_job')
     def status_panel(self):
         if self.selected_job:
-            return pn.Column(
-                self.statuses_panel,
-                pn.Param(self.param.update, widgets={'update': {'button_type': 'primary', 'width': 100}}),
-            )
+            return self.statuses_panel
         else:
             return pn.pane.HTML('<h2>No jobs are available</h2>')
 
