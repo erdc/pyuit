@@ -231,7 +231,7 @@ class LogsTab(TabView):
         job = self.active_job
         if job is not None:
             log_contents = func(job)
-            return pn.pane.Str(log_contents, width=800)
+            return pn.pane.Str(log_contents, sizing_mode='stretch_both')
 
     @param.depends('parent.active_job', 'log')
     def log_pane(self):
@@ -249,6 +249,7 @@ class LogsTab(TabView):
         return pn.Column(
             refresh_btn, spn,
             log_content,
+            sizing_mode='stretch_both'
         )
 
     def panel(self):
@@ -256,6 +257,7 @@ class LogsTab(TabView):
             pn.Param(self.parent.param.selected_sub_job, width=300),
             pn.Param(self.param.log, width=300),
             self.log_pane,
+            sizing_mode='stretch_both',
         )
 
 
