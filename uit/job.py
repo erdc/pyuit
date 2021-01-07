@@ -341,6 +341,7 @@ class PbsArrayJob(PbsJob):
         all_jobs = [self] + self.sub_jobs
         self.update_statuses(all_jobs)
         self._qstat = {j.job_id: j.qstat for j in all_jobs}
+        return self.status
 
     def _get_log(self, log_type, filename=None):
         raise AttributeError('Cannot get the log on a PbsArrayJob. You must access logs on the sub-jobs.')
