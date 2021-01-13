@@ -149,8 +149,9 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
                     width=700,
                     show_name=False
                 ),
+                self.environment_variables_view,
             ),
-            self.environment_variables_view,
+
             name='Environment',
         )
 

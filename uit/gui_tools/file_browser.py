@@ -213,7 +213,7 @@ class FileBrowser(param.Parameterized):
     up = param.Action(lambda self: self.move_up(), label='⬆️', precedence=0.2)
     refresh_control = param.Action(lambda self: self.refresh(), label='🔄', precedence=0.25)
     callback = param.Action(lambda x: None, precedence=-1)
-    file_listing = param.ListSelector(default=[], label='', precedence=0.5)
+    file_listing = param.ListSelector(default=[], label='Single click to select a file or directory:', precedence=0.5)
     patterns = param.List(precedence=-1, default=['*'])
     show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
     _disabled = param.Boolean(default=False, precedence=-1)
@@ -565,9 +565,11 @@ class SelectFile(FileSelector):
 
 
 class FileViewer(param.Parameterized):
-    update_btn = param.Action(lambda self: self.get_file_contents(), label='Update', precedence=3)
+    update_btn = param.Action(lambda self: self.get_file_contents(), label='Update', precedence=5)
     n = param.Integer(default=500, bounds=(0, 10_000), precedence=2)
     cmd = param.ObjectSelector(default='head', objects=['head', 'tail'], label='Command', precedence=1)
+    line_wrap = param.Boolean(label='Line Wrap', precedence=3)
+    wrap_length = param.Integer(default=100, label='Wrap Length', precedence=4)
     file_select = param.ClassSelector(FileSelector, default=FileSelector())
     file_path = param.String()
     file_contents = param.String()
@@ -588,10 +590,24 @@ class FileViewer(param.Parameterized):
         self.file_path = self.file_path or str(self.uit_client.WORKDIR)
         self.file_select.file_path = self.file_path
 
+    @staticmethod
+    def make_wrap(string, wrap_len):
+        lines = string.splitlines(keepends=True)
+        wrapped_lines = list()
+        for line in lines:
+            if len(line) > wrap_len:
+                wrapped_lines.append(line[:wrap_len] + '\n')
+                wrapped_lines.append(line[wrap_len:])
+            else:
+                wrapped_lines.append(line)
+        return ''.join(wrapped_lines)
+
     def get_file_contents(self, event=None):
         if self.uit_client.connected:
             try:
                 self.file_contents = self.uit_client.call(f'{self.cmd} -n {self.n} {self.file_select.file_path}')
+                if self.line_wrap:
+                    self.file_contents = self.make_wrap(self.file_contents, self.wrap_length)
             except Exception as e:
                 log.debug(e)
                 # self.file_contents = f'ERROR!: {e}'
@@ -614,16 +630,18 @@ class FileViewer(param.Parameterized):
             pn.WidgetBox(
                 pn.Param(
                     self,
-                    parameters=['cmd', 'n', 'update_btn'],
+                    parameters=['cmd', 'n', 'line_wrap', 'wrap_length', 'update_btn'],
                     widgets={
                         'cmd': {'width': 100},
                         'n': pn.widgets.Spinner(value=self.n, width=100, name=self.param.n.label),
+                        'line_wrap': {'width': 100, 'align': 'end'},
+                        'wrap_length': {'width': 100},
                         'update_btn': {'button_type': 'primary', 'width': 100, 'align': 'end'}
                     },
                     default_layout=pn.Row,
                     show_name=False,
+                    sizing_mode='stretch_width',
                 ),
-                width=400,
             ),
             self.view,
             sizing_mode='stretch_both',
