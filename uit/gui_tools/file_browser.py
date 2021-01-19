@@ -595,11 +595,10 @@ class FileViewer(param.Parameterized):
         lines = string.splitlines(keepends=True)
         wrapped_lines = list()
         for line in lines:
-            if len(line) > wrap_len:
+            while len(line) > wrap_len:
                 wrapped_lines.append(line[:wrap_len] + '\n')
-                wrapped_lines.append(line[wrap_len:])
-            else:
-                wrapped_lines.append(line)
+                line = line[wrap_len:]
+            wrapped_lines.append(line)
         return ''.join(wrapped_lines)
 
     def get_file_contents(self, event=None):
