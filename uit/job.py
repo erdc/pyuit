@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 class PbsJob:
 
     def __init__(self, script, client=None, label=None, workspace=None,
-                 transfer_input_files=None, home_input_files=None, archive_input_files=None, ):
+                 transfer_input_files=None, home_input_files=None, archive_input_files=None, working_dir=None):
         self.script = script
         self.client = client or Client()
         self.workspace = workspace or Path.cwd()
@@ -22,6 +22,7 @@ class PbsJob:
         self.home_input_files = home_input_files or list()
         self.archive_input_files = archive_input_files or list()
         self.label = label
+        self._working_dir = working_dir
         self._job_id = None
         self._status = None
         self._qstat = None
@@ -47,7 +48,9 @@ class PbsJob:
 
     @property
     def working_dir(self):
-        return self.client.WORKDIR / self.remote_workspace_suffix
+        if self._working_dir is None:
+            self._working_dir = self.client.WORKDIR / self.remote_workspace_suffix
+        return self._working_dir
 
     @property
     def run_dir(self):
@@ -296,11 +299,11 @@ class PbsJob:
 class PbsArrayJob(PbsJob):
     class PbsArraySubJob(PbsJob):
         def __init__(self, parent, job_index):
-            super().__init__(parent.script, parent.client, parent.workspace)
+            super().__init__(parent.script, parent.client, parent.label, parent.workspace,
+                             working_dir=parent.working_dir)
             self.parent = parent
             self._remote_workspace_id = self.parent._remote_workspace_id
             self._remote_workspace = self.parent._remote_workspace
-            self.label = self.parent.label
             self._job_index = job_index
             self._job_id = None
 
@@ -430,7 +433,7 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
     working_dir = script.parent
     pbs_script = uit_client.call(f'cat {pbs_script}')
     matches = re.findall('#PBS -(.*)', pbs_script)
-    directives = {k: v for k, v in [i.split() for i in matches]}
+    directives = {k: v for k, v in [(i.split() + [''])[:2] for i in matches]}
     directives['l'] = _process_l_directives(pbs_script)
 
     Job = PbsJob
@@ -448,9 +451,13 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
         script._array_indices = tuple(int(i) for i in re.split('[-:]', directives['J']))
         if not job_id.endswith('[]'):
             job_id += '[]'
-    j = Job(script=script, client=uit_client)
+    j = Job(script=script, client=uit_client, working_dir=working_dir)
     j._remote_workspace_id = working_dir.name.split('.', 1)[-1]
-    j.label = working_dir.parent.relative_to(uit_client.WORKDIR)
+    try:
+        j.label = working_dir.parent.relative_to(uit_client.WORKDIR)
+        j._working_dir = None
+    except:
+        pass
     j._job_id = job_id
     j._status = 'F'
     return j
