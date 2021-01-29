@@ -1,6 +1,8 @@
+from functools import partial
+import re
+
 import param
 import panel as pn
-from functools import partial
 
 from .file_browser import HpcFileBrowser
 from .utils import HpcConfigurable
@@ -131,27 +133,24 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         )
 
     def advanced_options_view(self):
-        return pn.Row(
-            pn.Column(
-                '<h3>Modules to Load</h3>',
-                pn.Param(
-                    self,
-                    parameters=['modules_to_load'],
-                    widgets={'modules_to_load': pn.widgets.CrossSelector},
-                    width=700,
-                    show_name=False
-                ),
-                '<h3>Modules to Unload</h3>',
-                pn.Param(
-                    self,
-                    parameters=['modules_to_unload'],
-                    widgets={'modules_to_unload': pn.widgets.CrossSelector},
-                    width=700,
-                    show_name=False
-                ),
-                self.environment_variables_view,
+        return pn.Column(
+            '<h3>Modules to Load</h3>',
+            pn.Param(
+                self,
+                parameters=['modules_to_load'],
+                widgets={'modules_to_load': pn.widgets.CrossSelector},
+                width=700,
+                show_name=False
             ),
-
+            '<h3>Modules to Unload</h3>',
+            pn.Param(
+                self,
+                parameters=['modules_to_unload'],
+                widgets={'modules_to_unload': pn.widgets.CrossSelector},
+                width=700,
+                show_name=False
+            ),
+            self.environment_variables_view,
             name='Environment',
         )
 
@@ -162,7 +161,8 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     cancel_btn = param.Action(lambda self: self.cancel(), label='Cancel', precedence=10)
     disable_validation = param.Boolean(label='Override Validation')
     validated = param.Boolean()
-    job_name = param.String(label='Job Name (Required)')
+    job_name = param.String(label='Job Name (Required, cannot contain spaces or tabs)')
+    error_messages = param.ClassSelector(pn.Column, default=pn.Column(sizing_mode='stretch_width'))
     uit_client = param.ClassSelector(Client)
     _pbs_script = param.ClassSelector(PbsScript, default=None)
     ready = param.Boolean(default=False, precedence=-1)
@@ -194,7 +194,8 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             is_valid = self.validate()
             self.validated = is_valid
             if is_valid:
-                param.depends('environment_variables', 'load_modules', 'unload_modules', watch=True)(self.un_validate)  # TODO: this is not working
+                param.depends(self.param.environment_variables, self.param.load_modules, self.param.unload_modules,
+                              watch=True)(self.un_validate)  # todo only environment_variables triggers
             else:
                 self.param.validate_btn.constant = False
                 self.param.trigger('validated')
@@ -237,9 +238,14 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @param.depends('job_name', watch=True)
     def is_submitable(self):
-        valid_job_name = False
-        if bool(self.job_name) and ' ' not in self.job_name:
+        valid_job_name = True
+        self.error_messages[:] = []
+        if re.match('^[^*&%\\/\s]*$', self.job_name) is None:
             valid_job_name = True
+            self.error_messages.append(
+                pn.pane.Alert('* Job Name cannot contain spaces or any of the following characters: * & % \\ /',
+                              alert_type='danger')
+            )
         self.param.submit_btn.constant = self.param.validate_btn.constant = not valid_job_name
 
     @param.depends('disable_validation', 'validated')
@@ -273,6 +279,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         return pn.Column(
             self.view,
             self.action_button,
+            self.error_messages,
             name='Submit',
             sizing_mode='stretch_both',
         )

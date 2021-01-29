@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from pathlib import Path, PurePosixPath
 import logging
+import time
 
 import param
 import panel as pn
@@ -100,6 +101,20 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     selected_job = param.ObjectSelector(default=None, label='Job')
     selected_sub_job = param.ObjectSelector(label='Experiment Point', precedence=0.1)
     active_job = param.Parameter()
+    custom_logs = param.List(default=[])
+    ready = param.Boolean()
+    disable_status_update = param.Boolean()
+
+    def __init__(self, **params):
+        super().__init__(**params)
+        self.status_tab = StatusTab(parent=self, disable_update=self.disable_status_update)
+        self.logs_tab = LogsTab(parent=self, custom_logs=self.custom_logs)
+        self.files_tab = FileViewerTab(parent=self)
+        self.tabs = self.default_tabs = [
+            self.status_tab.tab,
+            self.logs_tab.tab,
+            self.files_tab.tab,
+        ]
 
     @property
     def run_dir(self):
@@ -134,6 +149,7 @@ class PbsJobTabbedViewer(HpcWorkspaces):
         if self.selected_job is not None:
             self.working_dir = self.selected_job.working_dir
 
+    @param.depends('selected_sub_job', watch=True)
     def update_active_job(self):
         if self.is_array:
             self.active_job = self.selected_sub_job
@@ -205,6 +221,7 @@ class TabView(param.Parameterized):
 class LogsTab(TabView):
     title = param.String(default='Logs')
     log = param.ObjectSelector(objects=[], label='Log File', precedence=0.2)
+    log_content = param.String()
     custom_logs = param.List(default=[])
     num_log_lines = param.Integer(default=100, label='n')
     refresh_btn = param.Action(lambda self: self.param.trigger('log'), label='Refresh')
@@ -212,6 +229,7 @@ class LogsTab(TabView):
     def __init__(self, **params):
         super().__init__(**params)
         self.update_log()
+        self.get_log()
 
     @param.depends('custom_logs', watch=True)
     def update_log(self):
@@ -221,44 +239,55 @@ class LogsTab(TabView):
             self.param.log.objects += self.custom_logs
             self.param.log.names = {cl.split('/')[-1]: cl for cl in self.custom_logs}
 
-    def x_log(self, log_file):
-        try:
-            return self.get_log(lambda job: job.get_custom_log(log_file, num_lines=self.num_log_lines))
-        except RuntimeError as e:
-            log.exception(e)
-
-    def get_log(self, func):
+    @param.depends('parent.selected_sub_job', 'log', watch=True)
+    def get_log(self):
         job = self.active_job
         if job is not None:
-            log_contents = func(job)
-            return pn.pane.Str(log_contents, sizing_mode='stretch_both')
+            if self.log == 'stdout':
+                log_content = job.get_stdout_log()
+            elif self.log == 'stderr':
+                log_content = job.get_stderr_log()
+            else:
+                try:
+                    log_content = job.get_custom_log(self.log, num_lines=self.num_log_lines)
+                except RuntimeError as e:
+                    log.exception(e)
+            self.log_content = log_content
+            self.param.trigger('log_content')
 
-    @param.depends('parent.active_job', 'log')
-    def log_pane(self):
+    @param.depends('log_content')
+    def dynamic_panel(self):
+        log_content = pn.pane.Str(self.log_content, sizing_mode='stretch_both')
+
         spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
         refresh_btn = pn.Param(
             self.param.refresh_btn, widgets={'refresh_btn': {'button_type': 'primary', 'width': 100}}
         )[0]
-        refresh_btn.js_on_click(args={'btn': refresh_btn, 'spn': spn}, code='btn.visible=false; spn.width=50;')
-        if self.log == 'stdout':
-            log_content = self.get_log(lambda job: job.get_stdout_log())
-        elif self.log == 'stderr':
-            log_content = self.get_log(lambda job: job.get_stderr_log())
+        args = {'log': log_content, 'btn': refresh_btn, 'spn': spn}
+        code = 'btn.visible=false; log.visible=false; spn.width=50;'
+        refresh_btn.js_on_click(args=args, code=code)
+
+        if self.is_array:
+            sub_job_selector = pn.Param(self.parent.param.selected_sub_job)[0]
+            sub_job_selector.width = 300
+            # sub_job_selector.jscallback(args=args, value=code)
         else:
-            log_content = self.x_log(self.log)
+            sub_job_selector = None
+
+        log_type_selector = pn.Param(self.param.log)[0]
+        log_type_selector.width = 300
+        # log_type_selector.jscallback(args, value=code)
+
         return pn.Column(
-            refresh_btn, spn,
+            sub_job_selector,
+            log_type_selector,
+            # refresh_btn, spn,
             log_content,
             sizing_mode='stretch_both'
         )
 
     def panel(self):
-        return pn.Column(
-            pn.Param(self.parent.param.selected_sub_job, width=300),
-            pn.Param(self.param.log, width=300),
-            self.log_pane,
-            sizing_mode='stretch_both',
-        )
+        return self.dynamic_panel
 
 
 class FileViewerTab(TabView):
@@ -293,20 +322,25 @@ class StatusTab(TabView):
     statuses = param.DataFrame(precedence=0.1)
     update = param.Action(lambda self: self.update_statuses(), precedence=0.2)
     terminate_btn = param.Action(lambda self: self.terminate_job(), label='Terminate', precedence=0.3)
+    disable_update = param.Boolean()
 
     @param.depends('parent.selected_job', watch=True)
     def update_statuses(self):
         if self.selected_job is not None:
-            if self.is_array:
-                self.statuses = None
-                jobs = [self.selected_job] + self.selected_job.sub_jobs
-                self.statuses = PbsJob.update_statuses(jobs, as_df=True)
+            if self.disable_update:
+                qstat = self.selected_job.qstat
+                statuses = pd.DataFrame(qstat, index=[1]) if qstat is not None else None
             else:
-                self.statuses = self.uit_client.status(self.selected_job.job_id, as_df=True)
-            self.update_terminate_btn()
+                jobs = [self.selected_job]
+                if self.is_array:
+                    jobs += self.selected_job.sub_jobs
+                statuses = PbsJob.update_statuses(jobs, as_df=True)
+                self.update_terminate_btn()
+            self.statuses = statuses
 
     def terminate_job(self):
         self.selected_job.terminate()
+        time.sleep(5)
         self.update_statuses()
 
     def update_terminate_btn(self):
@@ -314,26 +348,33 @@ class StatusTab(TabView):
 
     @param.depends('statuses')
     def statuses_panel(self):
-        if self.statuses is not None:
-            return pn.Column(
-                pn.Param(
-                    self.param.statuses,
-                    widgets={'statuses': {'show_index': False, 'width': 1300}},
-                ),
-                pn.Param(
-                    self,
-                    parameters=['update', 'terminate_btn'],
-                    widgets={
-                        'update': {'button_type': 'primary', 'width': 100},
-                        'terminate_btn': {'button_type': 'danger', 'width': 100},
-                    },
-                    show_name=False,
-                    default_layout=pn.Row,
-                ),
-                sizing_mode='stretch_width',
-            )
-        else:
-            return pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=50)
+        spn = pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+        statuses_table = pn.Param(
+            self.param.statuses,
+            widgets={'statuses': {'show_index': False, 'width': 1300}},
+        )[0] if self.statuses is not None else pn.pane.Alert('No status information available.', alert_type='info')
+        update_btn, terminate_btn = pn.Param(
+            self,
+            parameters=['update', 'terminate_btn'],
+            widgets={
+                'update': {'button_type': 'primary', 'width': 100},
+                'terminate_btn': {'button_type': 'danger', 'width': 100},
+            },
+            show_name=False,
+        )[:]
+        args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'statuses_table': statuses_table, 'spn': spn}
+        code = 'update_btn.visible=false; terminate_btn.visible=false; statuses_table.visible=false; spn.width=50;'
+
+        update_btn.js_on_click(args=args, code=code)
+        terminate_btn.js_on_click(args=args, code=code)
+
+        buttons = None if self.disable_update else pn.Row(update_btn, terminate_btn, spn)
+
+        return pn.Column(
+            statuses_table,
+            buttons,
+            sizing_mode='stretch_width',
+        )
 
     @param.depends('parent.selected_job')
     def status_panel(self):

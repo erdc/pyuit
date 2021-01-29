@@ -402,7 +402,7 @@ class HpcPath(Path, PurePosixPath):
             self._is_file = True
 
     def parse_list_dir(self):
-        TYPES = {'d': 'dir', '-': 'file', 'l': 'link'}
+        TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
         base_path = self.as_posix()
         parsed_ls = {'path': base_path, 'dirs': [], 'files': [], 'links': []}
         ls = self.uit_client.call(f'ls -l {base_path}')
