@@ -252,8 +252,10 @@ class LogsTab(TabView):
                     log_content = job.get_custom_log(self.log, num_lines=self.num_log_lines)
                 except RuntimeError as e:
                     log.exception(e)
-            self.log_content = log_content
-            self.param.trigger('log_content')
+            if self.log_content == log_content:
+                self.param.trigger('log_content')
+            else:
+                self.log_content = log_content
 
     @param.depends('log_content')
     def dynamic_panel(self):

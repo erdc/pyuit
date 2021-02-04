@@ -19,6 +19,9 @@ class PbsScriptInputs(param.Parameterized):
     wall_time = param.String(default='01:00:00', precedence=6)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
+    notification_email = param.String(label='To:', precedence=9)
+    notify_start = param.Boolean(default=True, label='when job begins', precedence=9.1)
+    notify_end = param.Boolean(default=True, label='when job ends', precedence=9.2)
 
     def update_hpc_connection_dependent_defaults(self):
         if not self.uit_client.connected:
@@ -45,14 +48,25 @@ class PbsScriptInputs(param.Parameterized):
 
     def pbs_options_view(self):
         self.update_hpc_connection_dependent_defaults()
-        hpc_submit = pn.panel(
-            self,
-            parameters=list(PbsScriptInputs.param)[1:],  # all params except 'name'
-            widgets={'nodes': pn.widgets.Spinner},
-            show_name=False,
+        return pn.Column(
+            pn.Param(
+                self,
+                parameters=list(PbsScriptInputs.param)[1:-3],  # all params except 'name'
+                widgets={'nodes': pn.widgets.Spinner},
+                show_name=False,
+
+            ),
+            pn.layout.WidgetBox(
+                pn.pane.HTML('<label class"bk">Send e-mail notifications:</label>'),
+                pn.Param(
+                    self,
+                    parameters=['notification_email', 'notify_start', 'notify_end'],
+                    widgets={'notification_email': {'placeholder': 'john.doe@example.com'}, 'notify_start': {'width': 150}, 'notify_end': {'width': 150}},
+                    show_name=False,
+                ),
+            ),
             name='PBS Options'
         )
-        return hpc_submit
 
 
 class PbsScriptAdvancedInputs(HpcConfigurable):
@@ -123,34 +137,39 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         self.env_names[0].name = 'Name'
         self.env_values[0].name = 'Value'
 
-        return pn.Column(
-            '<h3>Environment Variables</h3>',
+        return pn.Card(
             pn.Column(
                 *[pn.Row(k, v, b, width_policy='max') for k, v, b in
                   zip(self.env_names, self.env_values, self.env_browser)],
             ),
             self.browse_view,
+            title='Environment Variables',
+            sizing_mode='stretch_width',
         )
 
     def advanced_options_view(self):
         return pn.Column(
-            '<h3>Modules to Load</h3>',
-            pn.Param(
-                self,
-                parameters=['modules_to_load'],
-                widgets={'modules_to_load': pn.widgets.CrossSelector},
-                width=700,
-                show_name=False
-            ),
-            '<h3>Modules to Unload</h3>',
-            pn.Param(
-                self,
-                parameters=['modules_to_unload'],
-                widgets={'modules_to_unload': pn.widgets.CrossSelector},
-                width=700,
-                show_name=False
-            ),
             self.environment_variables_view,
+            pn.Card(
+                '<h3>Modules to Load</h3>',
+                pn.Param(
+                    self,
+                    parameters=['modules_to_load'],
+                    widgets={'modules_to_load': pn.widgets.CrossSelector},
+                    width=700,
+                    show_name=False
+                ),
+                '<h3>Modules to Unload</h3>',
+                pn.Param(
+                    self,
+                    parameters=['modules_to_unload'],
+                    widgets={'modules_to_unload': pn.widgets.CrossSelector},
+                    width=700,
+                    show_name=False
+                ),
+                title='Modules',
+                sizing_mode='stretch_width',
+            ),
             name='Environment',
         )
 
@@ -194,8 +213,13 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             is_valid = self.validate()
             self.validated = is_valid
             if is_valid:
-                param.depends(self.param.environment_variables, self.param.load_modules, self.param.unload_modules,
-                              watch=True)(self.un_validate)  # todo only environment_variables triggers
+                param.depends(
+                    self.param.job_name,
+                    self.param.environment_variables,
+                    self.param.load_modules,
+                    self.param.unload_modules,
+                    watch=True
+                )(self.un_validate)  # todo only environment_variables triggers
             else:
                 self.param.validate_btn.constant = False
                 self.param.trigger('validated')
@@ -222,13 +246,25 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             system=self.uit_client.system,
         )
 
+        if self.notify_start or self.notify_end:
+            options = ''
+            if self.notify_start:
+                options += 'b'
+            if self.notify_end:
+                options += 'e'
+            self._pbs_script.set_directive('-m', options)
+        if self.notification_email:
+            self._pbs_script.set_directive('-M', self.notification_email)
+
         # remove "(default)" from any modules when adding to pbs script
         for module in self.modules_to_load:
             self._pbs_script.load_module(module.replace('(default)', ''))
         for module in self.modules_to_unload:
             self._pbs_script.unload_module(module.replace('(default)', ''))
+
         self._pbs_script._environment_variables = self.environment_variables
         self._pbs_script.execution_block = self.execution_block
+
         return self._pbs_script
 
     @property
@@ -237,15 +273,20 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @param.depends('job_name', watch=True)
     def is_submitable(self):
-        valid_job_name = True
         self.error_messages[:] = []
-        if re.match('^[^*&%\\/\s]*$', self.job_name) is None:
-            valid_job_name = True
+        if not self.job_name:
+            self.error_messages.append(
+                pn.pane.Alert('* You must first enter a Job Name above before you can proceed.',
+                              alert_type='danger')
+            )
+        elif re.match('^[^*&%\\/\s]*$', self.job_name) is None:
             self.error_messages.append(
                 pn.pane.Alert('* Job Name cannot contain spaces or any of the following characters: * & % \\ /',
                               alert_type='danger')
             )
-        self.param.submit_btn.constant = self.param.validate_btn.constant = not valid_job_name
+        errors_exist = len(self.error_messages) > 0
+        self.param.submit_btn.constant = self.param.validate_btn.constant = self.param.disable_validation.constant = errors_exist
+        self.param.trigger('disable_validation')  # get buttons to reload
 
     @param.depends('disable_validation', 'validated')
     def action_button(self):
@@ -275,6 +316,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         return pn.Row(action_btn, cancel_btn, spn)
 
     def submit_view(self):
+        self.is_submitable()
         return pn.Column(
             self.view,
             self.action_button,

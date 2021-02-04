@@ -27,7 +27,7 @@ try:
 except ImportError:
     has_pandas = False
 
-log = logging.getLogger(f'pyuit.{__name__}')
+log = logging.getLogger(__name__)
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
