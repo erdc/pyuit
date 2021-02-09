@@ -316,7 +316,9 @@ class StatusTab(TabView):
     title = param.String(default='Status')
     statuses = param.DataFrame(precedence=0.1)
     update = param.Action(lambda self: self.update_statuses(), precedence=0.2)
-    terminate_btn = param.Action(lambda self: self.terminate_job(), label='Terminate', precedence=0.3)
+    terminate_btn = param.Action(lambda self: self.terminate_options(), label='Terminate', precedence=0.3)
+    yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=-1)
+    cancel_btn = param.Action(lambda self: self.cancel_job(), label='Cancel', precedence=-1)
     disable_update = param.Boolean()
 
     @param.depends('parent.selected_job', watch=True)
@@ -333,10 +335,23 @@ class StatusTab(TabView):
                 self.update_terminate_btn()
             self.statuses = statuses
 
+    def terminate_options(self):
+        self.param.terminate_btn.precedence = -1
+        self.param.yes_btn.precedence = 0.3
+        self.param.cancel_btn.precedence = 0.4
+
     def terminate_job(self):
+        self.param.terminate_btn.precedence = 0.3
+        self.param.yes_btn.precedence = -1
+        self.param.cancel_btn.precedence = -1
         self.selected_job.terminate()
         time.sleep(5)
         self.update_statuses()
+
+    def cancel_job(self):
+        self.param.terminate_btn.precedence = 0.3
+        self.param.yes_btn.precedence = -1
+        self.param.cancel_btn.precedence = -1
 
     def update_terminate_btn(self):
         self.param.terminate_btn.constant = self.selected_job.status not in ('Q', 'R', 'B')
@@ -348,20 +363,26 @@ class StatusTab(TabView):
             self.param.statuses,
             widgets={'statuses': {'show_index': False, 'width': 1300}},
         )[0] if self.statuses is not None else pn.pane.Alert('No status information available.', alert_type='info')
-        update_btn, terminate_btn = pn.Param(
+        update_btn, terminate_btn, yes_btn, cancel_btn = pn.Param(
             self,
-            parameters=['update', 'terminate_btn'],
+            parameters=['update', 'terminate_btn', 'yes_btn', 'cancel_btn'],
             widgets={
                 'update': {'button_type': 'primary', 'width': 100},
                 'terminate_btn': {'button_type': 'danger', 'width': 100},
+                'yes_btn': {'button_type': 'primary', 'width': 100},
+                'cancel_btn': {'button_type': 'danger', 'width': 100},
             },
             show_name=False,
         )[:]
-        args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'statuses_table': statuses_table, 'spn': spn}
-        code = 'update_btn.visible=false; terminate_btn.visible=false; statuses_table.visible=false; spn.width=50;'
+        args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'yes_btn': yes_btn, 'cancel_btn': cancel_btn,
+                'statuses_table': statuses_table, 'spn': spn}
+        code = 'update_btn.visible=false; terminate_btn.visible=false; yes_btn.visible=false; cancel_btn;' \
+               ' statuses_table.visible=false; spn.width=50;'
 
         update_btn.js_on_click(args=args, code=code)
         terminate_btn.js_on_click(args=args, code=code)
+        yes_btn.js_on_click(args=args, code=code)
+        cancel_btn.js_on_click(args=args, code=code)
 
         buttons = None if self.disable_update else pn.Row(update_btn, terminate_btn, spn)
 
