@@ -49,7 +49,7 @@ class TestPBSScript(unittest.TestCase):
         self.pbs.set_directive('-A', 'C++')
 
         # Call the method
-        res = self.pbs.get_directives()
+        res = self.pbs.optional_directives
 
         # Test the result
         self.assertEqual('OepnGL', res[0].options)

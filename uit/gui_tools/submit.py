@@ -169,6 +169,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
                 ),
                 title='Modules',
                 sizing_mode='stretch_width',
+                collapsed=True,
             ),
             name='Environment',
         )

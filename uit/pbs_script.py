@@ -175,11 +175,12 @@ class PbsScript(object):
         Returns:
             str: Value of the given directive.
         """
-        for d in self._optional_directives:
+        for d in self.optional_directives:
             if d.directive == directive:
                 return d.options
 
-    def get_directives(self):
+    @property
+    def optional_directives(self):
         """Get a list of all defined directives.
 
         Returns:
@@ -252,7 +253,7 @@ class PbsScript(object):
              str: All optional directives.
         """
         header = self._create_block_header_string('Optional Directives')
-        return self._render_directive_list(header, self._optional_directives)
+        return self._render_directive_list(header, self.optional_directives)
 
     @staticmethod
     def _render_directive_list(header, directives):

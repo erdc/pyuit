@@ -134,16 +134,19 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     @param.depends('selected_job', watch=True)
     def update_selected_job_dependencies(self):
         self.update_working_dir()
-        self.update_selected_sub_job()
-        self.update_active_job()
+        if self.is_array:
+            self.update_selected_sub_job()
+            self.param.selected_sub_job.precedence = 1
+        else:
+            self.active_job = self.selected_job
+            self.param.selected_sub_job.precedence = -1
 
     def update_selected_sub_job(self):
-        if self.is_array:
-            objects = [j for j in self.selected_job.sub_jobs]
-            self.param.selected_sub_job.names = {j.job_id: j for j in objects}
-            self.param.selected_sub_job.objects = objects
-            if objects:
-                self.selected_sub_job = objects[0]
+        objects = [j for j in self.selected_job.sub_jobs]
+        self.param.selected_sub_job.names = {j.job_id: j for j in objects}
+        self.param.selected_sub_job.objects = objects
+        if objects:
+            self.selected_sub_job = objects[0]
 
     def update_working_dir(self):
         if self.selected_job is not None:
@@ -153,10 +156,6 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     def update_active_job(self):
         if self.is_array:
             self.active_job = self.selected_sub_job
-            self.param.selected_sub_job.precedence = 1
-        else:
-            self.active_job = self.selected_job
-            self.param.selected_sub_job.precedence = -1
 
     @param.depends('selected_job')
     def header_panel(self):
@@ -180,7 +179,7 @@ class TabView(param.Parameterized):
 
     @property
     def tab(self):
-        return self.title, self.panel()
+        return self.title, self.panel
 
     @property
     def uit_client(self):
@@ -258,7 +257,7 @@ class LogsTab(TabView):
                 self.log_content = log_content
 
     @param.depends('log_content')
-    def dynamic_panel(self):
+    def panel(self):
         log_content = pn.pane.Str(self.log_content, sizing_mode='stretch_both')
 
         spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
@@ -266,7 +265,7 @@ class LogsTab(TabView):
             self.param.refresh_btn, widgets={'refresh_btn': {'button_type': 'primary', 'width': 100}}
         )[0]
         args = {'log': log_content, 'btn': refresh_btn, 'spn': spn}
-        code = 'btn.visible=false; log.visible=false; spn.width=50;'
+        code = 'btn.visible=false; /*log.visible=false;*/ spn.width=50;'
         refresh_btn.js_on_click(args=args, code=code)
 
         if self.is_array:
@@ -288,9 +287,6 @@ class LogsTab(TabView):
             sizing_mode='stretch_both'
         )
 
-    def panel(self):
-        return self.dynamic_panel
-
 
 class FileViewerTab(TabView):
     title = param.String(default='Files')
@@ -310,13 +306,10 @@ class FileViewerTab(TabView):
         if self.file_viewer:
             self.file_viewer.file_path = str(self.selected_job.run_dir)
 
-    def view(self):
+    def panel(self):
         panel = self.file_viewer.panel()
         panel.min_height = 1000
         return panel
-
-    def panel(self):
-        return self.view
 
 
 class StatusTab(TabView):
@@ -379,11 +372,8 @@ class StatusTab(TabView):
         )
 
     @param.depends('parent.selected_job')
-    def status_panel(self):
+    def panel(self):
         if self.selected_job:
             return self.statuses_panel
         else:
             return pn.pane.HTML('<h2>No jobs are available</h2>')
-
-    def panel(self):
-        return self.status_panel
