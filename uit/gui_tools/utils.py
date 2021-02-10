@@ -316,9 +316,9 @@ class StatusTab(TabView):
     title = param.String(default='Status')
     statuses = param.DataFrame(precedence=0.1)
     update = param.Action(lambda self: self.update_statuses(), precedence=0.2)
-    terminate_btn = param.Action(lambda self: self.terminate_options(), label='Terminate', precedence=0.3)
-    yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=-1)
-    cancel_btn = param.Action(lambda self: self.cancel_job(), label='Cancel', precedence=-1)
+    terminate_btn = param.Action(lambda self: self.terminate_job(), label='Terminate', precedence=0.3)
+    yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=0.4)
+    cancel_btn = param.Action(lambda self: self.cancel_job(), label='Cancel', precedence=0.5)
     disable_update = param.Boolean()
 
     @param.depends('parent.selected_job', watch=True)
@@ -326,13 +326,19 @@ class StatusTab(TabView):
         if self.selected_job is not None:
             if self.disable_update:
                 qstat = self.selected_job.qstat
-                statuses = pd.DataFrame(qstat, index=[1]) if qstat is not None else None
+                if qstat is None:
+                    statuses = None
+                elif self.is_array:
+                    statuses = pd.DataFrame.from_dict(qstat).T
+                else:
+                    statuses = pd.DataFrame(qstat, index=[0])
             else:
                 jobs = [self.selected_job]
                 if self.is_array:
                     jobs += self.selected_job.sub_jobs
                 statuses = PbsJob.update_statuses(jobs, as_df=True)
                 self.update_terminate_btn()
+            statuses.set_index('job_id', inplace=True)
             self.statuses = statuses
 
     def terminate_options(self):
@@ -345,7 +351,7 @@ class StatusTab(TabView):
         self.param.yes_btn.precedence = -1
         self.param.cancel_btn.precedence = -1
         self.selected_job.terminate()
-        time.sleep(5)
+        time.sleep(10)
         self.update_statuses()
 
     def cancel_job(self):
@@ -358,33 +364,33 @@ class StatusTab(TabView):
 
     @param.depends('statuses')
     def statuses_panel(self):
-        spn = pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
         statuses_table = pn.Param(
             self.param.statuses,
-            widgets={'statuses': {'show_index': False, 'width': 1300}},
+            widgets={'statuses': {'width': 1300}},
         )[0] if self.statuses is not None else pn.pane.Alert('No status information available.', alert_type='info')
-        update_btn, terminate_btn, yes_btn, cancel_btn = pn.Param(
-            self,
-            parameters=['update', 'terminate_btn', 'yes_btn', 'cancel_btn'],
-            widgets={
-                'update': {'button_type': 'primary', 'width': 100},
-                'terminate_btn': {'button_type': 'danger', 'width': 100},
-                'yes_btn': {'button_type': 'primary', 'width': 100},
-                'cancel_btn': {'button_type': 'danger', 'width': 100},
-            },
-            show_name=False,
-        )[:]
-        args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'yes_btn': yes_btn, 'cancel_btn': cancel_btn,
-                'statuses_table': statuses_table, 'spn': spn}
-        code = 'update_btn.visible=false; terminate_btn.visible=false; yes_btn.visible=false; cancel_btn;' \
-               ' statuses_table.visible=false; spn.width=50;'
 
-        update_btn.js_on_click(args=args, code=code)
-        terminate_btn.js_on_click(args=args, code=code)
-        yes_btn.js_on_click(args=args, code=code)
-        cancel_btn.js_on_click(args=args, code=code)
+        if self.disable_update:
+            buttons = None
+        else:
+            spn = pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+            update_btn, terminate_btn = pn.Param(
+                self,
+                parameters=['update', 'terminate_btn'],
+                widgets={
+                    'update': {'button_type': 'primary', 'width': 100},
+                    'terminate_btn': {'button_type': 'danger', 'width': 100},
+                },
+                show_name=False,
+            )[:]
+            args = {'update_btn': update_btn, 'terminate_btn': terminate_btn,
+                    'statuses_table': statuses_table, 'spn': spn}
+            code = 'update_btn.visible=false; terminate_btn.visible=false;' \
+                   ' statuses_table.visible=false; spn.width=50;'
 
-        buttons = None if self.disable_update else pn.Row(update_btn, terminate_btn, spn)
+            update_btn.js_on_click(args=args, code=code)
+            terminate_btn.js_on_click(args=args, code=code)
+
+            buttons = pn.Row(update_btn, terminate_btn, spn)
 
         return pn.Column(
             statuses_table,
