@@ -338,7 +338,8 @@ class StatusTab(TabView):
                     jobs += self.selected_job.sub_jobs
                 statuses = PbsJob.update_statuses(jobs, as_df=True)
                 self.update_terminate_btn()
-            statuses.set_index('job_id', inplace=True)
+            if statuses is not None:
+                statuses.set_index('job_id', inplace=True)
             self.statuses = statuses
 
     def terminate_options(self):
