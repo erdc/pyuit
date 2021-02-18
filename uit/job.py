@@ -455,7 +455,6 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
     j._remote_workspace_id = working_dir.name.split('.', 1)[-1]
     try:
         j.label = working_dir.parent.relative_to(uit_client.WORKDIR)
-        j._working_dir = None
     except:
         pass
     j._job_id = job_id
