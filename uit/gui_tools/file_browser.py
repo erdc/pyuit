@@ -385,7 +385,7 @@ class HpcPath(Path, PurePosixPath):
     def _get_metadata(self):
         if not self.is_absolute():
             self._str = str(self.uit_client.HOME / self)
-        ls = self.uit_client.list_dir(self.parent.as_posix())
+        ls = self.parse_list_dir(self.parent.as_posix())
         if 'dirs' not in ls:  # then ls is invalid
             raise ValueError(f'Invalid file path {self.parent.as_posix()}')
         self._is_dir = False
@@ -397,13 +397,12 @@ class HpcPath(Path, PurePosixPath):
             self._is_dir = True
             self._ls = self.uit_client.list_dir(self.as_posix())
             if 'error' in self._ls:
-                self.parse_list_dir()
+                self._ls = self.parse_list_dir(self.as_posix())
         elif self.name in (f['name'] for f in ls['files']):
             self._is_file = True
 
-    def parse_list_dir(self):
+    def parse_list_dir(self, base_path):
         TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
-        base_path = self.as_posix()
         parsed_ls = {'path': base_path, 'dirs': [], 'files': [], 'links': []}
         ls = self.uit_client.call(f'ls -l {base_path}')
         for f in ls.splitlines()[1:]:
@@ -422,7 +421,7 @@ class HpcPath(Path, PurePosixPath):
             if perms.startswith('l'):
                 metadata['link'] = parts[-1]
             parsed_ls[metadata['type'] + 's'].append(metadata)
-        self._ls = parsed_ls
+        return parsed_ls
 
     def is_dir(self):
         if self._is_dir is None:
