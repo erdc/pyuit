@@ -1,7 +1,11 @@
 """Custom Exceptions."""
 
 
-class DpRouteError(RuntimeError):
+class UITError(RuntimeError):
+    pass
+
+
+class DpRouteError(UITError):
     """
     A custom exception for DP_ROUTE class errors.
 

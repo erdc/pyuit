@@ -19,6 +19,7 @@ from werkzeug.serving import make_server
 
 from .pbs_script import PbsScript
 from .util import robust, HpcEnv
+from .exceptions import UITError
 
 # optional dependency
 try:
@@ -37,9 +38,6 @@ QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontie
 
 _auth_code = None
 _server = None
-
-
-class UITError(RuntimeError): pass
 
 
 class Client:
