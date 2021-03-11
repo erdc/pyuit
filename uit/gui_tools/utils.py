@@ -12,6 +12,7 @@ from .file_browser import FileViewer
 from ..uit import Client
 from ..job import PbsJob, PbsArrayJob
 
+pn.extension(raw_css=['.hidden{visibility: hidden;}'])
 log = logging.getLogger(__name__)
 
 
@@ -134,16 +135,19 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     @param.depends('selected_job', watch=True)
     def update_selected_job_dependencies(self):
         self.update_working_dir()
-        self.update_selected_sub_job()
-        self.update_active_job()
+        if self.is_array:
+            self.update_selected_sub_job()
+            self.param.selected_sub_job.precedence = 1
+        else:
+            self.active_job = self.selected_job
+            self.param.selected_sub_job.precedence = -1
 
     def update_selected_sub_job(self):
-        if self.is_array:
-            objects = [j for j in self.selected_job.sub_jobs]
-            self.param.selected_sub_job.names = {j.job_id: j for j in objects}
-            self.param.selected_sub_job.objects = objects
-            if objects:
-                self.selected_sub_job = objects[0]
+        objects = [j for j in self.selected_job.sub_jobs]
+        self.param.selected_sub_job.names = {j.job_id: j for j in objects}
+        self.param.selected_sub_job.objects = objects
+        if objects:
+            self.selected_sub_job = objects[0]
 
     def update_working_dir(self):
         if self.selected_job is not None:
@@ -153,10 +157,6 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     def update_active_job(self):
         if self.is_array:
             self.active_job = self.selected_sub_job
-            self.param.selected_sub_job.precedence = 1
-        else:
-            self.active_job = self.selected_job
-            self.param.selected_sub_job.precedence = -1
 
     @param.depends('selected_job')
     def header_panel(self):
@@ -180,7 +180,7 @@ class TabView(param.Parameterized):
 
     @property
     def tab(self):
-        return self.title, self.panel()
+        return self.title, self.panel
 
     @property
     def uit_client(self):
@@ -258,7 +258,7 @@ class LogsTab(TabView):
                 self.log_content = log_content
 
     @param.depends('log_content')
-    def dynamic_panel(self):
+    def panel(self):
         log_content = pn.pane.Str(self.log_content, sizing_mode='stretch_both')
 
         spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
@@ -266,7 +266,7 @@ class LogsTab(TabView):
             self.param.refresh_btn, widgets={'refresh_btn': {'button_type': 'primary', 'width': 100}}
         )[0]
         args = {'log': log_content, 'btn': refresh_btn, 'spn': spn}
-        code = 'btn.visible=false; log.visible=false; spn.width=50;'
+        code = 'btn.visible=false; /*log.visible=false;*/ spn.width=50;'
         refresh_btn.js_on_click(args=args, code=code)
 
         if self.is_array:
@@ -288,9 +288,6 @@ class LogsTab(TabView):
             sizing_mode='stretch_both'
         )
 
-    def panel(self):
-        return self.dynamic_panel
-
 
 class FileViewerTab(TabView):
     title = param.String(default='Files')
@@ -310,22 +307,19 @@ class FileViewerTab(TabView):
         if self.file_viewer:
             self.file_viewer.file_path = str(self.selected_job.run_dir)
 
-    def view(self):
+    def panel(self):
         panel = self.file_viewer.panel()
         panel.min_height = 1000
         return panel
-
-    def panel(self):
-        return self.view
 
 
 class StatusTab(TabView):
     title = param.String(default='Status')
     statuses = param.DataFrame(precedence=0.1)
     update = param.Action(lambda self: self.update_statuses(), precedence=0.2)
-    terminate_btn = param.Action(lambda self: self.terminate_options(), label='Terminate', precedence=0.3)
-    yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=-1)
-    cancel_btn = param.Action(lambda self: self.cancel_job(), label='Cancel', precedence=-1)
+    terminate_btn = param.Action(lambda self: None, label='Terminate', precedence=0.3)
+    yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=0.4)
+    cancel_btn = param.Action(lambda self: None, label='Cancel', precedence=0.5)
     disable_update = param.Boolean()
 
     @param.depends('parent.selected_job', watch=True)
@@ -333,65 +327,68 @@ class StatusTab(TabView):
         if self.selected_job is not None:
             if self.disable_update:
                 qstat = self.selected_job.qstat
-                statuses = pd.DataFrame(qstat, index=[1]) if qstat is not None else None
+                if qstat is None:
+                    statuses = None
+                elif self.is_array:
+                    statuses = pd.DataFrame.from_dict(qstat).T
+                else:
+                    statuses = pd.DataFrame(qstat, index=[0])
             else:
                 jobs = [self.selected_job]
                 if self.is_array:
                     jobs += self.selected_job.sub_jobs
                 statuses = PbsJob.update_statuses(jobs, as_df=True)
                 self.update_terminate_btn()
+            if statuses is not None:
+                statuses.set_index('job_id', inplace=True)
             self.statuses = statuses
 
-    def terminate_options(self):
-        self.param.terminate_btn.precedence = -1
-        self.param.yes_btn.precedence = 0.3
-        self.param.cancel_btn.precedence = 0.4
-
     def terminate_job(self):
-        self.param.terminate_btn.precedence = 0.3
-        self.param.yes_btn.precedence = -1
-        self.param.cancel_btn.precedence = -1
         self.selected_job.terminate()
-        time.sleep(5)
+        time.sleep(10)
         self.update_statuses()
-
-    def cancel_job(self):
-        self.param.terminate_btn.precedence = 0.3
-        self.param.yes_btn.precedence = -1
-        self.param.cancel_btn.precedence = -1
 
     def update_terminate_btn(self):
         self.param.terminate_btn.constant = self.selected_job.status not in ('Q', 'R', 'B')
 
     @param.depends('statuses')
     def statuses_panel(self):
-        spn = pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
         statuses_table = pn.Param(
             self.param.statuses,
-            widgets={'statuses': {'show_index': False, 'width': 1300}},
+            widgets={'statuses': {'width': 1300}},
         )[0] if self.statuses is not None else pn.pane.Alert('No status information available.', alert_type='info')
-        update_btn, terminate_btn, yes_btn, cancel_btn = pn.Param(
-            self,
-            parameters=['update', 'terminate_btn', 'yes_btn', 'cancel_btn'],
-            widgets={
-                'update': {'button_type': 'primary', 'width': 100},
-                'terminate_btn': {'button_type': 'danger', 'width': 100},
-                'yes_btn': {'button_type': 'primary', 'width': 100},
-                'cancel_btn': {'button_type': 'danger', 'width': 100},
-            },
-            show_name=False,
-        )[:]
-        args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'yes_btn': yes_btn, 'cancel_btn': cancel_btn,
-                'statuses_table': statuses_table, 'spn': spn}
-        code = 'update_btn.visible=false; terminate_btn.visible=false; yes_btn.visible=false; cancel_btn;' \
-               ' statuses_table.visible=false; spn.width=50;'
 
+        if self.disable_update:
+            buttons = None
+        else:
+            spn = pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+            update_btn, terminate_btn, yes_btn, cancel_btn = pn.Param(
+                self,
+                parameters=['update', 'terminate_btn', 'yes_btn', 'cancel_btn'],
+                widgets={
+                    'update': {'button_type': 'primary', 'width': 100},
+                    'terminate_btn': {'button_type': 'danger', 'width': 100},
+                    'yes_btn': {'button_type': 'danger', 'width': 100},
+                    'cancel_btn': {'button_type': 'success', 'width': 100},
+                },
+                show_name=False,
+            )[:]
+        args = {'update_btn': update_btn, 'terminate_btn': terminate_btn,
+                'statuses_table': statuses_table, 'spn': spn, 'yes_btn': yes_btn, 'cancel_btn': cancel_btn}
+        code = 'update_btn.visible=false; terminate_btn.visible=false;' \
+               ' statuses_table.visible=false; spn.width=50; yes_btn.css_classes=["bk", "hidden"];' \
+               'cancel_btn.css_classes=["bk", "hidden"];'
+        terminate_code = 'terminate_btn.visible=false; yes_btn.css_classes=["bk"]; cancel_btn.css_classes=["bk"];'
+        cancel_code = 'terminate_btn.visible=true; yes_btn.css_classes=["bk", "hidden"];' \
+                      'cancel_btn.css_classes=["bk", "hidden"];'
+
+        yes_btn.css_classes = ['hidden']
+        cancel_btn.css_classes = ['hidden']
         update_btn.js_on_click(args=args, code=code)
-        terminate_btn.js_on_click(args=args, code=code)
+        terminate_btn.js_on_click(args=args, code=terminate_code)
         yes_btn.js_on_click(args=args, code=code)
-        cancel_btn.js_on_click(args=args, code=code)
-
-        buttons = None if self.disable_update else pn.Row(update_btn, terminate_btn, spn)
+        cancel_btn.js_on_click(args=args, code=cancel_code)
+        buttons = pn.Row(spn, update_btn, terminate_btn, yes_btn, cancel_btn)
 
         return pn.Column(
             statuses_table,
@@ -400,11 +397,8 @@ class StatusTab(TabView):
         )
 
     @param.depends('parent.selected_job')
-    def status_panel(self):
+    def panel(self):
         if self.selected_job:
             return self.statuses_panel
         else:
             return pn.pane.HTML('<h2>No jobs are available</h2>')
-
-    def panel(self):
-        return self.status_panel
