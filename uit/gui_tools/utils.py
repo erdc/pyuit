@@ -13,6 +13,8 @@ from ..uit import Client
 from ..job import PbsJob, PbsArrayJob
 
 log = logging.getLogger(__name__)
+pn.extension(raw_css=['.hidden{visibility: hidden;}'])
+
 
 
 class HpcConfigurable(param.Parameterized):
@@ -321,87 +323,92 @@ class StatusTab(TabView):
     cancel_btn = param.Action(lambda self: self.cancel_job(), label='Cancel', precedence=0.5)
     disable_update = param.Boolean()
 
-    @param.depends('parent.selected_job', watch=True)
-    def update_statuses(self):
-        if self.selected_job is not None:
-            if self.disable_update:
-                qstat = self.selected_job.qstat
-                if qstat is None:
-                    statuses = None
-                elif self.is_array:
-                    statuses = pd.DataFrame.from_dict(qstat).T
+    class StatusTab(TabView):
+        title = param.String(default='Status')
+        statuses = param.DataFrame(precedence=0.1)
+        update = param.Action(lambda self: self.update_statuses(), precedence=0.2)
+        terminate_btn = param.Action(lambda self: None, label='Terminate', precedence=0.3)
+        yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=0.4)
+        cancel_btn = param.Action(lambda self: None, label='Cancel', precedence=0.5)
+        disable_update = param.Boolean()
+
+        @param.depends('parent.selected_job', watch=True)
+        def update_statuses(self):
+            if self.selected_job is not None:
+                if self.disable_update:
+                    qstat = self.selected_job.qstat
+                    if qstat is None:
+                        statuses = None
+                    elif self.is_array:
+                        statuses = pd.DataFrame.from_dict(qstat).T
+                    else:
+                        statuses = pd.DataFrame(qstat, index=[0])
                 else:
-                    statuses = pd.DataFrame(qstat, index=[0])
+                    jobs = [self.selected_job]
+                    if self.is_array:
+                        jobs += self.selected_job.sub_jobs
+                    statuses = PbsJob.update_statuses(jobs, as_df=True)
+                    self.update_terminate_btn()
+                if statuses is not None:
+                    statuses.set_index('job_id', inplace=True)
+                self.statuses = statuses
+
+        def terminate_job(self):
+            self.selected_job.terminate()
+            time.sleep(10)
+            self.update_statuses()
+
+        def update_terminate_btn(self):
+            self.param.terminate_btn.constant = self.selected_job.status not in ('Q', 'R', 'B')
+
+        @param.depends('statuses')
+        def statuses_panel(self):
+            statuses_table = pn.Param(
+                self.param.statuses,
+                widgets={'statuses': {'width': 1300}},
+            )[0] if self.statuses is not None else pn.pane.Alert('No status information available.', alert_type='info')
+
+            if self.disable_update:
+                buttons = None
             else:
-                jobs = [self.selected_job]
-                if self.is_array:
-                    jobs += self.selected_job.sub_jobs
-                statuses = PbsJob.update_statuses(jobs, as_df=True)
-                self.update_terminate_btn()
-            if statuses is not None:
-                statuses.set_index('job_id', inplace=True)
-            self.statuses = statuses
-
-    def terminate_options(self):
-        self.param.terminate_btn.precedence = -1
-        self.param.yes_btn.precedence = 0.3
-        self.param.cancel_btn.precedence = 0.4
-
-    def terminate_job(self):
-        self.param.terminate_btn.precedence = 0.3
-        self.param.yes_btn.precedence = -1
-        self.param.cancel_btn.precedence = -1
-        self.selected_job.terminate()
-        time.sleep(10)
-        self.update_statuses()
-
-    def cancel_job(self):
-        self.param.terminate_btn.precedence = 0.3
-        self.param.yes_btn.precedence = -1
-        self.param.cancel_btn.precedence = -1
-
-    def update_terminate_btn(self):
-        self.param.terminate_btn.constant = self.selected_job.status not in ('Q', 'R', 'B')
-
-    @param.depends('statuses')
-    def statuses_panel(self):
-        statuses_table = pn.Param(
-            self.param.statuses,
-            widgets={'statuses': {'width': 1300}},
-        )[0] if self.statuses is not None else pn.pane.Alert('No status information available.', alert_type='info')
-
-        if self.disable_update:
-            buttons = None
-        else:
-            spn = pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
-            update_btn, terminate_btn = pn.Param(
-                self,
-                parameters=['update', 'terminate_btn'],
-                widgets={
-                    'update': {'button_type': 'primary', 'width': 100},
-                    'terminate_btn': {'button_type': 'danger', 'width': 100},
-                },
-                show_name=False,
-            )[:]
+                spn = pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+                update_btn, terminate_btn, yes_btn, cancel_btn = pn.Param(
+                    self,
+                    parameters=['update', 'terminate_btn', 'yes_btn', 'cancel_btn'],
+                    widgets={
+                        'update': {'button_type': 'primary', 'width': 100},
+                        'terminate_btn': {'button_type': 'danger', 'width': 100},
+                        'yes_btn': {'button_type': 'danger', 'width': 100},
+                        'cancel_btn': {'button_type': 'success', 'width': 100},
+                    },
+                    show_name=False,
+                )[:]
             args = {'update_btn': update_btn, 'terminate_btn': terminate_btn,
-                    'statuses_table': statuses_table, 'spn': spn}
+                    'statuses_table': statuses_table, 'spn': spn, 'yes_btn': yes_btn, 'cancel_btn': cancel_btn}
             code = 'update_btn.visible=false; terminate_btn.visible=false;' \
-                   ' statuses_table.visible=false; spn.width=50;'
+                   ' statuses_table.visible=false; spn.width=50; yes_btn.css_classes=["bk", "hidden"];' \
+                   'cancel_btn.css_classes=["bk", "hidden"];'
+            terminate_code = 'terminate_btn.visible=false; yes_btn.css_classes=["bk"]; cancel_btn.css_classes=["bk"];'
+            cancel_code = 'terminate_btn.visible=true; yes_btn.css_classes=["bk", "hidden"];' \
+                          'cancel_btn.css_classes=["bk", "hidden"];'
 
+            yes_btn.css_classes = ['hidden']
+            cancel_btn.css_classes = ['hidden']
             update_btn.js_on_click(args=args, code=code)
-            terminate_btn.js_on_click(args=args, code=code)
+            terminate_btn.js_on_click(args=args, code=terminate_code)
+            yes_btn.js_on_click(args=args, code=code)
+            cancel_btn.js_on_click(args=args, code=cancel_code)
+            buttons = pn.Row(spn, update_btn, terminate_btn, yes_btn, cancel_btn)
 
-            buttons = pn.Row(update_btn, terminate_btn, spn)
+            return pn.Column(
+                statuses_table,
+                buttons,
+                sizing_mode='stretch_width',
+            )
 
-        return pn.Column(
-            statuses_table,
-            buttons,
-            sizing_mode='stretch_width',
-        )
-
-    @param.depends('parent.selected_job')
-    def panel(self):
-        if self.selected_job:
-            return self.statuses_panel
-        else:
-            return pn.pane.HTML('<h2>No jobs are available</h2>')
+        @param.depends('parent.selected_job')
+        def panel(self):
+            if self.selected_job:
+                return self.statuses_panel
+            else:
+                return pn.pane.HTML('<h2>No jobs are available</h2>')
