@@ -179,6 +179,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     submit_btn = param.Action(lambda self: self._submit(), label='Submit', constant=True, precedence=10)
     validate_btn = param.Action(lambda self: self._validate(), label='Validate', constant=True, precedence=10)
     cancel_btn = param.Action(lambda self: self.cancel(), label='Cancel', precedence=10)
+    previous_btn = param.Action(lambda self: self._previous(), label='Previous', precedence=10)
     disable_validation = param.Boolean(label='Override Validation')
     validated = param.Boolean()
     job_name = param.String(label='Job Name (Required, cannot contain spaces or tabs)')
@@ -186,6 +187,15 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     uit_client = param.ClassSelector(Client)
     _pbs_script = param.ClassSelector(PbsScript, default=None)
     ready = param.Boolean(default=False, precedence=-1)
+    next_stage = param.Selector()
+    pipeline_obj = param.ClassSelector(pn.pipeline.Pipeline)
+
+    def _previous(self):
+        prev_stage = self.pipeline_obj._stages[self.pipeline_obj._prev_stage][0]
+        prev_stage.reset()
+        self.pipeline_obj.param.trigger('previous')
+        self.pipeline_obj._block = False
+
 
     def pre_validate(self):
         pass
@@ -332,6 +342,11 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def panel(self):
         return pn.Column(
             '# Submit Job',
+            pn.Param(
+                self.param.previous_btn,
+                widgets={'previous_btn': {'button_type': 'primary', 'width': 100}}
+            ),
+
             pn.layout.Tabs(
                 self.submit_view(),
                 self.pbs_options_view(),

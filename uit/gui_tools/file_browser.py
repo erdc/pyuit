@@ -407,6 +407,11 @@ class HpcPath(Path, PurePosixPath):
         ls = self.uit_client.call(f'ls -l {base_path}')
         for f in ls.splitlines()[1:]:
             parts = f.split()
+            # handle case where group name contains a space
+            try:
+                int(parts[4])
+            except ValueError:
+                parts[3] += f' {parts.pop(4)}'
             perms, _, owner, group, size, mon, day, time, filename = parts[:9]
             metadata = {
                 'owner': owner,
