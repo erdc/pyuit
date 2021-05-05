@@ -531,9 +531,9 @@ class Client:
         if not parse:
             return result
 
-        columns = ['system', 'subproject', 'hours_allocated', 'hours_used',
+        columns = ['system', 'subproject', 'typ', 'hours_allocated', 'hours_used',
                    'hours_remaining', 'percent_remaining', 'background_hours_used']
-        delimiter = '========= ============= =========== =========== =========== ========= ==========\n'
+        delimiter = '========== ============= === ========== ========== ========== ======= ==========\n'
         return self._parse_hpc_output(result, columns, as_df, delimiter=delimiter, remove_last_line=True)
 
     @_ensure_connected

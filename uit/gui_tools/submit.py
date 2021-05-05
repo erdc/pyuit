@@ -317,14 +317,18 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             widgets={'cancel_btn': {'button_type': 'danger', 'width': 200}}
         )[0]
 
-        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
+        code = 'btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit(); ' \
+               'other_btn.disabled=true;'
+        action_btn.js_on_click(
+            args={'btn': action_btn, 'other_btn': cancel_btn},
+            code=code
+        )
+        cancel_btn.js_on_click(
+            args={'other_btn': action_btn, 'btn': cancel_btn},
+            code=code,
+        )
 
-        args = {'action_btn': action_btn, 'cancel_btn': cancel_btn, 'spn': spn}
-        code = 'action_btn.visible=false; cancel_btn.visible=false; spn.width=50;'
-        action_btn.js_on_click(args=args, code=code)
-        cancel_btn.js_on_click(args=args, code=code)
-
-        return pn.Row(action_btn, cancel_btn, spn)
+        return pn.Row(action_btn, cancel_btn)
 
     def submit_view(self):
         self.is_submitable()
