@@ -134,7 +134,6 @@ class HpcConnect(param.Parameterized):
     @param.depends('connected')
     def view(self):
         header = '# Connect to HPC System'
-        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
         connect_btn = pn.Param(
             self.param.connect_btn,
             widgets={
@@ -144,10 +143,13 @@ class HpcConnect(param.Parameterized):
                 }
             },
         )[0]
-        connect_btn.js_on_click(args={'btn': connect_btn, 'spn': spn}, code='btn.visible=false; spn.width=50;')
+        connect_btn.js_on_click(
+            args={'btn': connect_btn, },
+            code='btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit();'
+        )
 
         if self.connected is None:
-            content = spn
+            content = None
         elif self.connected is False:
             self.advanced_pn = pn.panel(
                 self,
@@ -158,7 +160,7 @@ class HpcConnect(param.Parameterized):
             )
             if self.login_node is None:
                 self.advanced_pn.insert(1, self.param.exclude_nodes.label)
-            content = pn.Column(pn.layout.Tabs(self.system_pn, self.advanced_pn), connect_btn, spn)
+            content = pn.Column(pn.layout.Tabs(self.system_pn, self.advanced_pn), connect_btn)
         else:
             self.param.connect_btn.label = 'Re-Connect'
             btns = pn.Param(

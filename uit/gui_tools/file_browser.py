@@ -221,6 +221,7 @@ class FileBrowser(param.Parameterized):
     def __init__(self, delayed_init=False, disabled=False, **params):
         self.delayed_init = delayed_init
         super().__init__(**params)
+        self.file_listing_widget = None
         self._initialize_path()
         self.disabled = disabled
 
@@ -266,6 +267,11 @@ class FileBrowser(param.Parameterized):
 
     @param.depends('_disabled')
     def panel(self):
+        self.file_listing_widget = pn.Param(
+            self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'
+        )[0]
+        self.file_listing_widget.jscallback(
+            value='this.css_classes.push("pn-loading", "arcs"); this.properties.css_classes.change.emit();')
         return pn.Column(
             pn.Param(
                 self,
@@ -277,7 +283,7 @@ class FileBrowser(param.Parameterized):
                 margin=0,
             ),
             self.param.show_hidden,
-            pn.Param(self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'),
+            self.file_listing_widget,
             sizing_mode='stretch_width',
             margin=0,
         )
@@ -289,7 +295,14 @@ class FileBrowser(param.Parameterized):
         else:
             return [self.path.as_posix()]
 
+    def stop_loading(self):
+        if self.file_listing_widget is not None:
+            self.file_listing_widget.css_classes = ['uit-loading']
+            self.file_listing_widget.css_classes = []
+            # self.file_listing_widget.param.trigger('css_classes')
+
     def do_callback(self, changed=True):
+        self.stop_loading()
         if self.callback:
             self.callback(changed)
 
@@ -407,11 +420,13 @@ class HpcPath(Path, PurePosixPath):
         ls = self.uit_client.call(f'ls -l {base_path}')
         for f in ls.splitlines()[1:]:
             parts = f.split()
+
             # handle case where group name contains a space
             try:
                 int(parts[4])
             except ValueError:
                 parts[3] += f' {parts.pop(4)}'
+
             perms, _, owner, group, size, mon, day, time, filename = parts[:9]
             metadata = {
                 'owner': owner,
@@ -538,18 +553,22 @@ class FileSelector(param.Parameterized):
         self.param.browse_toggle.label = 'Browse'
 
     def input_row(self):
-        return pn.Param(
+        file_path, browse_toggle = pn.Param(
             self,
             parameters=['file_path', 'browse_toggle'],
             widgets={
                 'file_path': {'width_policy': 'max', 'show_name': False},
                 'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
             },
-            default_layout=pn.Row,
             show_name=False,
-            width_policy='max',
-            margin=0,
+        )[:2]
+
+        browse_toggle.js_on_click(
+            args={'btn': browse_toggle},
+            code='btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit();',
         )
+
+        return pn.Row(file_path, browse_toggle, width_policy='max', margin=0)
 
     @property
     def panel(self):

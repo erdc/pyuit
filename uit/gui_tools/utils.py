@@ -116,6 +116,12 @@ class PbsJobTabbedViewer(HpcWorkspaces):
             self.files_tab.tab,
         ]
 
+    def __str__(self):
+        return f'<{self.__class__.__name__} job={self.selected_job}>'
+
+    def __repr__(self):
+        return self.__str__()
+
     @property
     def run_dir(self):
         return self.active_job.run_dir
@@ -176,6 +182,12 @@ class PbsJobTabbedViewer(HpcWorkspaces):
 class TabView(param.Parameterized):
     title = param.String()
     parent = param.ClassSelector(PbsJobTabbedViewer)
+
+    def __str__(self):
+        return f'<{self.__class__.__name__}: {self.title} parent={self.parent}'
+
+    def __repr__(self):
+        return self.__str__()
 
     @property
     def tab(self):
@@ -260,29 +272,29 @@ class LogsTab(TabView):
     def panel(self):
         log_content = pn.pane.Str(self.log_content, sizing_mode='stretch_both')
 
-        spn = pn.widgets.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
         refresh_btn = pn.Param(
             self.param.refresh_btn, widgets={'refresh_btn': {'button_type': 'primary', 'width': 100}}
         )[0]
-        args = {'log': log_content, 'btn': refresh_btn, 'spn': spn}
-        code = 'btn.visible=false; /*log.visible=false;*/ spn.width=50;'
+        args = {'log': log_content, 'btn': refresh_btn}
+        code = 'btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit(); ' \
+               'log.css_classes.push("pn-loading", "arcs"); log.properties.css_classes.change.emit();'
         refresh_btn.js_on_click(args=args, code=code)
 
         if self.is_array:
             sub_job_selector = pn.Param(self.parent.param.selected_sub_job)[0]
             sub_job_selector.width = 300
-            # sub_job_selector.jscallback(args=args, value=code)
+            sub_job_selector.jscallback(args=args, value=code)
         else:
             sub_job_selector = None
 
         log_type_selector = pn.Param(self.param.log)[0]
         log_type_selector.width = 300
-        # log_type_selector.jscallback(args, value=code)
+        log_type_selector.jscallback(args, value=code)
 
         return pn.Column(
             sub_job_selector,
             log_type_selector,
-            # refresh_btn, spn,
+            refresh_btn,
             log_content,
             sizing_mode='stretch_both'
         )
@@ -316,9 +328,9 @@ class StatusTab(TabView):
     title = param.String(default='Status')
     statuses = param.DataFrame(precedence=0.1)
     update = param.Action(lambda self: self.update_statuses(), precedence=0.2)
-    terminate_btn = param.Action(lambda self: self.terminate_job(), label='Terminate', precedence=0.3)
+    terminate_btn = param.Action(lambda self: None, label='Terminate', precedence=0.3)
     yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=0.4)
-    cancel_btn = param.Action(lambda self: self.cancel_job(), label='Cancel', precedence=0.5)
+    cancel_btn = param.Action(lambda self: None, label='Cancel', precedence=0.5)
     disable_update = param.Boolean()
 
     @param.depends('parent.selected_job', watch=True)
@@ -342,23 +354,10 @@ class StatusTab(TabView):
                 statuses.set_index('job_id', inplace=True)
             self.statuses = statuses
 
-    def terminate_options(self):
-        self.param.terminate_btn.precedence = -1
-        self.param.yes_btn.precedence = 0.3
-        self.param.cancel_btn.precedence = 0.4
-
     def terminate_job(self):
-        self.param.terminate_btn.precedence = 0.3
-        self.param.yes_btn.precedence = -1
-        self.param.cancel_btn.precedence = -1
         self.selected_job.terminate()
         time.sleep(10)
         self.update_statuses()
-
-    def cancel_job(self):
-        self.param.terminate_btn.precedence = 0.3
-        self.param.yes_btn.precedence = -1
-        self.param.cancel_btn.precedence = -1
 
     def update_terminate_btn(self):
         self.param.terminate_btn.constant = self.selected_job.status not in ('Q', 'R', 'B')
@@ -373,25 +372,56 @@ class StatusTab(TabView):
         if self.disable_update:
             buttons = None
         else:
-            spn = pn.indicators.LoadingSpinner(value=True, color='primary', aspect_ratio=1, width=0)
-            update_btn, terminate_btn = pn.Param(
+            update_btn, terminate_btn, yes_btn, cancel_btn = pn.Param(
                 self,
-                parameters=['update', 'terminate_btn'],
+                parameters=['update', 'terminate_btn', 'yes_btn', 'cancel_btn'],
                 widgets={
                     'update': {'button_type': 'primary', 'width': 100},
                     'terminate_btn': {'button_type': 'danger', 'width': 100},
+                    'yes_btn': {'button_type': 'danger', 'width': 100},
+                    'cancel_btn': {'button_type': 'success', 'width': 100},
                 },
                 show_name=False,
             )[:]
-            args = {'update_btn': update_btn, 'terminate_btn': terminate_btn,
-                    'statuses_table': statuses_table, 'spn': spn}
-            code = 'update_btn.visible=false; terminate_btn.visible=false;' \
-                   ' statuses_table.visible=false; spn.width=50;'
 
-            update_btn.js_on_click(args=args, code=code)
-            terminate_btn.js_on_click(args=args, code=code)
+            yes_btn.visible = False
+            cancel_btn.visible = False
 
-            buttons = pn.Row(update_btn, terminate_btn, spn)
+            msg = pn.indicators.String(
+                value='Are you sure you want to terminate the job. This cannot be undone.',
+                css_classes=['bk', 'alert', 'alert-danger'], default_color='inherit', font_size='inherit',
+                visible=False,
+            )
+
+            terminate_confirmation = pn.Column(
+                msg, pn.Row(yes_btn, cancel_btn, margin=20), background='#ffffff',
+            )
+
+            args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'statuses_table': statuses_table,
+                    'msg': msg, 'yes_btn': yes_btn, 'cancel_btn': cancel_btn, 'term_col': terminate_confirmation}
+            terminate_code = 'update_btn.disabled=true; terminate_btn.visible=false; ' \
+                             'msg.visible=true; yes_btn.visible=true; cancel_btn.visible=true; ' \
+                             'term_col.css_classes=["panel-widget-box"]'
+            cancel_code = 'update_btn.disabled=false; terminate_btn.visible=true; ' \
+                          'msg.visible=false; yes_btn.visible=false; cancel_btn.visible=false; term_col.css_classes=[]'
+
+            terminate_btn.js_on_click(args=args, code=terminate_code)
+            cancel_btn.js_on_click(args=args, code=cancel_code)
+
+            code = 'btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit(); ' \
+                   'other_btn.disabled=true; ' \
+                   'statuses_table.push("pn-loading", "arcs"); statuses_table.properties.css_classes.change.emit();'
+
+            update_btn.js_on_click(
+                args={'btn': update_btn, 'other_btn': terminate_btn, 'statuses_table': statuses_table},
+                code=code,
+            )
+            yes_btn.js_on_click(
+                args={'btn': terminate_btn, 'other_btn': update_btn, 'statuses_table': statuses_table},
+                code=code,
+            )
+
+            buttons = pn.Row(update_btn, terminate_btn, terminate_confirmation)
 
         return pn.Column(
             statuses_table,
