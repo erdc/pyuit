@@ -384,20 +384,26 @@ class StatusTab(TabView):
                 show_name=False,
             )[:]
 
-            yes_btn.visible = True
-            cancel_btn.visible = True
+            yes_btn.visible = False
+            cancel_btn.visible = False
 
             msg = pn.indicators.String(
                 value='Are you sure you want to terminate the job. This cannot be undone.',
-                default_color='red', font_size='20px', visible=False
+                css_classes=['bk', 'alert', 'alert-danger'], default_color='inherit', font_size='inherit',
+                visible=False,
+            )
+
+            terminate_confirmation = pn.Column(
+                msg, pn.Row(yes_btn, cancel_btn, margin=20), background='#ffffff',
             )
 
             args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'statuses_table': statuses_table,
-                    'msg': msg, 'yes_btn': yes_btn, 'cancel_btn': cancel_btn}
+                    'msg': msg, 'yes_btn': yes_btn, 'cancel_btn': cancel_btn, 'term_col': terminate_confirmation}
             terminate_code = 'update_btn.disabled=true; terminate_btn.visible=false; ' \
-                             'msg.visible=true; yes_btn.visible=true; cancel_btn.visible=true;'
+                             'msg.visible=true; yes_btn.visible=true; cancel_btn.visible=true; ' \
+                             'term_col.css_classes=["panel-widget-box"]'
             cancel_code = 'update_btn.disabled=false; terminate_btn.visible=true; ' \
-                          'msg.visible=false; yes_btn.visible=false; cancel_btn.visible=false;'
+                          'msg.visible=false; yes_btn.visible=false; cancel_btn.visible=false; term_col.css_classes=[]'
 
             terminate_btn.js_on_click(args=args, code=terminate_code)
             cancel_btn.js_on_click(args=args, code=cancel_code)
@@ -413,10 +419,6 @@ class StatusTab(TabView):
             yes_btn.js_on_click(
                 args={'btn': terminate_btn, 'other_btn': update_btn, 'statuses_table': statuses_table},
                 code=code,
-            )
-
-            terminate_confirmation = pn.Column(
-                msg, pn.Row(yes_btn, cancel_btn)
             )
 
             buttons = pn.Row(update_btn, terminate_btn, terminate_confirmation)
