@@ -1,5 +1,6 @@
 from functools import partial
 import re
+import logging
 
 import param
 import panel as pn
@@ -8,6 +9,8 @@ from .file_browser import HpcFileBrowser
 from .utils import HpcConfigurable
 from ..uit import Client, QUEUES
 from ..pbs_script import NODE_TYPES, factors, PbsScript
+
+log = logging.getLogger(__name__)
 
 
 class PbsScriptInputs(param.Parameterized):
@@ -72,23 +75,40 @@ class PbsScriptInputs(param.Parameterized):
 class PbsScriptAdvancedInputs(HpcConfigurable):
     env_names = param.List()
     env_values = param.List()
-    env_browser = param.List()
-    browse_view = param.ClassSelector(pn.Row, default=pn.Row())
+    env_browsers = param.List()
+    file_browser = param.ClassSelector(HpcFileBrowser)
+    file_browser_col = param.ClassSelector(pn.Column, default=pn.Column(None, sizing_mode='stretch_width'))
+    hide_file_browser = param.Action(lambda self: self.show_file_browser(False), label='Close')
 
-    def update_environ(self, *events):
-        for event in events:
-            _, is_key, i = event.obj.css_classes[0].split('_')
-            is_key = is_key == 'key'
-            i = int(i)
-            if is_key:
-                if i > -1:
-                    self.environment_variables[event.new] = self.environment_variables[event.old]
-                    del self.environment_variables[event.old]
-                else:
-                    self.environment_variables[event.new] = None
+    @param.depends('uit_client', watch=True)
+    def configure_file_browser(self):
+        self.file_browser = HpcFileBrowser(self.uit_client)
+
+    def show_file_browser(self, show):
+        self.file_browser_col[0] = pn.WidgetBox(
+            pn.Param(self.param.hide_file_browser,
+                     widgets={'hide_file_browser': {'button_type': 'primary', 'width': 200}}),
+            self.file_browser.panel,
+            sizing_mode='stretch_width',
+        ) if show else None
+
+        if not show:
+            for btn in self.env_browsers:
+                btn.loading = False
+
+    def update_environ(self, event):
+        _, is_key, i = event.obj.css_classes[0].split('_')
+        is_key = is_key == 'key'
+        i = int(i)
+        if is_key:
+            if i > -1:
+                self.environment_variables[event.new] = self.environment_variables[event.old]
+                del self.environment_variables[event.old]
             else:
-                key = self.env_names[i].value
-                self.environment_variables[key] = event.new
+                self.environment_variables[event.new] = None
+        else:
+            key = self.env_names[i].value
+            self.environment_variables[key] = event.new
 
         self.param.trigger('environment_variables')
 
@@ -97,30 +117,26 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         widget.param.watch(self.update_environ, ['value'], onlychanged=True)
         return widget
 
-    @param.depends()
     def env_file_browser_widget(self, tag, **kwargs):
-        widget = pn.widgets.Button(name='📂', css_classes=[tag], width=30, align='end', **kwargs)
+        widget = pn.widgets.Button(name='📂', css_classes=[tag], width=40, align='end', **kwargs)
         widget.on_click(self.toggle_file_browser)
         return widget
 
-    def toggle_file_browser(self, *events):
-        for event in events:
-            _, is_key, i = event.obj.css_classes[0].split('_')
-            i = int(i)
-            new_val = self.env_values[i]
-            new_browser_pn = HpcFileBrowser(self.uit_client)
-            new_browser_pn.callback = partial(self.new_callback, a=new_val, b=new_browser_pn)
-            self.browse_view[:] = [new_browser_pn.panel]
+    def toggle_file_browser(self, event):
+        button = event.obj
+        button.loading = True
+        _, is_key, i = button.css_classes[0].split('_')
+        self.file_browser.callback = partial(self.update_file, index=int(i))
+        self.show_file_browser(True)
 
-    @staticmethod
-    def new_callback(new_selection, a, b):
-        a.value = b.value[0]
+    def update_file(self, _, index):
+        self.env_values[index].value = self.file_browser.value[0]
 
     @param.depends('environment_variables')
     def environment_variables_view(self):
         self.env_names = list()
         self.env_values = list()
-        self.env_browser = list()
+        self.env_browsers = list()
 
         for i, (k, v) in enumerate(self.environment_variables.items()):
             name_widget = self.env_var_widget(val=k, tag=f'env_key_{i}')
@@ -128,21 +144,19 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
             browser_widget = self.env_file_browser_widget(tag=f'env_browser_{i}')
             self.env_names.append(name_widget)
             self.env_values.append(val_widget)
-            self.env_browser.append(browser_widget)
+            self.env_browsers.append(browser_widget)
 
         self.env_names.append(self.env_var_widget(val=None, tag='env_key_-1', placeholder='NEW_ENV_VAR'))
         self.env_values.append(self.env_var_widget(val=None, tag='env_val_-1', disabled=True))
-        self.env_browser.append(self.env_file_browser_widget(tag='env_browser_-1', disabled=True))
+        self.env_browsers.append(self.env_file_browser_widget(tag='env_browser_-1', disabled=True))
 
         self.env_names[0].name = 'Name'
         self.env_values[0].name = 'Value'
 
         return pn.Card(
-            pn.Column(
-                *[pn.Row(k, v, b, width_policy='max') for k, v, b in
-                  zip(self.env_names, self.env_values, self.env_browser)],
-            ),
-            self.browse_view,
+            *[pn.Row(k, v, b, sizing_mode='stretch_width') for k, v, b in
+              zip(self.env_names, self.env_values, self.env_browsers)],
+            self.file_browser_col,
             title='Environment Variables',
             sizing_mode='stretch_width',
         )
@@ -195,7 +209,6 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         prev_stage.reset()
         self.pipeline_obj.param.trigger('previous')
         self.pipeline_obj._block = False
-
 
     def pre_validate(self):
         pass
@@ -327,7 +340,6 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             args={'other_btn': action_btn, 'btn': cancel_btn},
             code=code,
         )
-
         return pn.Row(action_btn, cancel_btn)
 
     def submit_view(self):
