@@ -270,18 +270,18 @@ class FileBrowser(param.Parameterized):
         self.file_listing_widget = pn.Param(
             self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'
         )[0]
-        self.file_listing_widget.jscallback(
-            value='this.css_classes.push("pn-loading", "arcs"); this.properties.css_classes.change.emit();')
+        widgets = pn.Param(
+            self, parameters=self.controls + ['path_text'], widgets=self.control_styles, show_name=False,
+        )[:]
+        args = {'listing': self.file_listing_widget}
+        code = 'listing.css_classes.push("pn-loading", "arcs"); listing.properties.css_classes.change.emit();'
+        self.file_listing_widget.jscallback(args=args, value=code)
+        for wg in widgets[:-1]:
+            wg.js_on_click(args=args, code=code)
+        widgets[-1].jscallback(args=args, value=code)
+
         return pn.Column(
-            pn.Param(
-                self,
-                parameters=self.controls + ['path_text'],
-                widgets=self.control_styles,
-                default_layout=pn.Row,
-                width_policy='max',
-                show_name=False,
-                margin=0,
-            ),
+            pn.Row(*widgets, sizing_mode='stretch_width', margin=0),
             self.param.show_hidden,
             self.file_listing_widget,
             sizing_mode='stretch_width',
