@@ -21,8 +21,6 @@ class HpcConfigurable(param.Parameterized):
     environment_variables = param.ClassSelector(OrderedDict, default=OrderedDict())
     modules_to_load = param.ListSelector(default=[])
     modules_to_unload = param.ListSelector(default=[])
-    load_modules = param.List()
-    unload_modules = param.List()
 
     @param.depends('uit_client', watch=True)
     def update_configurable_hpc_parameters(self):
@@ -33,7 +31,7 @@ class HpcConfigurable(param.Parameterized):
         self.param.modules_to_unload.objects = sorted(self.uit_client.get_loaded_modules())
         self.param.modules_to_load.objects = self._get_modules_available_to_load()
         self.modules_to_load = self._validate_modules(self.param.modules_to_load.objects, self.modules_to_load)
-        self.unload_modules = self._validate_modules(self.param.modules_to_unload.objects, self.modules_to_unload)
+        self.modules_to_unload = self._validate_modules(self.param.modules_to_unload.objects, self.modules_to_unload)
 
     def _get_modules_available_to_load(self):
         modules = set(self.uit_client.get_available_modules(flatten=True)) - set(self.param.modules_to_unload.objects)

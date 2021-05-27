@@ -425,7 +425,13 @@ class Client:
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
         log.debug(r.text)
-        resp = r.json()
+        try:
+            resp = r.json()
+        except Exception as e:
+            log.exception(e)
+            log.debug(r)
+            log.debug(data)
+            raise UITError('This is possibly a DP Route error')
 
         if full_response:
             return resp

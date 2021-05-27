@@ -9,6 +9,7 @@ from .file_browser import HpcFileBrowser
 from .utils import HpcConfigurable
 from ..uit import Client, QUEUES
 from ..pbs_script import NODE_TYPES, factors, PbsScript
+from ..job import PbsJob
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class PbsScriptInputs(param.Parameterized):
     wall_time = param.String(default='01:00:00', precedence=6)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
-    notification_email = param.String(label='To:', precedence=9)
+    notification_email = param.String(label='Notification E-mail(s)', precedence=9)
     notify_start = param.Boolean(default=True, label='when job begins', precedence=9.1)
     notify_end = param.Boolean(default=True, label='when job ends', precedence=9.2)
 
@@ -60,11 +61,12 @@ class PbsScriptInputs(param.Parameterized):
 
             ),
             pn.layout.WidgetBox(
+                pn.widgets.TextInput.from_param(self.param.notification_email, placeholder='john.doe@example.com'),
                 pn.pane.HTML('<label class"bk">Send e-mail notifications:</label>'),
                 pn.Param(
                     self,
-                    parameters=['notification_email', 'notify_start', 'notify_end'],
-                    widgets={'notification_email': {'placeholder': 'john.doe@example.com'}, 'notify_start': {'width': 150}, 'notify_end': {'width': 150}},
+                    parameters=['notify_start', 'notify_end'],
+                    widgets={'notify_start': {'width': 150}, 'notify_end': {'width': 150}},
                     show_name=False,
                 ),
             ),
@@ -78,7 +80,9 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
     env_browsers = param.List()
     file_browser = param.ClassSelector(HpcFileBrowser)
     file_browser_col = param.ClassSelector(pn.Column, default=pn.Column(None, sizing_mode='stretch_width'))
-    hide_file_browser = param.Action(lambda self: self.show_file_browser(False), label='Close')
+    apply_file_browser = param.Action(label='Apply')
+    close_file_browser = param.Action(lambda self: self.show_file_browser(False), label='Close')
+    append_path = param.Boolean(label='Append to Path')
 
     @param.depends('uit_client', watch=True)
     def configure_file_browser(self):
@@ -86,9 +90,19 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 
     def show_file_browser(self, show):
         self.file_browser_col[0] = pn.WidgetBox(
-            pn.Param(self.param.hide_file_browser,
-                     widgets={'hide_file_browser': {'button_type': 'primary', 'width': 200}}),
             self.file_browser.panel,
+            pn.Row(
+                pn.widgets.Checkbox.from_param(self.param.append_path, width=100),
+                pn.widgets.Button.from_param(
+                    self.param.apply_file_browser,
+                    button_type='success', width=100,
+                ),
+                pn.widgets.Button.from_param(
+                    self.param.close_file_browser,
+                    button_type='primary', width=100,
+                ),
+                align='end',
+            ),
             sizing_mode='stretch_width',
         ) if show else None
 
@@ -126,11 +140,14 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         button = event.obj
         button.loading = True
         _, is_key, i = button.css_classes[0].split('_')
-        self.file_browser.callback = partial(self.update_file, index=int(i))
+        self.apply_file_browser = partial(self.update_file_path, index=int(i))
         self.show_file_browser(True)
 
-    def update_file(self, _, index):
-        self.env_values[index].value = self.file_browser.value[0]
+    def update_file_path(self, index):
+        if self.append_path:
+            self.env_values[index].value += f':{self.file_browser.value[0]}'
+        else:
+            self.env_values[index].value = self.file_browser.value[0]
 
     @param.depends('environment_variables')
     def environment_variables_view(self):
@@ -200,6 +217,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     error_messages = param.ClassSelector(pn.Column, default=pn.Column(sizing_mode='stretch_width'))
     uit_client = param.ClassSelector(Client)
     _pbs_script = param.ClassSelector(PbsScript, default=None)
+    _job = param.ClassSelector(PbsJob, default=None)
     ready = param.Boolean(default=False, precedence=-1)
     next_stage = param.Selector()
     pipeline_obj = param.ClassSelector(pn.pipeline.Pipeline)
@@ -216,8 +234,12 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def pre_submit(self):
         pass
 
+    @param.output(jobs=list)
     def submit(self):
-        return False
+        if self.job:
+            if not self.job.job_id:
+                self.job.submit()
+            return [self.job]
 
     def _submit(self):
         if not self.param.submit_btn.constant:
@@ -240,10 +262,10 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 param.depends(
                     self.param.job_name,
                     self.param.environment_variables,
-                    self.param.load_modules,
-                    self.param.unload_modules,
+                    self.param.modules_to_load,
+                    self.param.modules_to_unload,
                     watch=True
-                )(self.un_validate)  # todo only environment_variables triggers
+                )(self.un_validate)
             else:
                 self.param.validate_btn.constant = False
                 self.param.trigger('validated')
@@ -259,37 +281,44 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @property
     def pbs_script(self):
-        self._pbs_script = PbsScript(
-            name=self.job_name,
-            project_id=self.hpc_subproject,
-            num_nodes=self.nodes,
-            queue=self.queue,
-            processes_per_node=self.processes_per_node,
-            node_type=self.node_type,
-            max_time=self.wall_time,
-            system=self.uit_client.system,
-        )
+        if self._pbs_script is None:
+            self._pbs_script = PbsScript(
+                name=self.job_name,
+                project_id=self.hpc_subproject,
+                num_nodes=self.nodes,
+                queue=self.queue,
+                processes_per_node=self.processes_per_node,
+                node_type=self.node_type,
+                max_time=self.wall_time,
+                system=self.uit_client.system,
+            )
 
-        if self.notify_start or self.notify_end:
-            options = ''
-            if self.notify_start:
-                options += 'b'
-            if self.notify_end:
-                options += 'e'
-            self._pbs_script.set_directive('-m', options)
-        if self.notification_email:
-            self._pbs_script.set_directive('-M', self.notification_email)
+            if self.notify_start or self.notify_end:
+                options = ''
+                if self.notify_start:
+                    options += 'b'
+                if self.notify_end:
+                    options += 'e'
+                self._pbs_script.set_directive('-m', options)
+            if self.notification_email:
+                self._pbs_script.set_directive('-M', self.notification_email)
 
-        # remove "(default)" from any modules when adding to pbs script
-        for module in self.modules_to_load:
-            self._pbs_script.load_module(module.replace('(default)', ''))
-        for module in self.modules_to_unload:
-            self._pbs_script.unload_module(module.replace('(default)', ''))
+            # remove "(default)" from any modules when adding to pbs script
+            for module in self.modules_to_load:
+                self._pbs_script.load_module(module.replace('(default)', ''))
+            for module in self.modules_to_unload:
+                self._pbs_script.unload_module(module.replace('(default)', ''))
 
-        self._pbs_script._environment_variables = self.environment_variables
-        self._pbs_script.execution_block = self.execution_block
+            self._pbs_script._environment_variables = self.environment_variables
+            self._pbs_script.execution_block = self.execution_block
 
         return self._pbs_script
+
+    @property
+    def job(self):
+        if self._job is None:
+            self._job = PbsJob(script=self.pbs_script, client=self.uit_client, workspace=self.user_workspace)
+        return self._job
 
     @property
     def execution_block(self):
