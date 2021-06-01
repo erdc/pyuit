@@ -253,42 +253,6 @@ class FileBrowser(param.Parameterized):
         self._disabled = disabled
 
     @property
-    def controls(self):
-        return ['home', 'up', 'refresh_control']
-
-    @property
-    def control_styles(self):
-        styles = {c: {'width': 25} for c in self.controls}
-
-        styles.update(
-            path_text={'width_policy': 'max'},
-        )
-        return styles
-
-    @param.depends('_disabled')
-    def panel(self):
-        self.file_listing_widget = pn.Param(
-            self.param.file_listing, widgets={'file_listing': {'height': 200}}, width_policy='max'
-        )[0]
-        widgets = pn.Param(
-            self, parameters=self.controls + ['path_text'], widgets=self.control_styles, show_name=False,
-        )[:]
-        args = {'listing': self.file_listing_widget}
-        code = 'listing.css_classes.push("pn-loading", "arcs"); listing.properties.css_classes.change.emit();'
-        self.file_listing_widget.jscallback(args=args, value=code)
-        for wg in widgets[:-1]:
-            wg.js_on_click(args=args, code=code)
-        widgets[-1].jscallback(args=args, value=code)
-
-        return pn.Column(
-            pn.Row(*widgets, sizing_mode='stretch_width', margin=0),
-            self.param.show_hidden,
-            self.file_listing_widget,
-            sizing_mode='stretch_width',
-            margin=0,
-        )
-
-    @property
     def value(self):
         if self.file_listing:
             return [str(self.path / v) for v in self.file_listing]
@@ -324,9 +288,12 @@ class FileBrowser(param.Parameterized):
             if fn.is_dir():
                 self.path = fn
                 self.file_listing = []
+            else:
+                self.path_text = fn.as_posix()
             self.do_callback()
 
     def refresh(self):
+        self.path_text = self.path.as_posix()
         self.file_listing = ['.']
 
     @param.depends('path_text', watch=True)
@@ -335,11 +302,14 @@ class FileBrowser(param.Parameterized):
         path = self._new_path(self.path_text)
         if path and path.is_dir():
             self.path = path
+            self.file_listing = []
         elif path and path.is_file():
-            self.path = path.parent
-            self.param.set_param(file_listing=[path.name])
+            with param.discard_events(self):
+                self.path = path.parent
+                self.file_listing = [path.name]
         else:
             log.warning(f'Invalid Directory: {path}')
+        self.stop_loading()
 
     @param.depends('path', 'show_hidden', watch=True)
     def make_options(self):
@@ -355,6 +325,42 @@ class FileBrowser(param.Parameterized):
             log.exception(str(e))
 
         self.param.file_listing.objects = sorted(selected)
+
+    @property
+    def controls(self):
+        return ['home', 'up', 'refresh_control']
+
+    @property
+    def control_styles(self):
+        styles = {c: {'width': 25} for c in self.controls}
+
+        styles.update(
+            path_text={'width_policy': 'max'},
+        )
+        return styles
+
+    @param.depends('_disabled')
+    def panel(self):
+        self.file_listing_widget = pn.widgets.MultiSelect.from_param(
+            self.param.file_listing, height=200, width_policy='max'
+        )
+        widgets = pn.Param(
+            self, parameters=self.controls + ['path_text'], widgets=self.control_styles, show_name=False,
+        )[:]
+        args = {'listing': self.file_listing_widget}
+        code = 'listing.css_classes.push("pn-loading", "arcs"); listing.properties.css_classes.change.emit();'
+        self.file_listing_widget.jscallback(args=args, value=code)
+        for wg in widgets[:-1]:
+            wg.js_on_click(args=args, code=code)
+        widgets[-1].jscallback(args=args, value=code)
+
+        return pn.Column(
+            pn.Row(*widgets, sizing_mode='stretch_width', margin=0),
+            self.param.show_hidden,
+            self.file_listing_widget,
+            sizing_mode='stretch_width',
+            margin=0,
+        )
 
 
 class HpcPath(Path, PurePosixPath):
@@ -533,7 +539,7 @@ class FileSelector(param.Parameterized):
 
     def update_file(self, new_selection):
         if new_selection:
-            self.param.set_param(file_path=self.file_browser.value[0])
+            self.file_path = self.file_browser.value[0]
 
     def toggle(self):
         self.show_browser = not self.show_browser
@@ -542,7 +548,6 @@ class FileSelector(param.Parameterized):
     def initialize_file_browser(self):
         if self.show_browser:
             self.file_browser.path_text = self.file_path
-            # self.file_browser.init()
 
     @param.depends('show_browser')
     def file_browser_panel(self):
