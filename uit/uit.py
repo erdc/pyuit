@@ -424,14 +424,15 @@ class Client:
         data = {'command': command, 'workingdir': working_dir}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
+
+        if r.status_code == 504:
+            if raise_on_error:
+                raise UITError('Gateway Timeout')
+            else:
+                return 'ERROR! Gateway Timeout'
+
         log.debug(r.text)
-        try:
-            resp = r.json()
-        except Exception as e:
-            log.exception(e)
-            log.debug(r)
-            log.debug(data)
-            raise UITError('This is possibly a DP Route error')
+        resp = r.json()
 
         if full_response:
             return resp

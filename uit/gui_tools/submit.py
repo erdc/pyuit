@@ -143,7 +143,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         self.apply_file_browser = partial(self.update_file_path, index=int(i))
         self.show_file_browser(True)
 
-    def update_file_path(self, index):
+    def update_file_path(self, _, index):
         if self.append_path:
             self.env_values[index].value += f':{self.file_browser.value[0]}'
         else:
@@ -151,6 +151,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 
     @param.depends('environment_variables')
     def environment_variables_view(self):
+        self.environment_variables.pop('', None)  # Clear blank key if there is one
         self.env_names = list()
         self.env_values = list()
         self.env_browsers = list()

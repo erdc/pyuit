@@ -211,7 +211,7 @@ class FileBrowser(param.Parameterized):
     path_text = param.String(label='', precedence=0.3)
     home = param.Action(lambda self: self.go_home(), label='🏠', precedence=0.1)
     up = param.Action(lambda self: self.move_up(), label='⬆️', precedence=0.2)
-    refresh_control = param.Action(lambda self: self.refresh(), label='🔄', precedence=0.25)
+    refresh_control = param.Action(lambda self: self.validate(), label='🔄', precedence=0.25)
     callback = param.Action(lambda x: None, precedence=-1)
     file_listing = param.ListSelector(default=[], label='Single click to select a file or directory:', precedence=0.5)
     patterns = param.List(precedence=-1, default=['*'])
@@ -271,12 +271,12 @@ class FileBrowser(param.Parameterized):
             self.callback(changed)
 
     def go_home(self):
-        self.path = Path.cwd()
+        self.path_text = Path.cwd().as_posix()
         self.file_listing = []
         self.do_callback()
 
     def move_up(self):
-        self.path = self.path.parent
+        self.path_text = self.path.parent.as_posix()
         self.file_listing = []
         self.do_callback()
 
@@ -285,16 +285,8 @@ class FileBrowser(param.Parameterized):
         if self.file_listing:
             filename = self.file_listing[0]
             fn = self.path / filename
-            if fn.is_dir():
-                self.path = fn
-                self.file_listing = []
-            else:
-                self.path_text = fn.as_posix()
+            self.path_text = fn.as_posix()
             self.do_callback()
-
-    def refresh(self):
-        self.path_text = self.path.as_posix()
-        self.file_listing = ['.']
 
     @param.depends('path_text', watch=True)
     def validate(self):
@@ -309,11 +301,10 @@ class FileBrowser(param.Parameterized):
                 self.file_listing = [path.name]
         else:
             log.warning(f'Invalid Directory: {path}')
-        self.stop_loading()
+        self.make_options()
 
-    @param.depends('path', 'show_hidden', watch=True)
+    @param.depends('show_hidden', watch=True)
     def make_options(self):
-        self.path_text = self.path.as_posix()
         selected = []
         try:
             selected = [p.name + '/' for p in self.path.glob('*') if p.is_dir()]
@@ -325,6 +316,7 @@ class FileBrowser(param.Parameterized):
             log.exception(str(e))
 
         self.param.file_listing.objects = sorted(selected)
+        self.stop_loading()
 
     @property
     def controls(self):
@@ -372,7 +364,7 @@ class HpcPath(Path, PurePosixPath):
         super()._init(template=template)
         self._is_dir = is_dir
         self._is_file = None
-        self._ls = []
+        self._ls = None
         self.uit_client = uit_client
 
     def __new__(cls, *args, is_dir=None, uit_client=None):
@@ -396,9 +388,16 @@ class HpcPath(Path, PurePosixPath):
 
     @property
     def ls(self):
-        if not self._ls:
+        if self._ls is None:
             self._get_metadata()
         return self._ls
+
+    @property
+    def parent(self):
+        parent = super().parent
+        parent.uit_client = self.uit_client
+        parent._is_dir = True
+        return parent
 
     @_ensure_connected
     def _get_metadata(self):
@@ -419,6 +418,7 @@ class HpcPath(Path, PurePosixPath):
                 self._ls = self.parse_list_dir(self.as_posix())
         elif self.name in (f['name'] for f in ls['files']):
             self._is_file = True
+            self._ls = ''
 
     def parse_list_dir(self, base_path):
         TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
@@ -497,13 +497,13 @@ class HpcFileBrowser(FileBrowser):
 
     @HpcPath._ensure_connected
     def go_home(self):
-        self.path = self._new_path(self.uit_client.HOME)
+        self.path_text = self._new_path(self.uit_client.HOME).as_posix()
         self.file_listing = []
         self.do_callback()
 
     @HpcPath._ensure_connected
     def go_to_workdir(self):
-        self.path = self._new_path(self.uit_client.WORKDIR)
+        self.path_text = self._new_path(self.uit_client.WORKDIR).as_posix()
         self.file_listing = []
         self.do_callback()
 
