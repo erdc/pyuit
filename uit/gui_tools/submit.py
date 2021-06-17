@@ -217,7 +217,6 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     job_name = param.String(label='Job Name (Required, cannot contain spaces or tabs)')
     error_messages = param.ClassSelector(pn.Column, default=pn.Column(sizing_mode='stretch_width'))
     uit_client = param.ClassSelector(Client)
-    _pbs_script = param.ClassSelector(PbsScript, default=None)
     _job = param.ClassSelector(PbsJob, default=None)
     ready = param.Boolean(default=False, precedence=-1)
     next_stage = param.Selector()
@@ -239,6 +238,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def submit(self):
         if self.job:
             if not self.job.job_id:
+                self.job.script = self.pbs_script  # update script to ensure it reflects any UI updates
                 self.job.submit()
             return [self.job]
 
@@ -282,38 +282,37 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @property
     def pbs_script(self):
-        if self._pbs_script is None:
-            self._pbs_script = PbsScript(
-                name=self.job_name,
-                project_id=self.hpc_subproject,
-                num_nodes=self.nodes,
-                queue=self.queue,
-                processes_per_node=self.processes_per_node,
-                node_type=self.node_type,
-                max_time=self.wall_time,
-                system=self.uit_client.system,
-            )
+        pbs_script = PbsScript(
+            name=self.job_name,
+            project_id=self.hpc_subproject,
+            num_nodes=self.nodes,
+            queue=self.queue,
+            processes_per_node=self.processes_per_node,
+            node_type=self.node_type,
+            max_time=self.wall_time,
+            system=self.uit_client.system,
+        )
 
-            if self.notify_start or self.notify_end:
-                options = ''
-                if self.notify_start:
-                    options += 'b'
-                if self.notify_end:
-                    options += 'e'
-                self._pbs_script.set_directive('-m', options)
-            if self.notification_email:
-                self._pbs_script.set_directive('-M', self.notification_email)
+        if self.notify_start or self.notify_end:
+            options = ''
+            if self.notify_start:
+                options += 'b'
+            if self.notify_end:
+                options += 'e'
+            pbs_script.set_directive('-m', options)
+        if self.notification_email:
+            pbs_script.set_directive('-M', self.notification_email)
 
-            # remove "(default)" from any modules when adding to pbs script
-            for module in self.modules_to_load:
-                self._pbs_script.load_module(module.replace('(default)', ''))
-            for module in self.modules_to_unload:
-                self._pbs_script.unload_module(module.replace('(default)', ''))
+        # remove "(default)" from any modules when adding to pbs script
+        for module in self.modules_to_load:
+            pbs_script.load_module(module.replace('(default)', ''))
+        for module in self.modules_to_unload:
+            pbs_script.unload_module(module.replace('(default)', ''))
 
-            self._pbs_script._environment_variables = self.environment_variables
-            self._pbs_script.execution_block = self.execution_block
+        pbs_script._environment_variables = self.environment_variables
+        pbs_script.execution_block = self.execution_block
 
-        return self._pbs_script
+        return pbs_script
 
     @property
     def job(self):
