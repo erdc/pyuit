@@ -14,13 +14,16 @@ log = logging.getLogger(__name__)
 class PbsJob:
 
     def __init__(self, script, client=None, label=None, workspace=None,
-                 transfer_input_files=None, home_input_files=None, archive_input_files=None, working_dir=None):
+                 transfer_input_files=None, home_input_files=None, archive_input_files=None,
+                 working_dir=None, description=None, metadata=None):
         self.script = script
         self.client = client or Client()
         self.workspace = workspace or Path.cwd()
         self.transfer_input_files = transfer_input_files or list()
         self.home_input_files = home_input_files or list()
         self.archive_input_files = archive_input_files or list()
+        self.description = description
+        self.metadata = metadata or dict()
         self.label = label
         self._working_dir = working_dir
         self._job_id = None
