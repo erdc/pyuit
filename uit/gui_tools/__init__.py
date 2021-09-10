@@ -3,6 +3,7 @@ from .submit import HpcSubmit
 from .monitor import HpcJobMonitor
 from .results import HpcJobResultsViewer
 from .utils import (
+    make_bk_label,
     HpcConfigurable,
     HpcWorkspaces,
     PbsJobTabbedViewer,

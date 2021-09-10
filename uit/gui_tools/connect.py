@@ -3,9 +3,11 @@ import logging
 import param
 import panel as pn
 
+from .utils import make_bk_label
+
 from uit.uit import Client, HPC_SYSTEMS, UITError
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class HpcAuthenticate(param.Parameterized):
@@ -68,7 +70,7 @@ class HpcConnect(param.Parameterized):
 
     def __init__(self, **params):
         super().__init__(**params)
-        self.advanced_pn = None
+        self.advanced_pn = pn.Column(name='Advanced Options')
         self.system_pn = pn.Column(
             pn.panel(self, parameters=['system'], show_name=False),
             pn.Spacer(),
@@ -84,20 +86,17 @@ class HpcConnect(param.Parameterized):
             options.insert(0, None)
             self.param.login_node.objects = options
             self.param.login_node.names = {'Random': None}
+            self.update_exclude_nodes_visibility()
 
     @param.depends('login_node', watch=True)
     def update_exclude_nodes_visibility(self):
-        self.param.exclude_nodes.precedence = 1 if self.login_node is None else -1
+        self.advanced_pn.clear()
+        self.advanced_pn.append(pn.widgets.Select.from_param(self.param.login_node, width=300))
         if self.login_node is None:
             self.advanced_pn.extend([
-                self.param.exclude_nodes.label,
-                pn.Param(
-                    self.param.exclude_nodes,
-                    widgets={'exclude_nodes': pn.widgets.CrossSelector},
-                ),
+                make_bk_label(self.param.exclude_nodes.label),
+                pn.widgets.CrossSelector.from_param(self.param.exclude_nodes),
             ])
-        else:
-            self.advanced_pn[:] = self.advanced_pn[:1]
 
     @param.depends('_next_stage', watch=True)
     def update_next_stage(self):
@@ -115,7 +114,7 @@ class HpcConnect(param.Parameterized):
                 retry_on_failure=retry,
             )
         except UITError as e:
-            log.exception(e)
+            logger.exception(e)
             self.exclude_nodes.append(self.uit_client.login_node)
             self.disconnect()
             self.system_pn[-1] = pn.pane.Alert(f'{e}<br/>Try connecting again.'.format(alert_type='danger'),
@@ -134,15 +133,7 @@ class HpcConnect(param.Parameterized):
     @param.depends('connected')
     def view(self):
         header = '# Connect to HPC System'
-        connect_btn = pn.Param(
-            self.param.connect_btn,
-            widgets={
-                'connect_btn': {
-                    'button_type': 'success',
-                    'width': 100,
-                }
-            },
-        )[0]
+        connect_btn = pn.widgets.Button.from_param(self.param.connect_btn, button_type='success', width=100)
         connect_btn.js_on_click(
             args={'btn': connect_btn, },
             code='btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit();'
@@ -151,31 +142,14 @@ class HpcConnect(param.Parameterized):
         if self.connected is None:
             content = None
         elif self.connected is False:
-            self.advanced_pn = pn.panel(
-                self,
-                parameters=['login_node', 'exclude_nodes'],
-                widgets={'exclude_nodes': pn.widgets.CrossSelector},
-                show_name=False,
-                name='Advanced Options',
-            )
-            if self.login_node is None:
-                self.advanced_pn.insert(1, self.param.exclude_nodes.label)
             content = pn.Column(pn.layout.Tabs(self.system_pn, self.advanced_pn), connect_btn)
         else:
             self.param.connect_btn.label = 'Re-Connect'
-            btns = pn.Param(
-                self,
-                parameters=['connect_btn', 'disconnect_btn'],
-                widgets={
-                    'disconnect_btn': {'button_type': 'danger', 'width': 100},
-                    'connect_btn': {'button_type': 'success', 'width': 100}
-                },
-                show_name=False,
-                default_layout=pn.Row,
-            )
+            connect_btn = pn.widgets.Button.from_param(self.param.connect_btn, button_type='success', width=100)
+            disconnect_btn = pn.widgets.Button.from_param(self.param.disconnect_btn, button_type='danger', width=100)
             return pn.Column(
                 header,
-                btns,
+                pn.Row(connect_btn, disconnect_btn),
                 pn.panel(self, parameters=['connection_status'], show_name=False, width=400),
             )
 

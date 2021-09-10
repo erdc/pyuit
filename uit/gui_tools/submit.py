@@ -1,6 +1,7 @@
-from functools import partial
 import re
 import logging
+from functools import partial
+from itertools import zip_longest
 
 import param
 import panel as pn
@@ -11,7 +12,7 @@ from ..uit import Client, QUEUES
 from ..pbs_script import NODE_TYPES, factors, PbsScript
 from ..job import PbsJob
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class PbsScriptInputs(param.Parameterized):
@@ -63,12 +64,8 @@ class PbsScriptInputs(param.Parameterized):
             pn.layout.WidgetBox(
                 pn.widgets.TextInput.from_param(self.param.notification_email, placeholder='john.doe@example.com'),
                 pn.pane.HTML('<label class"bk">Send e-mail notifications:</label>'),
-                pn.Param(
-                    self,
-                    parameters=['notify_start', 'notify_end'],
-                    widgets={'notify_start': {'width': 150}, 'notify_end': {'width': 150}},
-                    show_name=False,
-                ),
+                pn.widgets.Checkbox.from_param(self.param.notify_start, width=150),
+                pn.widgets.Checkbox.from_param(self.param.notify_end, width=150),
             ),
             name='PBS Options'
         )
@@ -78,6 +75,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
     env_names = param.List()
     env_values = param.List()
     env_browsers = param.List()
+    env_delete_buttons = param.List()
     file_browser = param.ClassSelector(HpcFileBrowser)
     file_browser_col = param.ClassSelector(pn.Column, default=pn.Column(None, sizing_mode='stretch_width'))
     apply_file_browser = param.Action(label='Apply')
@@ -111,18 +109,19 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
                 btn.loading = False
 
     def update_environ(self, event):
-        _, is_key, i = event.obj.css_classes[0].split('_')
-        is_key = is_key == 'key'
+        _, widget_type, i = event.obj.css_classes[0].split('_')
         i = int(i)
-        if is_key:
+        key = self.env_names[i].value
+        if widget_type == 'key':
             if i > -1:
                 self.environment_variables[event.new] = self.environment_variables[event.old]
                 del self.environment_variables[event.old]
             else:
                 self.environment_variables[event.new] = None
-        else:
-            key = self.env_names[i].value
+        elif widget_type == 'val':
             self.environment_variables[key] = event.new
+        elif widget_type == 'del':
+            del self.environment_variables[key]
 
         self.param.trigger('environment_variables')
 
@@ -135,6 +134,15 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         widget = pn.widgets.Button(name='📂', css_classes=[tag], width=40, align='end', **kwargs)
         widget.on_click(self.toggle_file_browser)
         return widget
+
+    def env_delete_btn(self, tag):
+        btn = pn.widgets.Button(name='X', css_classes=[tag], width=35, align='end', button_type='danger')
+        btn.on_click(self.update_environ)
+        btn.js_on_click(
+            args={'btn': btn},
+            code='btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit();'
+        )
+        return btn
 
     def toggle_file_browser(self, event):
         button = event.obj
@@ -155,25 +163,27 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         self.env_names = list()
         self.env_values = list()
         self.env_browsers = list()
+        self.env_delete_buttons = list()
 
         for i, (k, v) in enumerate(self.environment_variables.items()):
             name_widget = self.env_var_widget(val=k, tag=f'env_key_{i}')
             val_widget = self.env_var_widget(val=str(v), tag=f'env_val_{i}')
             browser_widget = self.env_file_browser_widget(tag=f'env_browser_{i}')
+            delete_btn = self.env_delete_btn(tag=f'env_del_{i}')
             self.env_names.append(name_widget)
             self.env_values.append(val_widget)
             self.env_browsers.append(browser_widget)
+            self.env_delete_buttons.append(delete_btn)
 
         self.env_names.append(self.env_var_widget(val=None, tag='env_key_-1', placeholder='NEW_ENV_VAR'))
         self.env_values.append(self.env_var_widget(val=None, tag='env_val_-1', disabled=True))
-        self.env_browsers.append(self.env_file_browser_widget(tag='env_browser_-1', disabled=True))
 
         self.env_names[0].name = 'Name'
         self.env_values[0].name = 'Value'
 
         return pn.Card(
-            *[pn.Row(k, v, b, sizing_mode='stretch_width') for k, v, b in
-              zip(self.env_names, self.env_values, self.env_browsers)],
+            *[pn.Row(k, v, b, d, sizing_mode='stretch_width') for k, v, b, d in
+              zip_longest(self.env_names, self.env_values, self.env_browsers, self.env_delete_buttons)],
             self.file_browser_col,
             title='Environment Variables',
             sizing_mode='stretch_width',
@@ -184,21 +194,9 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
             self.environment_variables_view,
             pn.Card(
                 '<h3>Modules to Load</h3>',
-                pn.Param(
-                    self,
-                    parameters=['modules_to_load'],
-                    widgets={'modules_to_load': pn.widgets.CrossSelector},
-                    width=700,
-                    show_name=False
-                ),
+                pn.widgets.CrossSelector.from_param(self.param.modules_to_load, width=700),
                 '<h3>Modules to Unload</h3>',
-                pn.Param(
-                    self,
-                    parameters=['modules_to_unload'],
-                    widgets={'modules_to_unload': pn.widgets.CrossSelector},
-                    width=700,
-                    show_name=False
-                ),
+                pn.widgets.CrossSelector.from_param(self.param.modules_to_unload, width=700),
                 title='Modules',
                 sizing_mode='stretch_width',
                 collapsed=True,
@@ -350,14 +348,8 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             button = 'validate_btn'
             button_type = 'primary'
 
-        action_btn = pn.Param(
-            self.param[button],
-            widgets={button: {'button_type': button_type, 'width': 200}}
-        )[0]
-        cancel_btn = pn.Param(
-            self.param.cancel_btn,
-            widgets={'cancel_btn': {'button_type': 'danger', 'width': 200}}
-        )[0]
+        action_btn = pn.widgets.Button.from_param(self.param[button], button_type=button_type, width=200)
+        cancel_btn = pn.widgets.Button.from_param(self.param.cancel_btn, button_type='danger', width=200)
 
         code = 'btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit(); ' \
                'other_btn.disabled=true;'
@@ -382,15 +374,12 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         )
 
     def view(self):
-        return pn.Param(self.param.job_name),
+        return pn.Param(self.param.job_name)
 
     def panel(self):
         return pn.Column(
             '# Submit Job',
-            pn.Param(
-                self.param.previous_btn,
-                widgets={'previous_btn': {'button_type': 'primary', 'width': 100}}
-            ),
+            pn.widgets.Button.from_param(self.param.previous_btn, button_type='primary', width=100),
 
             pn.layout.Tabs(
                 self.submit_view(),

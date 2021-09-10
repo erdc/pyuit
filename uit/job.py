@@ -8,7 +8,7 @@ from .pbs_script import PbsScript, NODE_ARGS
 from .execution_block import EXECUTION_BLOCK_TEMPLATE
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class PbsJob:
@@ -154,7 +154,7 @@ class PbsJob:
             self.client.call(command=f'{cmd} {self.job_id}', working_dir=self.working_dir)
             return True
         except Exception as e:
-            log.exception(e)
+            logger.exception(e)
             return False
 
     def _transfer_files(self):
@@ -173,7 +173,7 @@ class PbsJob:
             home_input_files=self._render_home_input_files(),
             execution_block=self.script.execution_block,
         )
-        self.script.execution_block = execution_block
+        self.script._execution_block = execution_block
 
     def _render_home_input_files(self):
         return '\n'.join([f'cp ${{HOME}}/{f} .' for f in self.home_input_files])

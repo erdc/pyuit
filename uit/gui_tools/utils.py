@@ -12,7 +12,11 @@ from .file_browser import FileViewer
 from ..uit import Client
 from ..job import PbsJob, PbsArrayJob
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+
+
+def make_bk_label(label):
+    return pn.pane.HTML(f'<div class="bk bk-input-group"><label class="bk">{label}</label></div>')
 
 
 class HpcConfigurable(param.Parameterized):
@@ -55,7 +59,7 @@ class HpcConfigurable(param.Parameterized):
                 module = f'{row.Name}/{row.Version}'
                 modules.append(module)
             else:
-                log.info(f'Module "{m}" is  invalid.')
+                logger.info(f'Module "{m}" is  invalid.')
         return sorted(modules)
 
     def load_config_file(self):
@@ -248,7 +252,7 @@ class LogsTab(TabView):
             self.param.log.objects += self.custom_logs
             self.param.log.names = {cl.split('/')[-1]: cl for cl in self.custom_logs}
 
-    @param.depends('parent.selected_sub_job', 'log', watch=True)
+    @param.depends('parent.active_job', 'log', watch=True)
     def get_log(self):
         job = self.active_job
         if job is not None:
@@ -260,7 +264,7 @@ class LogsTab(TabView):
                 try:
                     log_content = job.get_custom_log(self.log, num_lines=self.num_log_lines)
                 except RuntimeError as e:
-                    log.exception(e)
+                    logger.exception(e)
             if self.log_content == log_content:
                 self.param.trigger('log_content')
             else:
@@ -270,9 +274,7 @@ class LogsTab(TabView):
     def panel(self):
         log_content = pn.pane.Str(self.log_content, sizing_mode='stretch_both')
 
-        refresh_btn = pn.Param(
-            self.param.refresh_btn, widgets={'refresh_btn': {'button_type': 'primary', 'width': 100}}
-        )[0]
+        refresh_btn = pn.widgets.Button.from_param(self.param.refresh_btn, button_type='primary', width=100)
         args = {'log': log_content, 'btn': refresh_btn}
         code = 'btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit(); ' \
                'log.css_classes.push("pn-loading", "arcs"); log.properties.css_classes.change.emit();'
@@ -362,25 +364,16 @@ class StatusTab(TabView):
 
     @param.depends('statuses')
     def statuses_panel(self):
-        statuses_table = pn.Param(
-            self.param.statuses,
-            widgets={'statuses': {'width': 1300}},
-        )[0] if self.statuses is not None else pn.pane.Alert('No status information available.', alert_type='info')
+        statuses_table = pn.widgets.DataFrame.from_param(self.param.statuses, width=1300) \
+            if self.statuses is not None else pn.pane.Alert('No status information available.', alert_type='info')
 
         if self.disable_update:
             buttons = None
         else:
-            update_btn, terminate_btn, yes_btn, cancel_btn = pn.Param(
-                self,
-                parameters=['update', 'terminate_btn', 'yes_btn', 'cancel_btn'],
-                widgets={
-                    'update': {'button_type': 'primary', 'width': 100},
-                    'terminate_btn': {'button_type': 'danger', 'width': 100},
-                    'yes_btn': {'button_type': 'danger', 'width': 100},
-                    'cancel_btn': {'button_type': 'success', 'width': 100},
-                },
-                show_name=False,
-            )[:]
+            update_btn = pn.widgets.Button.from_param(self.param.update, button_type='primary', width=100)
+            terminate_btn = pn.widgets.Button.from_param(self.param.terminate_btn, button_type='danger', width=100)
+            yes_btn = pn.widgets.Button.from_param(self.param.yes_btn, button_type='danger', width=100)
+            cancel_btn = pn.widgets.Button.from_param(self.param.cancel_btn, button_type='success', width=100)
 
             yes_btn.visible = False
             cancel_btn.visible = False

@@ -10,7 +10,7 @@ import panel.models.ace  # noqa: F401
 
 from uit.uit import Client
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class FileManager(param.Parameterized):
@@ -139,12 +139,12 @@ class FileTransfer(param.Parameterized):
                 self.uit_client.put_file(local_file, self.to_directory)
         elif self.to_location == 'local':
             for remote_file in self.file_manager.cross_selector.value:
-                log.info('transferring {}'.format(remote_file))
+                logger.info('transferring {}'.format(remote_file))
                 self.uit_client.get_file(remote_file,
                                          local_path=os.path.join(self.to_directory, os.path.basename(remote_file)))
 
         else:
-            log.warning('HPC to HPC transfers are not supported.')
+            logger.warning('HPC to HPC transfers are not supported.')
 
     @param.depends('from_directory', watch=True)
     def _update_file_manager(self):
@@ -200,7 +200,7 @@ class FileTransfer(param.Parameterized):
         return pn.Column(
             from_box,
             to_box,
-            pn.panel(self.param.transfer_button)
+            pn.Param(self.param.transfer_button)
         )
 
 
@@ -300,7 +300,7 @@ class FileBrowser(param.Parameterized):
                 self.path = path.parent
                 self.file_listing = [path.name]
         else:
-            log.warning(f'Invalid Directory: {path}')
+            logger.warning(f'Invalid Directory: {path}')
         self.make_options()
 
     @param.depends('show_hidden', watch=True)
@@ -313,7 +313,7 @@ class FileBrowser(param.Parameterized):
             if not self.show_hidden:
                 selected = [p for p in selected if not str(p).startswith('.')]
         except Exception as e:
-            log.exception(str(e))
+            logger.exception(str(e))
 
         self.param.file_listing.objects = sorted(selected)
         self.stop_loading()
@@ -382,7 +382,7 @@ class HpcPath(Path, PurePosixPath):
         def wrapper(self, *args, **kwargs):
             if self.uit_client and self.uit_client.connected:
                 return method(self, *args, **kwargs)
-            log.warning('Path has no uit client, or it is not connected!')
+            logger.warning('Path has no uit client, or it is not connected!')
 
         return wrapper
 
@@ -472,6 +472,9 @@ class HpcPath(Path, PurePosixPath):
         result.extend(self._get_file_list(self.ls['files'], is_dir=False))
         return [r for r in result if r.match(pattern)]
 
+    def exists(self):
+        return self.is_dir() or self.is_file()
+
 
 class HpcFileBrowser(FileBrowser):
     path = param.ClassSelector(HpcPath)
@@ -558,15 +561,10 @@ class FileSelector(param.Parameterized):
         self.param.browse_toggle.label = 'Browse'
 
     def input_row(self):
-        file_path, browse_toggle = pn.Param(
-            self,
-            parameters=['file_path', 'browse_toggle'],
-            widgets={
-                'file_path': {'width_policy': 'max', 'show_name': False},
-                'browse_toggle': {'button_type': 'primary', 'width': 100, 'align': 'end'}
-            },
-            show_name=False,
-        )[:2]
+        file_path = pn.widgets.TextInput.from_param(self.param.file_path, sizing_mode='stretch_width', show_name=False)
+        browse_toggle = pn.widgets.Button.from_param(
+            self.param.browse_toggle, button_type='primary', width=100, align='end'
+        )
 
         browse_toggle.js_on_click(
             args={'btn': browse_toggle},
@@ -636,7 +634,7 @@ class FileViewer(param.Parameterized):
                 if self.line_wrap:
                     self.file_contents = self.make_wrap(self.file_contents, self.wrap_length)
             except Exception as e:
-                log.debug(e)
+                logger.debug(e)
                 # self.file_contents = f'ERROR!: {e}'
                 self.file_contents = ''
             self.param.trigger('update_btn')
@@ -655,19 +653,12 @@ class FileViewer(param.Parameterized):
         return pn.Column(
             self.file_select.panel,
             pn.WidgetBox(
-                pn.Param(
-                    self,
-                    parameters=['cmd', 'n', 'line_wrap', 'wrap_length', 'update_btn'],
-                    widgets={
-                        'cmd': {'width': 100},
-                        'n': pn.widgets.Spinner(value=self.n, width=100, name=self.param.n.label),
-                        'line_wrap': {'width': 100, 'align': 'end'},
-                        'wrap_length': {'width': 100},
-                        'update_btn': {'button_type': 'primary', 'width': 100, 'align': 'end'}
-                    },
-                    default_layout=pn.Row,
-                    show_name=False,
-                    sizing_mode='stretch_width',
+                pn.Row(
+                    pn.widgets.Select.from_param(self.param.cmd, width=100),
+                    pn.widgets.Spinner.from_param(self.param.n, width=100),
+                    pn.widgets.Checkbox.from_param(self.param.line_wrap, width=100, align='end'),
+                    pn.widgets.Spinner.from_param(self.param.wrap_length, width=100),
+                    pn.widgets.Button.from_param(self.param.update_btn, button_type='primary', width=100, align='end'),
                 ),
             ),
             self.view,

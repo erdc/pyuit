@@ -28,7 +28,7 @@ try:
 except ImportError:
     has_pandas = False
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
@@ -201,7 +201,7 @@ class Client:
             try:
                 self._callback(*args)
             except Exception as e:
-                log.exception(e)
+                logger.exception(e)
 
     def _as_df(self, data, columns=None):
         if not has_pandas:
@@ -229,7 +229,7 @@ class Client:
         # check if we have available tokens/refresh tokens
 
         if self.token:
-            log.info('access token available, no auth needed')
+            logger.info('access token available, no auth needed')
             self._do_callback(True)
             return
 
@@ -285,9 +285,9 @@ class Client:
         except UITError as e:
             self.connected = False
             msg = f'Error while connecting to node {login_node}: {e}'
-            log.info(msg)
+            logger.info(msg)
             if retry_on_failure and num_retries > 0:
-                log.debug(f'Retrying connection {num_retries} more time(s)')
+                logger.debug(f'Retrying connection {num_retries} more time(s)')
                 num_retries -= 1
                 exclude_login_nodes = list(exclude_login_nodes) + [login_node]
                 return self.connect(
@@ -298,7 +298,7 @@ class Client:
                 raise UITError(msg)
         else:
             msg = 'Connected successfully to {} on {}'.format(login_node, system)
-            log.info(msg)
+            logger.info(msg)
             return msg
 
     def get_auth_url(self):
@@ -351,7 +351,7 @@ class Client:
 
         # check the response
         if token.status_code == requests.codes.ok:
-            log.info('Access Token request succeeded.')
+            logger.info('Access Token request succeeded.')
         else:
             raise IOError('Token request failed.')
 
@@ -431,7 +431,7 @@ class Client:
             else:
                 return 'ERROR! Gateway Timeout'
 
-        log.debug(r.text)
+        logger.debug(r.text)
         resp = r.json()
 
         if full_response:
@@ -608,7 +608,7 @@ class Client:
                     k, v = l.split('=', 1)
                     d[k.strip()] = v.strip()
                 except ValueError:
-                    log.exception('ERROR', l)
+                    logger.exception('ERROR', l)
             d['Variable_List'] = dict(kv.split('=') for kv in d.get('Variable_List').split(','))
             statuses[lines[0]] = d
         return statuses

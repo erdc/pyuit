@@ -81,7 +81,8 @@ class PbsScript(object):
         self._modules = {}
         self._module_use = []
         self._environment_variables = collections.OrderedDict()
-        self.execution_block = ""
+        self._execution_block = None
+        self.execution_block = ''  # User defined execution block
         self.configure_job_dir = False
 
     def __repr__(self):
@@ -302,7 +303,8 @@ class PbsScript(object):
     def render_execution_block(self):
         header = self._create_block_header_string('Execution Block')
         job_dir_config = self.render_job_dir_configuration()
-        return header + '\n' + job_dir_config + self.execution_block
+        execution_block = self._execution_block or self.execution_block
+        return header + '\n' + job_dir_config + execution_block
 
     def render(self):
         """Render the PBS Script.
