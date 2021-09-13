@@ -215,13 +215,10 @@ class Client:
             return path.as_posix()
         return path
 
-    def authenticate(self, inline=None, width=800, height=800, callback=None):
+    def authenticate(self, callback=None):
         """Ensure we have an access token. Request one from the user if we do not.
 
         Args:
-            inline (bool): Flag to show authentication site as an inline IFrame rather then opening in a browser tab.
-            width (int): Width to make the inline widget.
-            height (int): Height to make the inline widget.
             callback (func): Function to call once authentication process has happened. Should accept a boolean
                 representing the authenticated status (i.e. True means authentication was successful).
         """
@@ -241,9 +238,6 @@ class Client:
             _server = start_server(self.get_token, self.port)
 
         auth_url = self.get_auth_url()
-        if inline:
-            import IPython
-            return IPython.display.IFrame(auth_url, width, height)
 
         import webbrowser
         webbrowser.open(auth_url)

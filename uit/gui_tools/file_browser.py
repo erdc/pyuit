@@ -8,7 +8,7 @@ import param
 import panel as pn
 import panel.models.ace  # noqa: F401
 
-from uit.uit import Client
+from uit import Client, UITError
 
 logger = logging.getLogger(__name__)
 
@@ -403,7 +403,10 @@ class HpcPath(Path, PurePosixPath):
     def _get_metadata(self):
         if not self.is_absolute():
             self._str = str(self.uit_client.HOME / self)
-        ls = self.parse_list_dir(self.parent.as_posix())
+        try:
+            ls = self.parse_list_dir(self.parent.as_posix())
+        except UITError:
+            raise ValueError(f'Invalid file path {self.parent.as_posix()}')
         if 'dirs' not in ls:  # then ls is invalid
             raise ValueError(f'Invalid file path {self.parent.as_posix()}')
         self._is_dir = False
@@ -473,7 +476,10 @@ class HpcPath(Path, PurePosixPath):
         return [r for r in result if r.match(pattern)]
 
     def exists(self):
-        return self.is_dir() or self.is_file()
+        try:
+            return self.is_dir() or self.is_file()
+        except ValueError:
+            return False
 
 
 class HpcFileBrowser(FileBrowser):
