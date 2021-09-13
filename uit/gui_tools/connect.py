@@ -16,7 +16,6 @@ class HpcAuthenticate(param.Parameterized):
     auth_code = param.String(default='', label='Code')
     ready = param.Boolean(default=False, precedence=-1)
     _next_stage = param.Selector()
-    inline = param.Boolean(default=True, precedence=-1)
 
     def __init__(self, uit_client=None, web_based=True, **params):
         super().__init__(**params)
@@ -35,13 +34,13 @@ class HpcAuthenticate(param.Parameterized):
     @param.depends('authenticated')
     def view(self):
         if not self.authenticated:
-            popout_instructions = '' if self.inline else '<p>A new browser tab will open with the UIT+ site.</p>'
             header = '<h1>Authenticate to HPC</h1> ' \
                      '<h2>Instructions:</h2> ' \
-                     f'{popout_instructions}<p>Login to UIT+ with your CAC and then click the "Approve" button to authorize ' \
+                     '<p>A new browser tab will open with the UIT+ site.</p>' \
+                     '<p>Login to UIT+ with your CAC and then click the "Approve" button to authorize ' \
                      'this application to use your HPC account on your behalf.</p>'
 
-            auth_frame = self.uit_client.authenticate(inline=self.inline, callback=self.update_authenticated)
+            auth_frame = self.uit_client.authenticate(callback=self.update_authenticated)
             if self.web_based:
                 return pn.Column(header, auth_frame)
             header += '<p>When the "Success" message is shown copy the code (the alpha-numeric sequence after ' \
