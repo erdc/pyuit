@@ -22,9 +22,3 @@ from .file_browser import (
     SelectFile,
     FileViewer,
 )
-
-import param
-import panel as pn
-
-
-pn.Column.param._add_parameter('visible', param.Boolean(default=True))

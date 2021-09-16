@@ -112,6 +112,9 @@ class PbsScript(object):
         header += ' '
         return f'## {header.ljust(50, "-")}'
 
+    @property
+    def environment_variables(self):
+        return self._environment_variables
 
     @property
     def get_num_nodes_process_directive(self):
@@ -226,7 +229,7 @@ class PbsScript(object):
         return self._modules
 
     def set_environment_variable(self, key, value):
-        self._environment_variables[key] = value
+        self.environment_variables[key] = value
 
     def render_required_directives_block(self):
         """Render each required directive on a separate line.
@@ -284,7 +287,7 @@ class PbsScript(object):
 
     def render_environment_block(self):
         opt_list = [self._create_block_header_string('Environment')]
-        opt_list.extend([f'export {key}="{value}"' for key, value in self._environment_variables.items()])
+        opt_list.extend([f'export {key}="{value}"' for key, value in self.environment_variables.items()])
         return '\n'.join(opt_list)
 
     def render_job_dir_configuration(self):

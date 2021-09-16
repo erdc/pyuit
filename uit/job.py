@@ -434,6 +434,7 @@ def _process_l_directives(pbs_script):
 def get_job_from_pbs_script(job_id, pbs_script, uit_client):
     script = PurePosixPath(pbs_script)
     working_dir = script.parent
+    logger.debug(f'PBS script parent: {working_dir}')
     pbs_script = uit_client.call(f'cat {pbs_script}')
     matches = re.findall('#PBS -(.*)', pbs_script)
     directives = {k: v for k, v in [(i.split() + [''])[:2] for i in matches]}
