@@ -18,7 +18,7 @@ class PbsJob:
                  working_dir=None, description=None, metadata=None):
         self.script = script
         self.client = client or Client()
-        self.workspace = workspace or Path.cwd()
+        self.workspace = Path(workspace) or Path.cwd()
         self.transfer_input_files = transfer_input_files or list()
         self.home_input_files = home_input_files or list()
         self.archive_input_files = archive_input_files or list()
