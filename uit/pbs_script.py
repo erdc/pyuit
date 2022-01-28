@@ -1,4 +1,5 @@
 import collections
+import datetime
 import os
 import io
 
@@ -40,16 +41,16 @@ class PbsScript(object):
     Generates a PBS script needed to submit jobs.
 
     Attributes:
-        max_time (str): Maximum amount of time the job should be allowed to run.
-        name (str): Name of the job to be passed in the PBS Header.
-        node_type (str): Type of node on which the job should run.
-        num_nodes (int): Number of nodes to request.
-        processes_per_node (int): Number of processors per node to request.
-        project_id (str): Project ID to be passed in the PBS Header.
-        queue (str): Name of the queue into which to submit the job.
-        system (str): Name of the system to run on.
-        array_indices (tuple): Indices for a job array in the following format: (start, end, [step]).
-            e.g. (0, 9) or (0, 9, 3)
+        name (str|required): Name of the job to be passed in the PBS Header.
+        project_id (str|required): Project ID to be passed in the PBS Header.
+        num_nodes (int|required): Number of nodes to request.
+        processes_per_node (int|required): Number of processors per node to request.
+        max_time (datetime.timedelta or str|required): Maximum amount of time the job should be allowed to run. If passed as a string it should be in the form "HH:MM:SS".
+        node_type (str): Type of node on which the job should run (default='debug').
+        queue (str): Name of the queue into which to submit the job (default='compute').
+        system (str): Name of the system to run on (default='onyx').
+        array_indices (tuple): Indices for a job array in the following format: (start, end, [step])
+            e.g. (0, 9) or (0, 9, 3) (default=None).
     """
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
                  queue='debug', node_type='compute', system='onyx', array_indices=None):
@@ -73,6 +74,7 @@ class PbsScript(object):
         self.system = system.lower()
         self._array_indices = array_indices
 
+        self._validate_max_time()
         self._validate_system()
         self._validate_node_type()
         self._validate_processes_per_node()
@@ -90,6 +92,15 @@ class PbsScript(object):
 
     def __str__(self):
         return self.render()
+
+    def _validate_max_time(self):
+        if not isinstance(self.max_time, datetime.timedelta):
+            try:
+                parts = [int(p) for p in self.max_time.split(':')]
+                hours, minutes, seconds = [0, 0, *parts][-3:]
+                self.max_time = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+            except:
+                raise ValueError('max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"')
 
     def _validate_system(self):
         systems = list(NODE_TYPES.keys())
@@ -111,6 +122,14 @@ class PbsScript(object):
     def _create_block_header_string(header):
         header += ' '
         return f'## {header.ljust(50, "-")}'
+
+
+    @property
+    def walltime(self):
+        hours = self.max_time.days * 24 + self.max_time.seconds // 3600
+        minutes = self.max_time.seconds % 3600 // 60
+        seconds = self.max_time.seconds % 3600 % 60
+        return f'{hours}:{minutes:02}:{seconds:02}'
 
     @property
     def environment_variables(self):
@@ -243,7 +262,7 @@ class PbsScript(object):
             PbsDirective('-A', self.project_id),
             PbsDirective('-q', self.queue),
             self.get_num_nodes_process_directive,
-            PbsDirective('-l', f'walltime={self.max_time}'),
+            PbsDirective('-l', f'walltime={self.walltime}'),
         ]
         if self._array_indices is not None:
             directives.extend(self.job_array_directives)
