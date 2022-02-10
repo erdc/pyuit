@@ -68,13 +68,12 @@ class PbsScript(object):
         self.project_id = project_id
         self.num_nodes = num_nodes
         self.processes_per_node = processes_per_node
-        self.max_time = max_time
+        self._max_time = max_time
         self.queue = queue
         self.node_type = node_type.lower()
         self.system = system.lower()
         self._array_indices = array_indices
 
-        self._validate_max_time()
         self._validate_system()
         self._validate_node_type()
         self._validate_processes_per_node()
@@ -92,15 +91,6 @@ class PbsScript(object):
 
     def __str__(self):
         return self.render()
-
-    def _validate_max_time(self):
-        if not isinstance(self.max_time, datetime.timedelta):
-            try:
-                parts = [int(p) for p in self.max_time.split(':')]
-                hours, minutes, seconds = [0, 0, *parts][-3:]
-                self.max_time = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
-            except:
-                raise ValueError('max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"')
 
     def _validate_system(self):
         systems = list(NODE_TYPES.keys())
@@ -123,6 +113,19 @@ class PbsScript(object):
         header += ' '
         return f'## {header.ljust(50, "-")}'
 
+    @property
+    def max_time(self):
+        return self._max_time
+
+    @max_time.setter
+    def max_time(self, max_time):
+        if not isinstance(max_time, datetime.timedelta):
+            try:
+                parts = [int(p) for p in max_time.split(':')]
+                hours, minutes, seconds = [0, 0, *parts][-3:]
+                self._max_time = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+            except:
+                raise ValueError('max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"')
 
     @property
     def walltime(self):
@@ -189,18 +192,26 @@ class PbsScript(object):
         """
         self._optional_directives.append(PbsDirective(directive, value))
 
-    def get_directive(self, directive):
+    def get_directive(self, directive, first=False, default=None):
         """Get value of named directive.
 
         Args:
             directive (str): Name of the directive.
+            first (bool|default=False): Return the options from the first instance of `directive` or `default`
+                if no instances of `directive` are found.
+            default (any|default=None): The default value to return if no instances of `directive` are found.
 
         Returns:
-            str: Value of the given directive.
+            List of options from all directives with the given directive. If `first=True` then returns single string.
         """
+        options = list()
         for d in self.optional_directives:
             if d.directive == directive:
-                return d.options
+                options.append(d.options)
+        if first:
+            return [*options, default][0]
+
+        return options
 
     @property
     def optional_directives(self):

@@ -51,6 +51,17 @@ class PbsScriptInputs(param.Parameterized):
         self.param.processes_per_node.objects = factors(NODE_TYPES[self.uit_client.system][self.node_type])
         self.processes_per_node = self.param.processes_per_node.objects[-1]
 
+    def add_email_directives(self, pbs_script):
+        if self.notify_start or self.notify_end:
+            options = ''
+            if self.notify_start:
+                options += 'b'
+            if self.notify_end:
+                options += 'e'
+            pbs_script.set_directive('-m', options)
+        if self.notification_email:
+            pbs_script.set_directive('-M', self.notification_email)
+
     def pbs_options_view(self):
         self.update_hpc_connection_dependent_defaults()
         return pn.Column(
@@ -291,15 +302,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             system=self.uit_client.system,
         )
 
-        if self.notify_start or self.notify_end:
-            options = ''
-            if self.notify_start:
-                options += 'b'
-            if self.notify_end:
-                options += 'e'
-            pbs_script.set_directive('-m', options)
-        if self.notification_email:
-            pbs_script.set_directive('-M', self.notification_email)
+        self.add_email_directives(pbs_script=pbs_script)
 
         # remove "(default)" from any modules when adding to pbs script
         for module in self.modules_to_load:
