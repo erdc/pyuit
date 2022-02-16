@@ -599,13 +599,16 @@ class SelectFile(FileSelector):
 class FileViewer(param.Parameterized):
     update_btn = param.Action(lambda self: self.get_file_contents(), label='Update', precedence=5)
     n = param.Integer(default=500, bounds=(0, 10_000), precedence=2)
-    cmd = param.ObjectSelector(default='head', objects=['head', 'tail'], label='Command', precedence=1)
+    cmd = param.ObjectSelector(default='head', objects=['head', 'tail', 'grep'], label='Command', precedence=1)
     line_wrap = param.Boolean(label='Line Wrap', precedence=3)
     wrap_length = param.Integer(default=100, label='Wrap Length', precedence=4)
     file_select = param.ClassSelector(FileSelector, default=FileSelector())
     file_path = param.String()
     file_contents = param.String()
     uit_client = param.ClassSelector(Client)
+    grep_pattern = param.String(label='Search', precedence=1)
+    grep_context = param.Integer(label='Context Lines', default=4, precedence=1)
+    grep_ignore_case = param.Boolean(label='Ignore Case', precedence=1)
 
     @param.depends('uit_client', watch=True)
     def configure_file_selector(self):
@@ -636,7 +639,12 @@ class FileViewer(param.Parameterized):
     def get_file_contents(self, event=None):
         if self.uit_client.connected:
             try:
-                self.file_contents = self.uit_client.call(f'{self.cmd} -n {self.n} {self.file_select.file_path}')
+                if self.cmd == 'grep':
+                    case = '-i' if self.grep_ignore_case else ''
+                    options = f'{case} -C {self.grep_context} {self.grep_pattern}'
+                else:
+                    options = f'-n {self.n}'
+                self.file_contents = self.uit_client.call(f'{self.cmd} {options} {self.file_select.file_path}')
                 if self.line_wrap:
                     self.file_contents = self.make_wrap(self.file_contents, self.wrap_length)
             except Exception as e:
@@ -655,18 +663,33 @@ class FileViewer(param.Parameterized):
             sizing_mode='stretch_both',
         )
 
+    @param.depends('cmd')
+    def options(self):
+        widgets = [pn.widgets.Select.from_param(self.param.cmd, width=100)]
+        if self.cmd == 'grep':
+            widgets.extend([
+                pn.widgets.TextInput.from_param(self.param.grep_pattern, width=100),
+                pn.widgets.Spinner.from_param(self.param.grep_context, width=100),
+                pn.widgets.Checkbox.from_param(self.param.grep_ignore_case, width=100, align='end')
+            ])
+        else:
+            widgets.append(
+                pn.widgets.Spinner.from_param(self.param.n, width=100)
+            )
+        widgets.extend([
+            pn.widgets.Checkbox.from_param(self.param.line_wrap, width=100, align='end'),
+            pn.widgets.Spinner.from_param(self.param.wrap_length, width=100),
+            pn.widgets.Button.from_param(self.param.update_btn, button_type='primary', width=100, align='end')
+        ])
+        return pn.Row(*widgets)
+
     def panel(self):
         return pn.Column(
             self.file_select.panel,
             pn.WidgetBox(
-                pn.Row(
-                    pn.widgets.Select.from_param(self.param.cmd, width=100),
-                    pn.widgets.Spinner.from_param(self.param.n, width=100),
-                    pn.widgets.Checkbox.from_param(self.param.line_wrap, width=100, align='end'),
-                    pn.widgets.Spinner.from_param(self.param.wrap_length, width=100),
-                    pn.widgets.Button.from_param(self.param.update_btn, button_type='primary', width=100, align='end'),
-                ),
+                self.options
             ),
+            'press control + F to open search window',
             self.view,
             sizing_mode='stretch_both',
         )
