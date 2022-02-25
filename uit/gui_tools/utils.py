@@ -248,11 +248,11 @@ class LogsTab(TabView):
 
     @param.depends('custom_logs', watch=True)
     def update_log(self):
-        self.param.log.objects = ['stdout', 'stderr']
+        self.param['log'].objects = ['stdout', 'stderr']
         self.log = 'stdout'
         if self.custom_logs:
-            self.param.log.objects += self.custom_logs
-            self.param.log.names = {cl.split('/')[-1]: cl for cl in self.custom_logs}
+            self.param['log'].objects += self.custom_logs
+            self.param['log'].names = {cl.split('/')[-1]: cl for cl in self.custom_logs}
 
     @param.depends('parent.active_job', 'log', watch=True)
     def get_log(self):
@@ -289,7 +289,7 @@ class LogsTab(TabView):
         else:
             sub_job_selector = None
 
-        log_type_selector = pn.Param(self.param.log)[0]
+        log_type_selector = pn.Param(self.param['log'])[0]
         log_type_selector.width = 300
         log_type_selector.jscallback(args, value=code)
 
