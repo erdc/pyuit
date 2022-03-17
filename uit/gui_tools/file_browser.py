@@ -293,8 +293,12 @@ class FileBrowser(param.Parameterized):
         """Check that inputted path is valid - set validator accordingly"""
         path = self._new_path(self.path_text)
         if path and path.is_dir():
-            self.path = path
-            self.file_listing = []
+            with param.discard_events(self):
+                self.path = path
+                self.file_listing = []
+                # since events are discarded the widget value must be set manually
+                if self.file_listing_widget:
+                    self.file_listing_widget.value = []
         elif path and path.is_file():
             with param.discard_events(self):
                 self.path = path.parent
