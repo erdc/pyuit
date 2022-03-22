@@ -63,7 +63,7 @@ class MockClient(Client):
                    'hours_remaining', 'percent_remaining', 'background_hours_used']
         return [{k: 'mock' for k in columns}]
 
-    def call(self, command,  *args, full_response=False, working_dir=None, **kwargs):
+    def call(self, command, *args, full_response=False, working_dir=None, **kwargs):
         cmd_args = command.split()
         try:
             completed_process = run(command, capture_output=True, cwd=working_dir, shell=True)
