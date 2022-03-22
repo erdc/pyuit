@@ -19,7 +19,7 @@ from werkzeug.serving import make_server
 
 from .pbs_script import PbsScript
 from .util import robust, HpcEnv
-from .exceptions import UITError
+from .exceptions import UITError, MaxRetriesError
 
 # optional dependency
 try:
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
-HPC_SYSTEMS = ['onyx']
+HPC_SYSTEMS = ['onyx', 'narwhal']
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
 
 _auth_code = None
@@ -203,18 +203,6 @@ class Client:
             except Exception as e:
                 logger.exception(e)
 
-    def _as_df(self, data, columns=None):
-        if not has_pandas:
-            raise RuntimeError('"as_df" cannot be set to True unless the Pandas module is installed.')
-        return pd.DataFrame.from_records(data, columns=columns)
-
-    @staticmethod
-    def _resolve_path(path, default=None):
-        path = path or default
-        if isinstance(path, Path):
-            return path.as_posix()
-        return path
-
     def authenticate(self, callback=None):
         """Ensure we have an access token. Request one from the user if we do not.
 
@@ -289,7 +277,7 @@ class Client:
                     retry_on_failure=retry_on_failure, num_retries=num_retries
                 )
             else:
-                raise UITError(msg)
+                raise MaxRetriesError(msg)
         else:
             msg = 'Connected successfully to {} on {}'.format(login_node, system)
             logger.info(msg)
@@ -532,10 +520,7 @@ class Client:
         if not parse:
             return result
 
-        columns = ['system', 'subproject', 'typ', 'hours_allocated', 'hours_used',
-                   'hours_remaining', 'percent_remaining', 'background_hours_used']
-        delimiter = '========== ============= === ========== ========== ========== ======= ==========\n'
-        return self._parse_hpc_output(result, columns, as_df, delimiter=delimiter, remove_last_line=True)
+        return self._parse_hpc_output(result, as_df, remove_last_line=True)
 
     @_ensure_connected
     @robust()
@@ -570,55 +555,6 @@ class Client:
                 else:
                     result1.extend(result2)
                     return result1
-
-    def _process_status_command(self, cmd, parse, full, as_df):
-        result = self.call(cmd)
-
-        if not parse:
-            return result
-
-        if full:
-            result = self._parse_full_status(result)
-            if as_df:
-                return self._as_df(result).T
-            else:
-                return result
-
-        delimiter = '--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----\n'
-        columns = ('job_id', 'username', 'queue', 'jobname', 'session_id', 'nds', 'tsk',
-                   'requested_memory', 'requested_time', 'status', 'elapsed_time')
-
-        return self._parse_hpc_output(result, columns, as_df, delimiter=delimiter)
-
-    @staticmethod
-    def _parse_full_status(status_str):
-        clean_status_str = status_str.replace('\n\t', '').split('Job Id: ')[1:]
-        statuses = dict()
-        for status in clean_status_str:
-            lines = status.splitlines()
-            d = dict()
-            for l in lines[1:-1]:
-                try:
-                    k, v = l.split('=', 1)
-                    d[k.strip()] = v.strip()
-                except ValueError:
-                    logger.exception('ERROR', l)
-            d['Variable_List'] = dict(kv.split('=') for kv in d.get('Variable_List').split(','))
-            statuses[lines[0]] = d
-        return statuses
-
-    def _parse_hpc_output(self, output, columns, as_df, delimiter=None, remove_last_line=False):
-        if delimiter is not None:
-            lines = output.split(delimiter)[-1].splitlines()
-
-        if remove_last_line:
-            lines = lines[:-1]
-
-        rows = [{k: v for k, v in list(zip(columns, i.split()))} for i in lines]
-
-        if as_df:
-            return self._as_df(rows, columns)
-        return rows
 
     @_ensure_connected
     def submit(self, pbs_script, working_dir=None, remote_name='run.pbs', local_temp_dir=None):
@@ -691,6 +627,99 @@ class Client:
         output = self.call('module list')
         output = re.sub('.*:ERROR:.*', '', output)
         return re.split('\n?\s*\d+\)\s*', output[:-1])[1:]
+
+    def _process_status_command(self, cmd, parse, full, as_df):
+        result = self.call(cmd)
+
+        if not parse:
+            return result
+
+        if full:
+            result = self._parse_full_status(result)
+            if as_df:
+                return self._as_df(result).T
+            else:
+                return result
+
+        columns = ('job_id', 'username', 'queue', 'jobname', 'session_id', 'nds', 'tsk',
+                   'requested_memory', 'requested_time', 'status', 'elapsed_time')
+
+        return self._parse_hpc_output(result, as_df, columns=columns, delimiter_char='-')
+
+    @staticmethod
+    def _parse_full_status(status_str):
+        clean_status_str = status_str.replace('\n\t', '').split('Job Id: ')[1:]
+        statuses = dict()
+        for status in clean_status_str:
+            lines = status.splitlines()
+            d = dict()
+            for l in lines[1:-1]:
+                try:
+                    k, v = l.split('=', 1)
+                    d[k.strip()] = v.strip()
+                except ValueError:
+                    logger.exception('ERROR', l)
+            d['Variable_List'] = dict(kv.split('=') for kv in d.get('Variable_List').split(','))
+            statuses[lines[0]] = d
+        return statuses
+
+    @staticmethod
+    def _resolve_path(path, default=None):
+        path = path or default
+        if isinstance(path, Path):
+            return path.as_posix()
+        return path
+
+    @staticmethod
+    def _as_df(data, columns=None):
+        if not has_pandas:
+            raise RuntimeError('"as_df" cannot be set to True unless the Pandas module is installed.')
+        return pd.DataFrame.from_records(data, columns=columns)
+
+    @staticmethod
+    def _parse_hpc_delimiter(output, delimiter_char='='):
+        m = re.search(f'(({delimiter_char}+\s)+)', output)
+        delimiter = m.group(0)
+        return delimiter
+
+    @staticmethod
+    def _parse_hpc_headers(header_lines, delimiter):
+        col_start = 0
+        columns = []
+        for column_header in delimiter.split():
+            col_width = len(column_header)
+            col_end = col_start + col_width + 1
+            col_name = []
+            for line in header_lines:
+                if line:
+                    name_part = line[col_start: col_end].strip()
+                    if name_part:
+                        col_name.append(name_part.lower().replace(' ', '_'))
+            columns.append('_'.join(col_name))
+            col_start = col_end
+        return columns
+
+    @classmethod
+    def _parse_hpc_output(cls, output, as_df, columns=None, delimiter=None, delimiter_char='=',
+                          num_header_lines=3, remove_last_line=False):
+        delimiter = delimiter or cls._parse_hpc_delimiter(output, delimiter_char=delimiter_char)
+
+        if delimiter is not None:
+            header, content = output.split(delimiter)
+            lines = content.splitlines()
+
+            if columns is None:
+                header_lines = header.splitlines()[-num_header_lines:]
+                columns = cls._parse_hpc_headers(header_lines, delimiter)
+
+        if remove_last_line:
+            lines = lines[:-1]
+
+        rows = [{k: v for k, v in list(zip(columns, i.split()))} for i in lines]
+
+        if as_df:
+            return cls._as_df(rows, columns)
+        return rows
 
 ############################################################
 # Simple Flask Server to retrieve auth_code & access_token #

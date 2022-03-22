@@ -5,7 +5,8 @@ import panel as pn
 
 from .utils import make_bk_label
 
-from uit.uit import Client, HPC_SYSTEMS, UITError
+from ..uit import Client, HPC_SYSTEMS
+from ..exceptions import MaxRetriesError
 
 logger = logging.getLogger(__name__)
 
@@ -112,12 +113,16 @@ class HpcConnect(param.Parameterized):
                 exclude_login_nodes=self.exclude_nodes,
                 retry_on_failure=retry,
             )
-        except UITError as e:
+        except MaxRetriesError as e:
             logger.exception(e)
             self.exclude_nodes.append(self.uit_client.login_node)
             self.disconnect()
-            self.system_pn[-1] = pn.pane.Alert(f'{e}<br/>Try connecting again.'.format(alert_type='danger'),
-                                               alert_type='danger', width=500)
+            self.system_pn[-1] = pn.pane.Alert(
+                'ERROR: Unable to establish a connection with the selected HPC system. '
+                'This type of network error is often intermittent. Try connecting again in a few minutes.',
+                alert_type='danger',
+                width=500
+            )
         else:
             self.connected = self.uit_client.connected
             self.ready = self.connected

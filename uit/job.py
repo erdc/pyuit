@@ -457,7 +457,11 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
         if not job_id.endswith('[]'):
             job_id += '[]'
     j = Job(script=script, client=uit_client, working_dir=working_dir)
-    j._remote_workspace_id = working_dir.name.split('.', 1)[-1]
+    j._remote_workspace_id = working_dir.name
+    try:
+        j._remote_workspace_id = '.'.join(working_dir.name.split('.')[-3:])
+    except:
+        pass
     try:
         j.label = working_dir.parent.relative_to(uit_client.WORKDIR)
     except:

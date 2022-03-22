@@ -17,6 +17,12 @@ NODE_TYPES = {
         'bigmem': 44,
         'transfer': 1,
         'knl': 64,
+    },
+    'narwhal': {
+        'compute': 128,
+        'gpu': 128,
+        'bigmem': 128,
+        'transfer': 1,
     }
 }
 

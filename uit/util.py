@@ -8,7 +8,7 @@
 """
 from functools import wraps
 from time import sleep
-from .exceptions import DpRouteError
+from .exceptions import MaxRetriesError
 
 
 def robust(retries=5):
@@ -37,15 +37,12 @@ def robust(retries=5):
                         raise
                 sleep(1)
             kwarg_str = ', '.join(['{}="{}"'.format(k, v) for k, v in kwargs.items()])
-            if 'DP Route error' in str(last_exception):
-                raise DpRouteError('Max number of retries reached without success for '
-                                   'method: {}({}). Last exception encountered: {}'.format(func.__name__, kwarg_str,
-                                                                                           last_exception))
 
-            else:
-                raise RuntimeError('Max number of retries reached without success for '
-                                   'method: {}({}). Last exception encountered: {}'.format(func.__name__, kwarg_str,
-                                                                                           last_exception))
+            raise MaxRetriesError(
+                f'Max number of retries reached without success for method: {func.__name__}({kwarg_str}). '
+                f'Last exception encountered: {last_exception}'
+            )
+
         return wrap_f
     return wrap
 

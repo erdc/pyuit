@@ -21,4 +21,5 @@ from .file_browser import (
     FileSelector,
     SelectFile,
     FileViewer,
+    HpcPath,
 )
