@@ -520,10 +520,7 @@ class Client:
         if not parse:
             return result
 
-        columns = ['system', 'subproject', 'typ', 'hours_allocated', 'hours_used',
-                   'hours_remaining', 'percent_remaining', 'background_hours_used']
-        delimiter = '========== ============= === ========== ========== ========== ======= ==========\n'
-        return self._parse_hpc_output(result, columns, as_df, delimiter=delimiter, remove_last_line=True)
+        return self._parse_hpc_output(result, as_df, remove_last_line=True)
 
     @_ensure_connected
     @robust()
@@ -644,11 +641,10 @@ class Client:
             else:
                 return result
 
-        delimiter = '--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----\n'
         columns = ('job_id', 'username', 'queue', 'jobname', 'session_id', 'nds', 'tsk',
                    'requested_memory', 'requested_time', 'status', 'elapsed_time')
 
-        return self._parse_hpc_output(result, columns, as_df, delimiter=delimiter)
+        return self._parse_hpc_output(result, as_df, columns=columns, delimiter_char='-')
 
     @staticmethod
     def _parse_full_status(status_str):
@@ -704,8 +700,8 @@ class Client:
         return columns
 
     @classmethod
-    def _parse_hpc_output(cls, output, columns, as_df, delimiter=None, remove_last_line=False, delimiter_char='=',
-                          num_header_lines=3):
+    def _parse_hpc_output(cls, output, as_df, columns=None, delimiter=None, delimiter_char='=',
+                          num_header_lines=3, remove_last_line=False):
         delimiter = delimiter or cls._parse_hpc_delimiter(output, delimiter_char=delimiter_char)
 
         if delimiter is not None:
