@@ -19,7 +19,7 @@ from werkzeug.serving import make_server
 
 from .pbs_script import PbsScript
 from .util import robust, HpcEnv
-from .exceptions import UITError
+from .exceptions import UITError, MaxRetriesError
 
 # optional dependency
 try:
@@ -277,7 +277,7 @@ class Client:
                     retry_on_failure=retry_on_failure, num_retries=num_retries
                 )
             else:
-                raise UITError(msg)
+                raise MaxRetriesError(msg)
         else:
             msg = 'Connected successfully to {} on {}'.format(login_node, system)
             logger.info(msg)
