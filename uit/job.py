@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class PbsJob:
 
-    def __init__(self, script, client=None, label=None, workspace=None,
+    def __init__(self, script, client=None, label='pyuit', workspace=None,
                  transfer_input_files=None, home_input_files=None, archive_input_files=None,
                  working_dir=None, description=None, metadata=None):
         self.script = script

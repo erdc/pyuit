@@ -231,6 +231,9 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     next_stage = param.Selector()
     pipeline_obj = param.ClassSelector(pn.pipeline.Pipeline)
 
+    # TODO should this be here?  (see line 324)
+    user_workspace = None
+
     def _previous(self):
         prev_stage = self.pipeline_obj._stages[self.pipeline_obj._prev_stage][0]
         prev_stage.reset()

@@ -74,7 +74,7 @@ class PbsScript(object):
         self.project_id = project_id
         self.num_nodes = num_nodes
         self.processes_per_node = processes_per_node
-        self._max_time = max_time
+        self.max_time = max_time
         self.queue = queue
         self.node_type = node_type.lower()
         self.system = system.lower()

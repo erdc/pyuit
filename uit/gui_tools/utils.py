@@ -109,6 +109,8 @@ class PbsJobTabbedViewer(HpcWorkspaces):
 
     def __init__(self, **params):
         super().__init__(**params)
+        if self.jobs:
+            self.update_selected_job()
         self.status_tab = StatusTab(parent=self, disable_update=self.disable_status_update)
         self.logs_tab = LogsTab(parent=self, custom_logs=self.custom_logs)
         self.files_tab = FileViewerTab(parent=self)
@@ -329,7 +331,7 @@ class FileViewerTab(TabView):
 class StatusTab(TabView):
     title = param.String(default='Status')
     statuses = param.DataFrame(precedence=0.1)
-    update = param.Action(lambda self: self.update_statuses(), precedence=0.2)
+    update_status = param.Action(lambda self: self.update_statuses(), precedence=0.2)
     terminate_btn = param.Action(lambda self: None, label='Terminate', precedence=0.3)
     yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=0.4)
     cancel_btn = param.Action(lambda self: None, label='Cancel', precedence=0.5)
@@ -372,7 +374,7 @@ class StatusTab(TabView):
         if self.disable_update:
             buttons = None
         else:
-            update_btn = pn.widgets.Button.from_param(self.param.update, button_type='primary', width=100)
+            update_btn = pn.widgets.Button.from_param(self.param.update_status, button_type='primary', width=100)
             terminate_btn = pn.widgets.Button.from_param(self.param.terminate_btn, button_type='danger', width=100)
             yes_btn = pn.widgets.Button.from_param(self.param.yes_btn, button_type='danger', width=100)
             cancel_btn = pn.widgets.Button.from_param(self.param.cancel_btn, button_type='success', width=100)
@@ -401,9 +403,13 @@ class StatusTab(TabView):
             terminate_btn.js_on_click(args=args, code=terminate_code)
             cancel_btn.js_on_click(args=args, code=cancel_code)
 
-            code = 'btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit(); ' \
-                   'other_btn.disabled=true; ' \
-                   'statuses_table.push("pn-loading", "arcs"); statuses_table.properties.css_classes.change.emit();'
+            code = (
+                'btn.css_classes.push("pn-loading", "arcs"); '
+                'btn.properties.css_classes.change.emit(); '
+                'other_btn.disabled=true; '
+                'statuses_table.css_classes.push("pn-loading", "arcs"); '
+                'statuses_table.properties.css_classes.change.emit();'
+            )
 
             update_btn.js_on_click(
                 args={'btn': update_btn, 'other_btn': terminate_btn, 'statuses_table': statuses_table},
