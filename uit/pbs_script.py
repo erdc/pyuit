@@ -132,6 +132,8 @@ class PbsScript(object):
                 self._max_time = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
             except:
                 raise ValueError('max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"')
+        else:
+            self._max_time = max_time
 
     @property
     def walltime(self):
