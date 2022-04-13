@@ -28,7 +28,7 @@ class HpcConfigurable(param.Parameterized):
 
     @param.depends('uit_client', watch=True)
     def update_configurable_hpc_parameters(self):
-        if not self.uit_client.connected:
+        if not (self.uit_client and self.uit_client.connected):
             return
 
         self.load_config_file()
