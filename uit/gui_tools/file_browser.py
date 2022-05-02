@@ -430,8 +430,8 @@ class HpcPath(Path, PurePosixPath):
     def parse_list_dir(self, base_path):
         TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
         parsed_ls = {'path': base_path, 'dirs': [], 'files': [], 'links': []}
-        ls = self.uit_client.call(f'ls -l {base_path}')
-        for f in ls.splitlines()[1:]:
+        ls = self.uit_client.call(f'ls -l {base_path}', full_response=True)
+        for f in ls['stdout'].splitlines()[1:]:
             parts = f.split()
 
             # handle case where group name contains a space
@@ -440,17 +440,21 @@ class HpcPath(Path, PurePosixPath):
             except ValueError:
                 parts[3] += f' {parts.pop(4)}'
 
-            perms, _, owner, group, size, mon, day, time, filename = parts[:9]
-            metadata = {
-                'owner': owner,
-                'path': f'{base_path}/{filename}',
-                'size': int(size),
-                'lastmodified': f'{mon} {day} {time}',
-                'name': filename,
-                'perms': perms,
-                'type': TYPES[perms[0]],
-                'group': group
-            }
+            try:
+                perms, _, owner, group, size, mon, day, time, filename = parts[:9]
+                metadata = {
+                    'owner': owner,
+                    'path': f'{base_path}/{filename}',
+                    'size': int(size),
+                    'lastmodified': f'{mon} {day} {time}',
+                    'name': filename,
+                    'perms': perms,
+                    'type': TYPES[perms[0]],
+                    'group': group
+                }
+            except Exception as e:
+                logger.warning(f'There was an error parsing an HPC file listing for line: "{f}"\n\n{e}')
+                continue
             if perms.startswith('l'):
                 metadata['link'] = parts[-1]
             parsed_ls[metadata['type'] + 's'].append(metadata)

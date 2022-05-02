@@ -536,7 +536,7 @@ class Client:
 
         if job_id:
             if isinstance(job_id, (tuple, list)):
-                job_id = ' '.join(job_id)
+                job_id = ' '.join([j.split('.')[0] for j in job_id])
             cmd += f' -x {job_id}'
             return self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
         else:
@@ -702,18 +702,21 @@ class Client:
     @classmethod
     def _parse_hpc_output(cls, output, as_df, columns=None, delimiter=None, delimiter_char='=',
                           num_header_lines=3, remove_last_line=False):
-        delimiter = delimiter or cls._parse_hpc_delimiter(output, delimiter_char=delimiter_char)
+        if output:
+            delimiter = delimiter or cls._parse_hpc_delimiter(output, delimiter_char=delimiter_char)
 
-        if delimiter is not None:
-            header, content = output.split(delimiter)
-            lines = content.splitlines()
+            if delimiter is not None:
+                header, content = output.split(delimiter)
+                lines = content.splitlines()
 
-            if columns is None:
-                header_lines = header.splitlines()[-num_header_lines:]
-                columns = cls._parse_hpc_headers(header_lines, delimiter)
+                if columns is None:
+                    header_lines = header.splitlines()[-num_header_lines:]
+                    columns = cls._parse_hpc_headers(header_lines, delimiter)
 
-        if remove_last_line:
-            lines = lines[:-1]
+            if remove_last_line:
+                lines = lines[:-1]
+        else:
+            lines = []
 
         rows = [{k: v for k, v in list(zip(columns, i.split()))} for i in lines]
 
