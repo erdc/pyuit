@@ -119,28 +119,40 @@ class PbsScript(object):
         header += ' '
         return f'## {header.ljust(50, "-")}'
 
+    @staticmethod
+    def parse_time(time_str):
+        if isinstance(time_str, datetime.timedelta):
+            return time_str
+
+        try:
+            parts = [int(p) for p in time_str.split(':')]
+            hours, minutes, seconds = [0, 0, *parts][-3:]
+            return datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+        except:
+            return None
+
+    @staticmethod
+    def format_time(date_time_obj):
+        hours = date_time_obj.days * 24 + date_time_obj.seconds // 3600
+        minutes = date_time_obj.seconds % 3600 // 60
+        seconds = date_time_obj.seconds % 3600 % 60
+        return f'{hours}:{minutes:02}:{seconds:02}'
+
     @property
     def max_time(self):
         return self._max_time
 
     @max_time.setter
     def max_time(self, max_time):
-        if not isinstance(max_time, datetime.timedelta):
-            try:
-                parts = [int(p) for p in max_time.split(':')]
-                hours, minutes, seconds = [0, 0, *parts][-3:]
-                self._max_time = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
-            except:
-                raise ValueError('max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"')
-        else:
+        max_time = self.parse_time(max_time)
+        if max_time:
             self._max_time = max_time
+        else:
+            raise ValueError('max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"')
 
     @property
     def walltime(self):
-        hours = self.max_time.days * 24 + self.max_time.seconds // 3600
-        minutes = self.max_time.seconds % 3600 // 60
-        seconds = self.max_time.seconds % 3600 % 60
-        return f'{hours}:{minutes:02}:{seconds:02}'
+        return self.format_time(self.max_time)
 
     @property
     def environment_variables(self):
