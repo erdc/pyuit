@@ -99,12 +99,27 @@ class MockClient(Client):
 
 mock_client = MockClient()
 
-mock_script = PbsScript('mock_script', 'mock_project_id', 1, 44, 'mock_max_time')
+mock_script = PbsScript(
+    name='mock_script',
+    project_id='mock_project_id',
+    num_nodes=1,
+    processes_per_node=44,
+    max_time='00:00:01'
+)
 
 mock_job = PbsJob(mock_script, client=mock_client, label='mock')
 
+mock_array_script = PbsScript(
+    name='mock_script',
+    project_id='mock_project_id',
+    num_nodes=1,
+    processes_per_node=44,
+    max_time='00:00:01',
+    array_indices=(0, 2)
+)
+
 mock_array_job = PbsArrayJob(
-    script=PbsScript('mock_script', 'mock_project_id', 1, 44, 'mock_max_time', array_indices=(0, 2)),
+    script=mock_array_script,
     client=mock_client,
     label='mock',
 )

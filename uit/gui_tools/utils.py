@@ -69,9 +69,9 @@ class HpcConfigurable(param.Parameterized):
                 config = yaml.safe_load(f).get(self.uit_client.system, {})
             modules = config.get('modules')
             if modules:
-                self.modules_to_load = modules.get('load') or self.modules_to_load
-                self.modules_to_unload = modules.get('unload') or self.modules_to_unload
-            self.environment_variables = OrderedDict(config.get('environment_variables')) or self.environment_variables
+                self.modules_to_load = self.modules_to_load or modules.get('load')
+                self.modules_to_unload = self.modules_to_unload or modules.get('unload')
+            self.environment_variables = self.environment_variables or OrderedDict(config.get('environment_variables'))
 
 
 class HpcWorkspaces(HpcConfigurable):
@@ -100,6 +100,7 @@ class HpcWorkspaces(HpcConfigurable):
 class PbsJobTabbedViewer(HpcWorkspaces):
     title = param.String()
     jobs = param.List()
+    tabs = param.List()
     selected_job = param.ObjectSelector(default=None, label='Job')
     selected_sub_job = param.ObjectSelector(label='Experiment Point', precedence=0.1)
     active_job = param.Parameter()
@@ -173,14 +174,18 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     def header_panel(self):
         return pn.Row(pn.panel(self.param.selected_job, width_policy='max'))
 
+    @param.depends('tabs')
+    def tabs_panel(self):
+        return pn.layout.Tabs(
+            *self.tabs,
+            sizing_mode='stretch_both',
+        )
+
     def panel(self):
         return pn.Column(
             f'# {self.title}',
             self.header_panel,
-            pn.layout.Tabs(
-                *self.tabs,
-                sizing_mode='stretch_both',
-            ),
+            self.tabs_panel,
             sizing_mode='stretch_both',
         )
 

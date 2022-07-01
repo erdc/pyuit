@@ -16,30 +16,38 @@ logger = logging.getLogger(__name__)
 
 
 class PbsScriptInputs(param.Parameterized):
-    hpc_subproject = param.ObjectSelector(default=None, precedence=3)
+    hpc_subproject = param.ObjectSelector(default=None, label='HPC Subproject', precedence=3)
+    subproject_usage = param.DataFrame(precedence=3.1)
     workdir = param.String(default='', precedence=4)
-    node_type = param.ObjectSelector(default='', objects=[], precedence=5)
+    node_type = param.ObjectSelector(default='', objects=[], label='Node Type', precedence=5)
     nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1)
-    processes_per_node = param.ObjectSelector(default=1, objects=[], precedence=5.2)
-    wall_time = param.String(default='01:00:00', precedence=6)
+    processes_per_node = param.ObjectSelector(default=1, objects=[], label='Processes per Node', precedence=5.2)
+    wall_time = param.String(default='01:00:00', label='Wall Time', precedence=6)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
     notification_email = param.String(label='Notification E-mail(s)', precedence=9)
     notify_start = param.Boolean(default=True, label='when job begins', precedence=9.1)
     notify_end = param.Boolean(default=True, label='when job ends', precedence=9.2)
 
+    SHOW_USAGE_TABLE_MAX_WIDTH = 1030
+
+    @staticmethod
+    def get_default(value, objects):
+        return value if value in objects else objects[0]
+
     def update_hpc_connection_dependent_defaults(self):
         if not self.uit_client.connected:
             return
 
-        subprojects = [u['subproject'] for u in self.uit_client.show_usage()]
+        self.subproject_usage = self.uit_client.show_usage(as_df=True)
+        subprojects = self.subproject_usage.subproject.to_list()
         self.param.hpc_subproject.objects = subprojects
-        self.hpc_subproject = subprojects[0]
+        self.hpc_subproject = self.get_default(self.hpc_subproject, subprojects)
         self.workdir = self.uit_client.WORKDIR.as_posix()
         self.param.node_type.objects = list(NODE_TYPES[self.uit_client.system].keys())
-        self.node_type = self.param.node_type.objects[0]
+        self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
         self.param.queue.objects = self.uit_client.get_queues()
-        self.queue = self.queue if self.queue in self.param.queue.objects else self.param.queue.objects[0]
+        self.queue = self.get_default(self.queue, self.param.queue.objects)
 
     @param.depends('queue', watch=True)
     def update_queue_depended_bounds(self):
@@ -65,12 +73,20 @@ class PbsScriptInputs(param.Parameterized):
     def pbs_options_view(self):
         self.update_hpc_connection_dependent_defaults()
         return pn.Column(
-            pn.Param(
-                self,
-                parameters=list(PbsScriptInputs.param)[1:-3],  # all params except 'name'
-                widgets={'nodes': pn.widgets.Spinner},
-                show_name=False,
-
+            pn.Card(
+                pn.widgets.Tabulator.from_param(self.param.subproject_usage, width=self.SHOW_USAGE_TABLE_MAX_WIDTH),
+                title='Show Usage',
+                sizing_mode='stretch_width',
+                collapsed=True,
+            ),
+            pn.Column(
+                self.param.hpc_subproject,
+                self.param.workdir,
+                self.param.node_type,
+                pn.widgets.Spinner.from_param(self.param.nodes),
+                self.param.processes_per_node,
+                self.param.wall_time,
+                self.param.queue,
             ),
             pn.layout.WidgetBox(
                 pn.widgets.TextInput.from_param(self.param.notification_email, placeholder='john.doe@example.com'),
