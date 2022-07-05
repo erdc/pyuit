@@ -344,6 +344,8 @@ class Client:
         """Get User Info from the UIT server."""
         # request user info from UIT site
         data = requests.get(urljoin(UIT_API_URL, 'userinfo'), headers=self.headers, verify=self.ca_file).json()
+        if not data['success']:
+            raise UITError('Not Authenticated')
         self._userinfo = data.get('userinfo')
         self._user = self._userinfo.get('USERNAME')
         self._systems = [sys.lower() for sys in self._userinfo['SYSTEMS'].keys()]

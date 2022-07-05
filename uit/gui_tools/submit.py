@@ -202,8 +202,14 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
             self.env_browsers.append(browser_widget)
             self.env_delete_buttons.append(delete_btn)
 
-        self.env_names.append(self.env_var_widget(val=None, tag='env_key_-1', placeholder='NEW_ENV_VAR'))
-        self.env_values.append(self.env_var_widget(val=None, tag='env_val_-1', disabled=True))
+        new_key_wg = self.env_var_widget(val=None, tag='env_key_-1', placeholder='NEW_ENV_VAR')
+        new_val_wg = self.env_var_widget(val=None, tag='env_val_-1', disabled=True)
+        new_key_wg.jscallback(
+            args={'val': new_val_wg},
+            value='val.css_classes.push("pn-loading", "arcs"); val.properties.css_classes.change.emit();'
+        )
+        self.env_names.append(new_key_wg)
+        self.env_values.append(new_val_wg)
 
         self.env_names[0].name = 'Name'
         self.env_values[0].name = 'Value'
