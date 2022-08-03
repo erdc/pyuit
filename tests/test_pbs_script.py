@@ -66,13 +66,15 @@ class TestPBSScript(unittest.TestCase):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=1, max_time="20:30:30",
                             node_type='gpu', system='narwhal')
         res = pbs_gpu.render_required_directives_block()
-        self.assertIn(f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["narwhal"]["compute"]}:mpiprocs={pbs_gpu.processes_per_node}', res)
+        self.assertIn(f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["narwhal"]["compute"]}:'
+                      f'mpiprocs={pbs_gpu.processes_per_node}', res)
 
     def test_get_render_required_directives_block_for_narwhal_bigmem_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=1, max_time="20:30:30",
                             node_type='bigmem', system='narwhal')
         res = pbs_gpu.render_required_directives_block()
-        self.assertIn(f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["narwhal"]["bigmem"]}:mpiprocs={pbs_gpu.processes_per_node}', res)
+        self.assertIn(f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["narwhal"]["bigmem"]}:'
+                      f'mpiprocs={pbs_gpu.processes_per_node}', res)
 
     def test_get_render_required_directives_block_for_narwhal_transfer_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=1, max_time="20:30:30",
@@ -83,7 +85,8 @@ class TestPBSScript(unittest.TestCase):
     def test_get_render_required_directives_block_for_onyx_compute_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time="20:30:30",
                             node_type='compute', system='onyx')
-        expected = f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["onyx"]["compute"]}:mpiprocs={pbs_gpu.processes_per_node}'
+        expected = f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["onyx"]["compute"]}:' \
+                   f'mpiprocs={pbs_gpu.processes_per_node}'
 
         res = pbs_gpu.render_required_directives_block()
         self.assertIn(expected, res)
@@ -91,7 +94,8 @@ class TestPBSScript(unittest.TestCase):
     def test_get_render_required_directives_block_for_onyx_gpu_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time="20:30:30",
                             node_type='gpu', system='onyx')
-        expected = f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["onyx"]["gpu"]}:mpiprocs={pbs_gpu.processes_per_node}:ngpus=1'
+        expected = f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["onyx"]["gpu"]}:' \
+                   f'mpiprocs={pbs_gpu.processes_per_node}:ngpus=1'
 
         res = pbs_gpu.render_required_directives_block()
         self.assertIn(expected, res)
@@ -99,7 +103,8 @@ class TestPBSScript(unittest.TestCase):
     def test_get_render_required_directives_block_for_onyx_bigmem_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time="20:30:30",
                             node_type='bigmem', system='onyx')
-        expected = f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["onyx"]["bigmem"]}:mpiprocs={pbs_gpu.processes_per_node}:bigmem=1'
+        expected = f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["onyx"]["bigmem"]}:' \
+                   f'mpiprocs={pbs_gpu.processes_per_node}:bigmem=1'
 
         res = pbs_gpu.render_required_directives_block()
         self.assertIn(expected, res)
@@ -113,7 +118,8 @@ class TestPBSScript(unittest.TestCase):
     def test_get_render_required_directives_block_for_onyx_knl_node(self):
         pbs_gpu = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=1, max_time="20:30:30",
                             node_type='knl', system='onyx')
-        expected = f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["onyx"]["knl"]}:mpiprocs={pbs_gpu.processes_per_node}:nmics=1'
+        expected = f'#PBS -l select={pbs_gpu.num_nodes}:ncpus={NODE_TYPES["onyx"]["knl"]}:' \
+                   f'mpiprocs={pbs_gpu.processes_per_node}:nmics=1'
 
         res = pbs_gpu.render_required_directives_block()
         self.assertIn(expected, res)
