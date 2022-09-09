@@ -51,7 +51,8 @@ class PbsScript(object):
         project_id (str|required): Project ID to be passed in the PBS Header.
         num_nodes (int|required): Number of nodes to request.
         processes_per_node (int|required): Number of processors per node to request.
-        max_time (datetime.timedelta or str|required): Maximum amount of time the job should be allowed to run. If passed as a string it should be in the form "HH:MM:SS".
+        max_time (datetime.timedelta or str|required): Maximum amount of time the job should be allowed to run.
+                If passed as a string it should be in the form "HH:MM:SS".
         node_type (str): Type of node on which the job should run (default='debug').
         queue (str): Name of the queue into which to submit the job (default='compute').
         system (str): Name of the system to run on (default='onyx').
@@ -128,7 +129,7 @@ class PbsScript(object):
             parts = [int(p) for p in time_str.split(':')]
             hours, minutes, seconds = [0, 0, *parts][-3:]
             return datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
-        except:
+        except:  # noqa: E722
             return None
 
     @staticmethod
@@ -349,7 +350,7 @@ class PbsScript(object):
               mkdir -p ${JOBDIR}
             fi
             # cd $JOBDIR
-            
+
             '''
         return ''
 

@@ -358,13 +358,14 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 pn.pane.Alert('* You must first enter a Job Name above before you can proceed.',
                               alert_type='danger')
             )
-        elif re.match('^[^*&%\\/\s]*$', self.job_name) is None:
+        elif re.match('^[^*&%\\/\s]*$', self.job_name) is None:  # noqa: W605
             self.error_messages.append(
                 pn.pane.Alert('* Job Name cannot contain spaces or any of the following characters: * & % \\ /',
                               alert_type='danger')
             )
         errors_exist = len(self.error_messages) > 0
-        self.param.submit_btn.constant = self.param.validate_btn.constant = self.param.disable_validation.constant = errors_exist
+        self.param.submit_btn.constant = self.param.validate_btn.constant = \
+            self.param.disable_validation.constant = errors_exist
         self.param.trigger('disable_validation')  # get buttons to reload
 
     @param.depends('disable_validation', 'validated')
