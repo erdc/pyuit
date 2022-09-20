@@ -363,16 +363,26 @@ class HpcPath(Path, PurePosixPath):
     """PurePath subclass that can make some system calls on an HPC system.
 
     """
+    _has_init = hasattr(Path, '_init')  # i.e. Python 3.7
+
+    def __init__(self, *args, is_dir=None, uit_client=None):
+        super().__init__()
+        self._is_dir = is_dir
+        self.uit_client = uit_client
+        self._is_file = None if is_dir is None else not is_dir
+        self._ls = None
 
     def _init(self, template=None, is_dir=None, uit_client=None):
-        super()._init(template=template)
-        self._is_dir = is_dir
-        self._is_file = None
-        self._ls = None
+        if self._has_init:
+            super()._init(template=template)
         self.uit_client = uit_client
+        self._is_dir = is_dir
 
     def __new__(cls, *args, is_dir=None, uit_client=None):
-        self = cls._from_parts(args, init=False)
+        if cls._has_init:
+            self = cls._from_parts(args, init=False)
+        else:
+            self = cls._from_parts(args)
         self._init(is_dir=is_dir, uit_client=uit_client)
         return self
 
@@ -399,8 +409,7 @@ class HpcPath(Path, PurePosixPath):
     @property
     def parent(self):
         parent = super().parent
-        parent.uit_client = self.uit_client
-        parent._is_dir = True
+        parent.__init__(is_dir=True, uit_client=self.uit_client)
         return parent
 
     @_ensure_connected
