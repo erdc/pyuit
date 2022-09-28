@@ -360,7 +360,7 @@ class Client:
              for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']
              ] for system in self._systems
         ]
-        self._uit_urls = {k: v for l in self._uit_urls for d in l for k, v in d.items()}
+        self._uit_urls = {k: v for l in self._uit_urls for d in l for k, v in d.items()}  # noqa: E741
 
     def get_uit_url(self, login_node=None):
         """Generate the URL for a given login node
@@ -628,7 +628,7 @@ class Client:
     def get_loaded_modules(self):
         output = self.call('module list')
         output = re.sub('.*:ERROR:.*', '', output)
-        return re.split('\n?\s*\d+\)\s*', output[:-1])[1:]
+        return re.split('\n?\s*\d+\)\s*', output[:-1])[1:]  # noqa: W605
 
     def _process_status_command(self, cmd, parse, full, as_df):
         result = self.call(cmd)
@@ -655,7 +655,7 @@ class Client:
         for status in clean_status_str:
             lines = status.splitlines()
             d = dict()
-            for l in lines[1:-1]:
+            for l in lines[1:-1]:  # noqa: E741
                 try:
                     k, v = l.split('=', 1)
                     d[k.strip()] = v.strip()
@@ -680,7 +680,7 @@ class Client:
 
     @staticmethod
     def _parse_hpc_delimiter(output, delimiter_char='='):
-        m = re.search(f'(({delimiter_char}+\s)+)', output)
+        m = re.search(f'(({delimiter_char}+\s)+)', output)  # noqa: W605
         delimiter = m.group(0)
         return delimiter
 
