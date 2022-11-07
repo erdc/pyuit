@@ -47,7 +47,7 @@ class MockClient(Client):
              for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']
              ] for system in self._systems
         ]
-        self._uit_urls = {k: v for l in self._uit_urls for d in l for k, v in d.items()}
+        self._uit_urls = {k: v for l in self._uit_urls for d in l for k, v in d.items()}  # noqa: E741
 
     def connect(self, system, **kwargs):
         self._system = system
@@ -72,12 +72,12 @@ class MockClient(Client):
             if full_response:
                 return {'stdout': stdout, 'stderr': stderr}
             return stdout
-        except:
+        except:  # noqa: E722
             try:  # For Windows
                 if cmd_args[0] == 'cat':
                     with open(cmd_args[1]) as f:
                         return f.read()
-            except:
+            except:  # noqa: E722
                 pass
             return ''
 

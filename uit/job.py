@@ -95,7 +95,7 @@ class PbsJob:
 
     @property
     def job_number(self):
-        return re.split('\.|\[', self.job_id)[0]
+        return re.split('\.|\[', self.job_id)[0]  # noqa: W605
 
     @property
     def status(self):
@@ -403,7 +403,7 @@ def get_job_from_full_status(job_id, status, uit_client):
         script._array_indices = tuple(int(i) for i in status['array_indices_submitted'].split('-'))
     try:
         working_dir = PurePosixPath(status['Output_Path'].split(':')[1]).parent.relative_to(uit_client.WORKDIR)
-    except:
+    except:  # noqa: E722
         return
     label = working_dir.parent.as_posix()
     remote_workspace_id = working_dir.name.split('.', 1)[1]
@@ -460,11 +460,11 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
     j._remote_workspace_id = working_dir.name
     try:
         j._remote_workspace_id = '.'.join(working_dir.name.split('.')[-3:])
-    except:
+    except:  # noqa: E722
         pass
     try:
         j.label = working_dir.parent.relative_to(uit_client.WORKDIR)
-    except:
+    except:  # noqa: E722
         pass
     j._job_id = job_id
     j._status = 'F'
