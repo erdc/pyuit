@@ -152,7 +152,7 @@ class PbsJob:
 
     def _execute(self, cmd):
         try:
-            self.client.call(command=f'{cmd} {self.job_id}', working_dir=self.working_dir)
+            self.client.call(command=f'{cmd} {self.job_id}')
             return True
         except Exception as e:
             logger.exception(e)
