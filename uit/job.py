@@ -26,10 +26,12 @@ class PbsJob:
         self.description = description
         self.metadata = metadata or dict()
         self.label = label
+        self.cleanup = False
         self._working_dir = working_dir
         self._job_id = None
         self._status = None
         self._qstat = None
+        self._post_processing_job_id = None
         self._remote_workspace_id = None
         self._remote_workspace = None
 
@@ -93,6 +95,9 @@ class PbsJob:
     def job_id(self):
         return self._job_id
 
+    def post_processing_job_id(self):
+        return self._post_processing_job_id
+
     @property
     def job_number(self):
         return re.split('\.|\[', self.job_id)[0]  # noqa: W605
@@ -105,11 +110,10 @@ class PbsJob:
     def qstat(self):
         return self._qstat
 
-    def submit(self, working_dir=None, remote_name=None, local_temp_dir=''):
+    def submit(self, remote_name=None, local_temp_dir=''):
         """Submit a Job to HPC queue.
 
         Args:
-            working_dir(str): Path to working dir on supercomputer in which to run pbs script.
             remote_name(str): Custom name for pbs script on supercomputer. Defaults to "run.pbs".
             local_temp_dir(str): Path to local temporary directory if unable to write to os temp dir.
 
@@ -189,8 +193,17 @@ class PbsJob:
     def _render_archive_input_files(self):
         return '\n'.join([f'archive get - C ${{ARCHIVE_HOME}} {f}' for f in self.archive_input_files])
 
+    def _schedule_post_processing_job(self):
+        post_processing_script = ''
+        working_dir = ''
+        remote_name = ''
+        local_temp_dir = ''
+        self._post_processing_job_id = self.client.submit(
+            post_processing_script, working_dir=working_dir, remote_name=remote_name, local_temp_dir=local_temp_dir
+        )
+
     def _schedule_cleanup(self):
-        self.cleanup = False  # TODO rethink how cleanup should work
+        pass
         # if self.cleanup:
         #     # Render cleanup script
         #     cleanup_walltime = strfdelta(self.max_cleanup_time, '%H:%M:%S')
