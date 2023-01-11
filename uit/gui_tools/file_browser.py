@@ -446,37 +446,61 @@ class HpcPath(Path, PurePosixPath):
             raise ValueError(f'Invalid file path {self.as_posix()}')
 
     def parse_list_dir(self, base_path):
-        TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
         parsed_ls = {'path': base_path, 'dirs': [], 'files': [], 'links': []}
         ls = self.uit_client.call(f'ls -l {base_path}', full_response=True)
-        for f in ls['stdout'].splitlines()[1:]:
-            parts = f.split()
-
-            # handle case where group name contains a space
+        for ls_line in ls['stdout'].splitlines()[1:]:
             try:
-                int(parts[4])
-            except ValueError:
-                parts[3] += f' {parts.pop(4)}'
+                metadata = self._parse_list_dir_line(ls_line, base_path)
 
-            try:
-                perms, _, owner, group, size, mon, day, time, filename = parts[:9]
-                metadata = {
-                    'owner': owner,
-                    'path': f'{base_path}/{filename}',
-                    'size': int(size),
-                    'lastmodified': f'{mon} {day} {time}',
-                    'name': filename,
-                    'perms': perms,
-                    'type': TYPES[perms[0]],
-                    'group': group
-                }
+                if ls_line.startswith('l'):
+                    metadata['type'] = 'file'
+                    tmp_filename = metadata['name']
+                    symlink_target = self.uit_client.call(f'ls -ld $(realpath {base_path}/{tmp_filename})')
+                    metadata = self._parse_list_dir_line(symlink_target, base_path)
+                    # path will be full path to target of symlink, which mimics UIT+
+                    # name will be short name of symlink
+                    metadata['name'] = tmp_filename
             except Exception as e:
-                logger.warning(f'There was an error parsing an HPC file listing for line: "{f}"\n\n{e}')
+                logger.warning(f'There was an error parsing an HPC file listing for line: "{ls_line}"\n\n{e}')
                 continue
-            if perms.startswith('l'):
-                metadata['link'] = parts[-1]
+
             parsed_ls[metadata['type'] + 's'].append(metadata)
         return parsed_ls
+
+    @staticmethod
+    def _parse_list_dir_line(ls_text, base_path):
+        """ Processes one line of text from 'ls -l'
+
+        Args:
+            ls_text: string of output from 'ls -l' or 'ls -ld'
+            base_path: original path given to 'ls -l'. Used for 'path' key.
+
+        Returns:
+            dict: metadata object with owner, group, size, etc.
+        """
+
+        TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
+        parts = ls_text.split()
+
+        # handle case where group name contains a space
+        try:
+            int(parts[4])
+        except ValueError:
+            parts[3] += f' {parts.pop(4)}'
+
+        perms, _, owner, group, size, mon, day, time, filename = parts[:9]
+        metadata = {
+            'owner': owner,
+            'path': f'{base_path}/{filename}',
+            'size': int(size),
+            'lastmodified': f'{mon} {day} {time}',
+            'name': filename,
+            'perms': perms,
+            'type': TYPES[perms[0]],
+            'group': group
+        }
+
+        return metadata
 
     def is_dir(self):
         if self._is_dir is None:
