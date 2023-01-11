@@ -420,9 +420,6 @@ class HpcPath(Path, PurePosixPath):
             ls_text = self.uit_client.call(f'ls -ldL {self.as_posix()}')  # -L dereferences symlinks
         except UITError:
             raise ValueError(f'Invalid file path {self.as_posix()}')
-        if ls_text.startswith('l'):
-            # All symlinks should resolve to 'd' or '-', so this is a broken symlink
-            raise ValueError(f'Invalid file path {self.as_posix()}')
         self._is_dir = False
         self._is_file = False
         self._ls = None
