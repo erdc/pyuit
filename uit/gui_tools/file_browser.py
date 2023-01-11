@@ -417,11 +417,11 @@ class HpcPath(Path, PurePosixPath):
         if not self.is_absolute():
             self._str = str(self.uit_client.HOME / self)
         try:
-            ls_text = self.uit_client.call(f'ls -ld {self.as_posix()}')
-
-            if ls_text.startswith('l'):  # process info about symlink target to determine dir or file
-                ls_text = self.uit_client.call(f'ls -ld $(realpath {self.as_posix()})')
+            ls_text = self.uit_client.call(f'ls -ldL {self.as_posix()}')  # -L dereferences symlinks
         except UITError:
+            raise ValueError(f'Invalid file path {self.as_posix()}')
+        if ls_text.startswith('l'):
+            # All symlinks should resolve to 'd' or '-', so this is a broken symlink
             raise ValueError(f'Invalid file path {self.as_posix()}')
         self._is_dir = False
         self._is_file = False
@@ -448,7 +448,7 @@ class HpcPath(Path, PurePosixPath):
     def parse_list_dir(self, base_path):
         TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
         parsed_ls = {'path': base_path, 'dirs': [], 'files': [], 'links': []}
-        ls = self.uit_client.call(f'ls -l {base_path}', full_response=True)
+        ls = self.uit_client.call(f'ls -lL {base_path}', full_response=True)
         for f in ls['stdout'].splitlines()[1:]:
             parts = f.split()
 
