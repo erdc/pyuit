@@ -152,15 +152,11 @@ class PbsJob:
 
     def _execute(self, cmd):
         try:
-            self.client.call(command=f'{cmd} {self.job_id}')
+            self.client.call(command=f'{cmd} {self.job_id}', working_dir=self.working_dir)
             return True
         except Exception as e:
-            if cmd == 'qdel' and 'qdel: Job has finished' in str(e):
-                # qdel exits with a returncode of 35 if it is run on a job that has already finished
-                return True
-            else:
-                logger.exception(f"Error when running '{cmd}': {e}")
-                return False
+            logger.exception(e)
+            return False
 
     def _transfer_files(self):
         # Transfer any files listed in transfer_input_files to working_dir on supercomputer
