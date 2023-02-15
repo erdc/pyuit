@@ -5,6 +5,8 @@ import re
 import random
 import threading
 import tempfile
+import time
+import traceback
 import uuid
 from functools import wraps
 from itertools import chain
@@ -35,6 +37,10 @@ DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 HPC_SYSTEMS = ['onyx', 'narwhal']
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
+
+FG_RED = "\033[31m"
+FG_CYAN = "\033[36m"
+ALL_OFF = "\033[0m"
 
 _auth_code = None
 _server = None
@@ -348,6 +354,7 @@ class Client:
             raise UITError('Not Authenticated')
         self._userinfo = data.get('userinfo')
         self._user = self._userinfo.get('USERNAME')
+        logger.info(f"get_userinfo user='{self._user}'")
         self._systems = [sys.lower() for sys in self._userinfo['SYSTEMS'].keys()]
         self._login_nodes = {
             system:
@@ -407,7 +414,10 @@ class Client:
         # construct the base options dictionary
         data = {'command': command, 'workingdir': working_dir}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        logger.info(f"call command='{FG_CYAN}{command}{ALL_OFF}'    {working_dir=}")
+        debug_start_time = time.perf_counter()
         r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
+        logger.debug(self._debug_uit(locals()))
 
         if r.status_code == 504:
             if raise_on_error:
@@ -415,7 +425,6 @@ class Client:
             else:
                 return 'ERROR! Gateway Timeout'
 
-        logger.debug(r.text)
         resp = r.json()
 
         if full_response:
@@ -446,8 +455,11 @@ class Client:
         data = {'file': remote_path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         files = {'file': local_path.open(mode='rb')}
+        logger.info(f"put_file {local_path=}    {remote_path=}")
+        debug_start_time = time.perf_counter()
         r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self.headers, data=data, files=files,
                           verify=self.ca_file)
+        logger.debug(self._debug_uit(locals()))
         return r.json()
 
     @_ensure_connected
@@ -467,8 +479,11 @@ class Client:
         remote_path = self._resolve_path(remote_path)
         data = {'file': remote_path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        logger.info(f"get_file {remote_path=}    {local_path=}")
+        debug_start_time = time.perf_counter()
         r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
                           stream=True)
+        logger.debug(self._debug_uit(locals()))
         if r.status_code != 200:
             raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
                                "not have permission to access it.".format(r.status_code, remote_path))
@@ -496,8 +511,11 @@ class Client:
 
         data = {'directory': path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        logger.info(f"list_dir {path=}")
+        debug_start_time = time.perf_counter()
         r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self.headers, data=data,
                           verify=self.ca_file)
+        logger.debug(self._debug_uit(locals()))
         result = r.json()
 
         if as_df and 'path' in result:
@@ -725,6 +743,94 @@ class Client:
         if as_df:
             return cls._as_df(rows, columns)
         return rows
+
+    def _debug_uit(self, local_vars):
+        """ Show information about and around UIT+ calls for debug logging
+
+        It can be called from any UIT Client method right after using requests.post().
+        The recommended way to call this is:
+            debug_start_time = time.perf_counter()
+            r = requests.post(...)
+            logger.debug(self._debug_uit(locals()))
+
+        It will not run if DEBUG logging is not enabled since this code is not perfect,
+        and nobody wants to see debug log code cause exceptions in production.
+        It doesn't run logger.debug() itself so that the parent function will show in the logs.
+        """
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
+        debug_end_time = time.perf_counter()
+        time_text = f"{debug_end_time - local_vars['debug_start_time']:.2f}s"
+
+        debug_header = ""
+        # if 'command' in local_vars:  # call
+        #     debug_header += f"\n    command='{local_vars['command']}'"
+        # if 'local_path' in local_vars:  # put_file, get_file
+        #     debug_header += f"\n    local_path='{local_vars['local_path']}'"
+        # if 'remote_path' in local_vars:  # put_file, get_file - should be after local_path on same line
+        #     debug_header += f"\n    remote_path='{local_vars['remote_path']}'"
+        # if 'path' in local_vars:  # list_directory
+        #     debug_header += f"\n    path='{local_vars['path']}'"
+
+        debug_header += f" {FG_RED}time={time_text}{ALL_OFF}    node='{self.login_node}'"
+
+        if len(local_vars['r'].text) > 0:
+            resp = local_vars['r'].json()
+        else:
+            resp = {}
+
+        if resp.get('exitcode') is not None:
+            debug_header += f"    rc={resp.get('exitcode')}"
+        # if 'working_dir' in local_vars:
+        #     debug_header += f"    pwd='{local_vars['working_dir']}'"
+
+        # stdout and stderr will only show up for call() and if they contain text
+        nice_stdout = ""
+        if resp.get('stdout'):
+            nice_stdout = "\n  stdout="
+            if len(resp.get('stdout')) > 500:
+                nice_stdout += "'" + resp.get('stdout')[:500].replace('\n', '\\n') + \
+                              f"'  <len:{len(resp.get('stdout'))}>"
+            else:
+                nice_stdout += "'" + resp.get('stdout').replace('\n', '\\n') + "'"
+
+        nice_stderr = ""
+        if resp.get('stderr'):
+            nice_stderr = "\n  stderr="
+            if len(resp.get('stderr')) > 500:
+                nice_stderr += "'" + resp.get('stderr')[:500].replace('\n', '\\n') + \
+                              f"'  <len:{len(resp.get('stderr'))}>"
+            else:
+                nice_stderr += "'" + resp.get('stderr').replace('\n', '\\n') + "'"
+
+        # Show only relevant function calls and ignore standard library
+        only_show_stacktrace = ['pyuit',
+                                'helios',
+                                'tethys_app',
+                                'uit_plus',
+                                'kestrel',
+                                'galaxy',
+                                'Galaxy']
+        stacktrace = traceback.extract_stack()
+        nice_trace = ''
+        for i in range(0, len(stacktrace)):
+            if not any(x in stacktrace[i].filename for x in only_show_stacktrace):
+                continue
+            if stacktrace[i].name == 'wrapper' or stacktrace[i].name == 'wrap_f':
+                # ignore the decorators for call()
+                continue
+            if 'traceback.extract_stack()' in stacktrace[i].line:  # ignore this last line
+                continue
+            if 'self._debug_uit(' in stacktrace[i].line:  # ignore this function call
+                continue
+            nice_trace += f"\n    {i}: {os.sep.join(stacktrace[i].filename.split(os.sep)[-4:])}:" + \
+                          f"{stacktrace[i].lineno} {stacktrace[i].name}()" + \
+                          f"    {str(stacktrace[i].line.encode('utf-8'))}"
+            # This uses encode('utf-8') to handle the unicode characters in file browser buttons
+
+        return f"{debug_header}{nice_stdout}{nice_stderr}{nice_trace}"
+
 
 ############################################################
 # Simple Flask Server to retrieve auth_code & access_token #
