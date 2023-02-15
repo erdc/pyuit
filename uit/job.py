@@ -155,8 +155,11 @@ class PbsJob:
             self.client.call(command=f'{cmd} {self.job_id}')
             return True
         except Exception as e:
-            if cmd == 'qdel' and 'qdel: Job has finished' in str(e):
-                # qdel exits with a returncode of 35 if it is run on a job that has already finished
+            if cmd == 'qdel' and ('qdel: Job has finished' in str(e) or 'qdel: Unknown Job Id' in str(e)):
+                # qdel exits with rc=35 and 'qdel: Job has finished' if it is run on a job that has already finished
+                # qdel exits with rc=153 and 'qdel: Unknown Job Id' if the job is too old
+                # This basically tests if the HPC is working well enough to send 'rm -rf' commands next
+                # This should not fail to delete from jobs_table when PBS no longer remembers the job
                 return True
             else:
                 logger.exception(f"Error when running '{cmd}': {e}")
