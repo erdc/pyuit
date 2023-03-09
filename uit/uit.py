@@ -763,17 +763,7 @@ class Client:
         debug_end_time = time.perf_counter()
         time_text = f"{debug_end_time - local_vars['debug_start_time']:.2f}s"
 
-        debug_header = ""
-        # if 'command' in local_vars:  # call
-        #     debug_header += f"\n    command='{local_vars['command']}'"
-        # if 'local_path' in local_vars:  # put_file, get_file
-        #     debug_header += f"\n    local_path='{local_vars['local_path']}'"
-        # if 'remote_path' in local_vars:  # put_file, get_file - should be after local_path on same line
-        #     debug_header += f"\n    remote_path='{local_vars['remote_path']}'"
-        # if 'path' in local_vars:  # list_directory
-        #     debug_header += f"\n    path='{local_vars['path']}'"
-
-        debug_header += f" {FG_RED}time={time_text}{ALL_OFF}    node='{self.login_node}'"
+        debug_header = f" {FG_RED}time={time_text}{ALL_OFF}    node={self.login_node}"
 
         if len(local_vars['r'].text) > 0:
             resp = local_vars['r'].json()
@@ -782,8 +772,7 @@ class Client:
 
         if resp.get('exitcode') is not None:
             debug_header += f"    rc={resp.get('exitcode')}"
-        # if 'working_dir' in local_vars:
-        #     debug_header += f"    pwd='{local_vars['working_dir']}'"
+        debug_header += f"    username={self.username}"
 
         # stdout and stderr will only show up for call() and if they contain text
         nice_stdout = ""
@@ -815,8 +804,6 @@ class Client:
         stacktrace = traceback.extract_stack()
         nice_trace = ''
         for i in range(0, len(stacktrace)):
-            if not any(x in stacktrace[i].filename for x in only_show_stacktrace):
-                continue
             if stacktrace[i].name == 'wrapper' or stacktrace[i].name == 'wrap_f':
                 # ignore the decorators for call()
                 continue
@@ -824,10 +811,19 @@ class Client:
                 continue
             if 'self._debug_uit(' in stacktrace[i].line:  # ignore this function call
                 continue
-            nice_trace += f"\n    {i}: {os.sep.join(stacktrace[i].filename.split(os.sep)[-4:])}:" + \
-                          f"{stacktrace[i].lineno} {stacktrace[i].name}()" + \
-                          f"    {str(stacktrace[i].line.encode('utf-8'))}"
-            # This uses encode('utf-8') to handle the unicode characters in file browser buttons
+            for substring in only_show_stacktrace:
+                if substring in stacktrace[i].filename:
+                    # Simple approach: grab the last 3 folders
+                    trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[-4:])
+                    # Nicer approach: try to display only the folders that start with pyuit or helios, etc.
+                    for j, path_element in enumerate(stacktrace[i].filename.split(os.sep)):
+                        if substring in path_element:
+                            trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[j:])
+                            break
+                    nice_trace += f"\n    {i}: {trimmed_filename}:" + \
+                                  f"{stacktrace[i].lineno} {stacktrace[i].name}()" + \
+                                  f"    {stacktrace[i].line.encode('ascii', 'backslashreplace').decode('ascii')}"
+            # This uses encode('ascii') because logging did not like the unicode characters in file browser buttons
 
         return f"{debug_header}{nice_stdout}{nice_stderr}{nice_trace}"
 
