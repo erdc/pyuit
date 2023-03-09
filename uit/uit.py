@@ -780,7 +780,7 @@ class Client:
             nice_stdout = "\n  stdout="
             if len(resp.get('stdout')) > 500:
                 nice_stdout += "'" + resp.get('stdout')[:500].replace('\n', '\\n') + \
-                              f"'  <len:{len(resp.get('stdout'))}>"
+                               f"'  <len:{len(resp.get('stdout'))}>"
             else:
                 nice_stdout += "'" + resp.get('stdout').replace('\n', '\\n') + "'"
 
@@ -789,7 +789,7 @@ class Client:
             nice_stderr = "\n  stderr="
             if len(resp.get('stderr')) > 500:
                 nice_stderr += "'" + resp.get('stderr')[:500].replace('\n', '\\n') + \
-                              f"'  <len:{len(resp.get('stderr'))}>"
+                               f"'  <len:{len(resp.get('stderr'))}>"
             else:
                 nice_stderr += "'" + resp.get('stderr').replace('\n', '\\n') + "'"
 
