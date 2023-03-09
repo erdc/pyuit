@@ -796,7 +796,7 @@ class Client:
         # Show only relevant function calls and ignore standard library
         only_show_stacktrace = ['pyuit',
                                 'helios',
-                                'tethys_app',
+                                'tethysapp',
                                 'uit_plus',
                                 'kestrel',
                                 'galaxy',
@@ -823,7 +823,9 @@ class Client:
                     nice_trace += f"\n    {i}: {trimmed_filename}:" + \
                                   f"{stacktrace[i].lineno} {stacktrace[i].name}()" + \
                                   f"    {stacktrace[i].line.encode('ascii', 'backslashreplace').decode('ascii')}"
-            # This uses encode('ascii') because logging did not like the unicode characters in file browser buttons
+                    # This uses encode('ascii') because the logging module did not like the unicode characters in
+                    # file browser buttons
+                    break
 
         return f"{debug_header}{nice_stdout}{nice_stderr}{nice_trace}"
 
