@@ -44,7 +44,7 @@ There are three ways that you can configure PyUIT to use the ``Client ID`` and t
 
 2. Set the ``UIT_ID`` and ``UIT_SECRET`` environmental variables
 
-If the ``client_id`` or the ``client_secrete`` are not passed into the ``Client`` when it is instantiated, then it will next look for those values from environmental variables. On UNIX systems you can set the environmental variables as follows::
+If the ``client_id`` or the ``client_secret`` are not passed into the ``Client`` when it is instantiated, then it will next look for those values from environmental variables. On UNIX systems you can set the environmental variables as follows::
 
   export UIT_ID="<YOUR_CLIENT_ID>"
   export UIT_SECRET="<YOUR_CLIENT_SECRET>"

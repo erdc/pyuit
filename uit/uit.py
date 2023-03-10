@@ -80,6 +80,7 @@ class Client:
         self._username = None
         self._callback = None
         self._available_modules = None
+        self._config = None
 
         # Set arg-based attributes
         self.client_id = client_id
@@ -98,6 +99,13 @@ class Client:
 
         if self.config_file is None:
             self.config_file = DEFAULT_CONFIG_FILE
+        try:
+            with open(self.config_file, 'r') as f:
+                self._config = yaml.safe_load(f)
+        except IOError:
+            pass  # This config file is rarely used, so ignore errors if it doesn't exist
+        except yaml.YAMLError as e:
+            logger.error(f"Error while parsing config file '{self.config_file}': {e}")
 
         if self.client_id is None:
             self.client_id = os.environ.get('UIT_ID')
@@ -106,10 +114,9 @@ class Client:
             self.client_secret = os.environ.get('UIT_SECRET')
 
         if (self.client_id is None or self.client_secret is None) and self.token is None:
-            with open(self.config_file, 'r') as f:
-                self.config = yaml.safe_load(f)
-                self.client_id = self.config.get('client_id')
-                self.client_secret = self.config.get('client_secret')
+            if self._config:
+                self.client_id = self._config.get('client_id')
+                self.client_secret = self._config.get('client_secret')
 
         if self.client_id is None and self.client_secret is None and self.token is None:
             raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
@@ -647,7 +654,7 @@ class Client:
     def get_loaded_modules(self):
         output = self.call('module list')
         output = re.sub('.*:ERROR:.*', '', output)
-        return re.split('\n?\s*\d+\)\s*', output[:-1])[1:]  # noqa: W605
+        return re.split(r'\n?\s*\d+\)\s*', output[:-1])[1:]
 
     def _process_status_command(self, cmd, parse, full, as_df):
         result = self.call(cmd)
@@ -775,58 +782,61 @@ class Client:
             debug_header += f"    rc={resp.get('exitcode')}"
         debug_header += f"    username={self.username}"
 
-        # stdout and stderr will only show up for call() and if they contain text
+        # stdout and stderr will only show up for call() and only if they contain text
         nice_stdout = ""
         if resp.get('stdout'):
-            nice_stdout = "\n  stdout="
+            nice_stdout = "\n  stdout='" + resp.get('stdout')[:500].replace('\n', '\\n') + "'"
             if len(resp.get('stdout')) > 500:
-                nice_stdout += "'" + resp.get('stdout')[:500].replace('\n', '\\n') + \
-                               f"'  <len:{len(resp.get('stdout'))}>"
-            else:
-                nice_stdout += "'" + resp.get('stdout').replace('\n', '\\n') + "'"
+                nice_stdout += f"  <len:{len(resp.get('stdout'))}>"
 
         nice_stderr = ""
         if resp.get('stderr'):
-            nice_stderr = "\n  stderr="
+            nice_stderr = "\n  stderr='" + resp.get('stderr')[:500].replace('\n', '\\n') + "'"
             if len(resp.get('stderr')) > 500:
-                nice_stderr += "'" + resp.get('stderr')[:500].replace('\n', '\\n') + \
-                               f"'  <len:{len(resp.get('stderr'))}>"
-            else:
-                nice_stderr += "'" + resp.get('stderr').replace('\n', '\\n') + "'"
+                nice_stderr += f"  <len:{len(resp.get('stderr'))}>"
 
-        # Show only relevant function calls and ignore standard library
-        only_show_stacktrace = ['pyuit',
-                                'helios',
-                                'tethysapp',
-                                'uit_plus',
-                                'kestrel',
-                                'galaxy',
-                                'Galaxy']
-        stacktrace = traceback.extract_stack()
+        # Show only relevant function calls and ignore standard library for the brief stacktrace
+        if self._config and 'debug_stacktrace_allowlist' in self._config:
+            debug_stacktrace_allowlist = self._config.get('debug_stacktrace_allowlist')
+            if not isinstance(debug_stacktrace_allowlist, list):
+                debug_stacktrace_allowlist = []
+        else:
+            debug_stacktrace_allowlist = ['pyuit']
+        # This only shows the 'pyuit' directory by default. To change which directories are shown in the stacktrace,
+        # modify the PyUIT yaml config file (default location is ~/.uit) with a list like this:
+        # debug_stacktrace_allowlist:
+        #   - pyuit
+        #   - your_codebase_dir
+
+        # To disable the stacktrace, put "debug_stacktrace_allowlist:" in the config file with no list below it
         nice_trace = ''
-        for i in range(0, len(stacktrace)):
-            if stacktrace[i].name == 'wrapper' or stacktrace[i].name == 'wrap_f':
-                # ignore the decorators for call()
-                continue
-            if 'traceback.extract_stack()' in stacktrace[i].line:  # ignore this last line
-                continue
-            if 'self._debug_uit(' in stacktrace[i].line:  # ignore this function call
-                continue
-            for substring in only_show_stacktrace:
-                if substring in stacktrace[i].filename:
-                    # Simple approach: grab the last 3 folders
-                    trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[-4:])
-                    # Nicer approach: try to display only the folders that start with pyuit or helios, etc.
-                    for j, path_element in enumerate(stacktrace[i].filename.split(os.sep)):
-                        if substring in path_element:
-                            trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[j:])
-                            break
-                    nice_trace += f"\n    {i}: {trimmed_filename}:" + \
-                                  f"{stacktrace[i].lineno} {stacktrace[i].name}()" + \
-                                  f"    {stacktrace[i].line.encode('ascii', 'backslashreplace').decode('ascii')}"
-                    # This uses encode('ascii') because the logging module did not like the unicode characters in
-                    # file browser buttons
-                    break
+        if debug_stacktrace_allowlist:
+            stacktrace = traceback.extract_stack()
+            for i in range(0, len(stacktrace)):
+                if stacktrace[i].name == 'wrapper' or stacktrace[i].name == 'wrap_f':
+                    # ignore the decorators for call()
+                    continue
+                if 'traceback.extract_stack()' in stacktrace[i].line:  # ignore this last line
+                    continue
+                if 'self._debug_uit(' in stacktrace[i].line:  # ignore this function call
+                    continue
+                for substring in debug_stacktrace_allowlist:
+                    if substring in stacktrace[i].filename:
+                        # Simple approach: grab the last 3 folders
+                        trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[-4:])
+                        # Nicer approach: try to display only the folders that start with pyuit, etc.
+                        for j, path_element in enumerate(stacktrace[i].filename.split(os.sep)):
+                            if substring in path_element:
+                                trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[j:])
+                                break
+                        nice_trace += (
+                            f"\n    {i}: {trimmed_filename}:"
+                            f"{stacktrace[i].lineno} {stacktrace[i].name}()"
+                            f"    {stacktrace[i].line.encode('ascii', 'backslashreplace').decode('ascii')}"
+                        )
+                        # This uses encode('ascii') because the logging module did not like the
+                        # unicode characters in file browser buttons
+                        break
 
         return f"{debug_header}{nice_stdout}{nice_stderr}{nice_trace}"
 
