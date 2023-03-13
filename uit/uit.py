@@ -5,6 +5,8 @@ import re
 import random
 import threading
 import tempfile
+import time
+import traceback
 import uuid
 from functools import wraps
 from itertools import chain
@@ -13,6 +15,7 @@ from urllib.parse import urljoin, urlencode  # noqa: F401
 
 import dodcerts
 import requests
+import simplejson.errors
 import yaml
 from flask import Flask, request, render_template_string
 from werkzeug.serving import make_server
@@ -35,6 +38,10 @@ DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
 HPC_SYSTEMS = ['onyx', 'narwhal']
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
+
+FG_RED = "\033[31m"
+FG_CYAN = "\033[36m"
+ALL_OFF = "\033[0m"
 
 _auth_code = None
 _server = None
@@ -73,6 +80,7 @@ class Client:
         self._username = None
         self._callback = None
         self._available_modules = None
+        self._config = None
 
         # Set arg-based attributes
         self.client_id = client_id
@@ -91,6 +99,13 @@ class Client:
 
         if self.config_file is None:
             self.config_file = DEFAULT_CONFIG_FILE
+        try:
+            with open(self.config_file, 'r') as f:
+                self._config = yaml.safe_load(f)
+        except IOError:
+            pass  # This config file is rarely used, so ignore errors if it doesn't exist
+        except yaml.YAMLError as e:
+            logger.error(f"Error while parsing config file '{self.config_file}': {e}")
 
         if self.client_id is None:
             self.client_id = os.environ.get('UIT_ID')
@@ -99,10 +114,9 @@ class Client:
             self.client_secret = os.environ.get('UIT_SECRET')
 
         if (self.client_id is None or self.client_secret is None) and self.token is None:
-            with open(self.config_file, 'r') as f:
-                self.config = yaml.safe_load(f)
-                self.client_id = self.config.get('client_id')
-                self.client_secret = self.config.get('client_secret')
+            if self._config:
+                self.client_id = self._config.get('client_id')
+                self.client_secret = self._config.get('client_secret')
 
         if self.client_id is None and self.client_secret is None and self.token is None:
             raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
@@ -348,6 +362,7 @@ class Client:
             raise UITError('Not Authenticated')
         self._userinfo = data.get('userinfo')
         self._user = self._userinfo.get('USERNAME')
+        logger.info(f"get_userinfo user='{self._user}'")
         self._systems = [sys.lower() for sys in self._userinfo['SYSTEMS'].keys()]
         self._login_nodes = {
             system:
@@ -407,7 +422,10 @@ class Client:
         # construct the base options dictionary
         data = {'command': command, 'workingdir': working_dir}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        logger.info(f"call command='{FG_CYAN}{command}{ALL_OFF}'    {working_dir=}")
+        debug_start_time = time.perf_counter()
         r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
+        logger.debug(self._debug_uit(locals()))
 
         if r.status_code == 504:
             if raise_on_error:
@@ -415,7 +433,6 @@ class Client:
             else:
                 return 'ERROR! Gateway Timeout'
 
-        logger.debug(r.text)
         resp = r.json()
 
         if full_response:
@@ -446,8 +463,11 @@ class Client:
         data = {'file': remote_path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         files = {'file': local_path.open(mode='rb')}
+        logger.info(f"put_file {local_path=}    {remote_path=}")
+        debug_start_time = time.perf_counter()
         r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self.headers, data=data, files=files,
                           verify=self.ca_file)
+        logger.debug(self._debug_uit(locals()))
         return r.json()
 
     @_ensure_connected
@@ -467,8 +487,11 @@ class Client:
         remote_path = self._resolve_path(remote_path)
         data = {'file': remote_path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        logger.info(f"get_file {remote_path=}    {local_path=}")
+        debug_start_time = time.perf_counter()
         r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
                           stream=True)
+        logger.debug(self._debug_uit(locals()))
         if r.status_code != 200:
             raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
                                "not have permission to access it.".format(r.status_code, remote_path))
@@ -496,8 +519,11 @@ class Client:
 
         data = {'directory': path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        logger.info(f"list_dir {path=}")
+        debug_start_time = time.perf_counter()
         r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self.headers, data=data,
                           verify=self.ca_file)
+        logger.debug(self._debug_uit(locals()))
         result = r.json()
 
         if as_df and 'path' in result:
@@ -628,7 +654,7 @@ class Client:
     def get_loaded_modules(self):
         output = self.call('module list')
         output = re.sub('.*:ERROR:.*', '', output)
-        return re.split('\n?\s*\d+\)\s*', output[:-1])[1:]  # noqa: W605
+        return re.split(r'\n?\s*\d+\)\s*', output[:-1])[1:]
 
     def _process_status_command(self, cmd, parse, full, as_df):
         result = self.call(cmd)
@@ -725,6 +751,95 @@ class Client:
         if as_df:
             return cls._as_df(rows, columns)
         return rows
+
+    def _debug_uit(self, local_vars):
+        """ Show information about and around UIT+ calls for debug logging
+
+        It can be called from any UIT Client method right after using requests.post().
+        The recommended way to call this is:
+            debug_start_time = time.perf_counter()
+            r = requests.post(...)
+            logger.debug(self._debug_uit(locals()))
+
+        It will not run if DEBUG logging is not enabled since this code is not perfect,
+        and nobody wants to see debug log code cause exceptions in production.
+        It doesn't run logger.debug() itself so that the parent function will show in the logs.
+        """
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
+        debug_end_time = time.perf_counter()
+        time_text = f"{debug_end_time - local_vars['debug_start_time']:.2f}s"
+
+        debug_header = f" {FG_RED}time={time_text}{ALL_OFF}    node={self.login_node}"
+
+        try:
+            resp = local_vars['r'].json()
+        except simplejson.errors.JSONDecodeError:
+            resp = {}
+
+        if resp.get('exitcode') is not None:
+            debug_header += f"    rc={resp.get('exitcode')}"
+        debug_header += f"    username={self.username}"
+
+        # stdout and stderr will only show up for call() and only if they contain text
+        nice_stdout = ""
+        if resp.get('stdout'):
+            nice_stdout = "\n  stdout='" + resp.get('stdout')[:500].replace('\n', '\\n') + "'"
+            if len(resp.get('stdout')) > 500:
+                nice_stdout += f"  <len:{len(resp.get('stdout'))}>"
+
+        nice_stderr = ""
+        if resp.get('stderr'):
+            nice_stderr = "\n  stderr='" + resp.get('stderr')[:500].replace('\n', '\\n') + "'"
+            if len(resp.get('stderr')) > 500:
+                nice_stderr += f"  <len:{len(resp.get('stderr'))}>"
+
+        # Show only relevant function calls and ignore standard library for the brief stacktrace
+        if self._config and 'debug_stacktrace_allowlist' in self._config:
+            debug_stacktrace_allowlist = self._config.get('debug_stacktrace_allowlist')
+            if not isinstance(debug_stacktrace_allowlist, list):
+                debug_stacktrace_allowlist = []
+        else:
+            debug_stacktrace_allowlist = ['pyuit']
+        # This only shows the 'pyuit' directory by default. To change which directories are shown in the stacktrace,
+        # modify the PyUIT yaml config file (default location is ~/.uit) with a list like this:
+        # debug_stacktrace_allowlist:
+        #   - pyuit
+        #   - your_codebase_dir
+
+        # To disable the stacktrace, put "debug_stacktrace_allowlist:" in the config file with no list below it
+        nice_trace = ''
+        if debug_stacktrace_allowlist:
+            stacktrace = traceback.extract_stack()
+            for i in range(0, len(stacktrace)):
+                if stacktrace[i].name == 'wrapper' or stacktrace[i].name == 'wrap_f':
+                    # ignore the decorators for call()
+                    continue
+                if 'traceback.extract_stack()' in stacktrace[i].line:  # ignore this last line
+                    continue
+                if 'self._debug_uit(' in stacktrace[i].line:  # ignore this function call
+                    continue
+                for substring in debug_stacktrace_allowlist:
+                    if substring in stacktrace[i].filename:
+                        # Simple approach: grab the last 3 folders
+                        trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[-4:])
+                        # Nicer approach: try to display only the folders that start with pyuit, etc.
+                        for j, path_element in enumerate(stacktrace[i].filename.split(os.sep)):
+                            if substring in path_element:
+                                trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[j:])
+                                break
+                        nice_trace += (
+                            f"\n    {i}: {trimmed_filename}:"
+                            f"{stacktrace[i].lineno} {stacktrace[i].name}()"
+                            f"    {stacktrace[i].line.encode('ascii', 'backslashreplace').decode('ascii')}"
+                        )
+                        # This uses encode('ascii') because the logging module did not like the
+                        # unicode characters in file browser buttons
+                        break
+
+        return f"{debug_header}{nice_stdout}{nice_stderr}{nice_trace}"
+
 
 ############################################################
 # Simple Flask Server to retrieve auth_code & access_token #
