@@ -15,7 +15,6 @@ from urllib.parse import urljoin, urlencode  # noqa: F401
 
 import dodcerts
 import requests
-import simplejson.errors
 import yaml
 from flask import Flask, request, render_template_string
 from werkzeug.serving import make_server
@@ -775,7 +774,7 @@ class Client:
 
         try:
             resp = local_vars['r'].json()
-        except simplejson.errors.JSONDecodeError:
+        except requests.exceptions.JSONDecodeError:
             resp = {}
 
         if resp.get('exitcode') is not None:
