@@ -251,6 +251,8 @@ class Client:
             login_node (str): Specific node name to connect to. Cannot be used with system arg.
             exclude_login_nodes (list): Nodes to exclude when selecting a login node. Ignored if login_node is
                 specified.
+            retry_on_failure (bool): True will attempt to connect to different login nodes.
+            num_retries (int): Number of connection attempts. Requires retry_on_failure=True
         """
         # get access token from file
         # populate userinfo and header info
@@ -276,7 +278,7 @@ class Client:
         self.connected = True
 
         try:
-            self.call(':')
+            self.call(':', working_dir='.', robust_retry=False)
         except UITError as e:
             self.connected = False
             msg = f'Error while connecting to node {login_node}: {e}'
@@ -398,17 +400,19 @@ class Client:
 
     @_ensure_connected
     @robust()
-    def call(self, command, working_dir=None, full_response=False, raise_on_error=True):
+    def call(self, command, working_dir=None, full_response=False, raise_on_error=True, robust_retry=True):
         """Execute commands on the HPC via the exec endpoint.
 
         Args:
             command (str): The command to run.
             working_dir (str, optional, default=None): Working directory from which to run the command.
-                If None the the users $HOME directory will be used
+                If None the users $HOME directory will be used
             full_response(bool, default=False):
                 If True return the full JSON response from the UIT+ server.
             raise_on_error(bool, default=True):
                 If True then an error is raised if the call is not successful.
+            robust_retry(bool, default=True):
+                If False then skip the @robust decorator and its 3 connection attempts.
 
         Returns:
             str: stdout from the command.

@@ -11,13 +11,16 @@ from time import sleep
 from .exceptions import MaxRetriesError
 
 
-def robust(retries=5):
+def robust(retries=3):
     """
     Robust wrapper for client methods. Will retry, reties times if failed due to DP routing error.
     """  # noqa: E501
     def wrap(func):
         @wraps(func)
         def wrap_f(*args, **kwargs):
+            if kwargs.get("robust_retry") is False:
+                return func(*args, **kwargs)
+
             attempts = 1
 
             last_exception = None
@@ -31,11 +34,10 @@ def robust(retries=5):
                     if 'DP Route error' in str(e):
                         attempts += 1
                         last_exception = e
-                        continue
+                        sleep(1)
                     else:
                         # Raise other Runtime Errors
                         raise
-                sleep(1)
             kwarg_str = ', '.join(['{}="{}"'.format(k, v) for k, v in kwargs.items()])
 
             raise MaxRetriesError(
