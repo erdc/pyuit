@@ -18,9 +18,6 @@ def robust(retries=3):
     def wrap(func):
         @wraps(func)
         def wrap_f(*args, **kwargs):
-            if kwargs.get("robust_retry") is False:
-                return func(*args, **kwargs)
-
             attempts = 1
 
             last_exception = None

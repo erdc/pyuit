@@ -278,7 +278,8 @@ class Client:
         self.connected = True
 
         try:
-            self.call(':', working_dir='.', robust_retry=False)
+            # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
+            self._call(':', working_dir='.')
         except UITError as e:
             self.connected = False
             msg = f'Error while connecting to node {login_node}: {e}'
@@ -400,7 +401,7 @@ class Client:
 
     @_ensure_connected
     @robust()
-    def call(self, command, working_dir=None, full_response=False, raise_on_error=True, robust_retry=True):
+    def call(self, command, working_dir=None, full_response=False, raise_on_error=True):
         """Execute commands on the HPC via the exec endpoint.
 
         Args:
@@ -411,12 +412,14 @@ class Client:
                 If True return the full JSON response from the UIT+ server.
             raise_on_error(bool, default=True):
                 If True then an error is raised if the call is not successful.
-            robust_retry(bool, default=True):
-                If False then skip the @robust decorator and its 3 connection attempts.
 
         Returns:
             str: stdout from the command.
         """
+        return self._call(command, working_dir=working_dir, full_response=full_response, raise_on_error=raise_on_error)
+
+    def _call(self, command, working_dir=None, full_response=False, raise_on_error=True):
+        """Internal call function to avoid the 3 retries from @robust()"""
         # Need to do this manually to prevent recursive loop when resolving self.home
         working_dir = working_dir or self.HOME
 
