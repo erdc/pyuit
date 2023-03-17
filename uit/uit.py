@@ -284,7 +284,9 @@ class Client:
             self.connected = False
             msg = f'Error while connecting to node {login_node}: {e}'
             logger.info(msg)
-            if retry_on_failure and num_retries > 0:
+            if retry_on_failure is False:
+                raise UITError(msg)
+            elif retry_on_failure and num_retries > 0:
                 logger.debug(f'Retrying connection {num_retries} more time(s)')
                 num_retries -= 1
                 exclude_login_nodes = list(exclude_login_nodes) + [login_node]
