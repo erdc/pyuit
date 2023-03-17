@@ -243,7 +243,7 @@ class Client:
         import webbrowser
         webbrowser.open(auth_url)
 
-    def connect(self, system=None, login_node=None, exclude_login_nodes=(), retry_on_failure=False, num_retries=3):
+    def connect(self, system=None, login_node=None, exclude_login_nodes=(), retry_on_failure=None, num_retries=3):
         """Connect this client to the UIT servers.
 
         Args:
@@ -251,7 +251,10 @@ class Client:
             login_node (str): Specific node name to connect to. Cannot be used with system arg.
             exclude_login_nodes (list): Nodes to exclude when selecting a login node. Ignored if login_node is
                 specified.
-            retry_on_failure (bool): True will attempt to connect to different login nodes.
+            retry_on_failure (bool):
+                True will attempt to connect to different login nodes.
+                False will only attempt one connection.
+                Default of None will automatically pick False if login_node is set, otherwise it will pick True.
             num_retries (int): Number of connection attempts. Requires retry_on_failure=True
         """
         # get access token from file
@@ -261,6 +264,9 @@ class Client:
 
         if all([system, login_node]) or not any([system, login_node]):
             raise ValueError('Please specify at least one of system or login_node and not both')
+
+        if retry_on_failure is None:
+            retry_on_failure = login_node is None  # Default to no retry when only one login node is specified
 
         if login_node is None:
             # pick random login node for system
