@@ -270,7 +270,12 @@ class Client:
 
         if login_node is None:
             # pick random login node for system
-            login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
+            try:
+                login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
+            except IndexError:
+                msg = f'Error while connecting to {system}. No more login nodes to try.'
+                logger.info(msg)
+                raise MaxRetriesError(msg)
 
         try:
             system = [sys for sys, nodes in self._login_nodes.items() if login_node in nodes][0]
