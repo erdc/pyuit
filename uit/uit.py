@@ -268,49 +268,60 @@ class Client:
         if retry_on_failure is None:
             retry_on_failure = login_node is None  # Default to no retry when only one login node is specified
 
-        if login_node is None:
-            # pick random login node for system
+        retry_on_dp_route_error = True
+        while num_retries >= 0:
+            if login_node is None:
+                # pick random login node for system
+                try:
+                    login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
+                except IndexError:
+                    msg = f'Error while connecting to {system}. No more login nodes to try.'
+                    logger.info(msg)
+                    raise MaxRetriesError(msg)
+
             try:
-                login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
-            except IndexError:
-                msg = f'Error while connecting to {system}. No more login nodes to try.'
+                system = [sys for sys, nodes in self._login_nodes.items() if login_node in nodes][0]
+            except Exception:
+                raise ValueError('{} login node not found in available nodes'.format(login_node))
+
+            self._login_node = login_node
+            self._system = system
+            self._username = self._userinfo['SYSTEMS'][self._system.upper()]['USERNAME']
+            self._uit_url = self._uit_urls[login_node]
+            self.connected = True
+
+            try:
+                # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
+                self._call(':', working_dir='.', timeout=25)
+            except UITError as e:
+                if retry_on_dp_route_error is True \
+                        and str(e) == "DP Route error: Cannot read property 'LOCAL_IP' of undefined":
+                    # This is a very specific workaround. When UIT+ has to launch the user's RatchetHelper.jar, that one
+                    # command takes 10 seconds and fails, but another command to the same login node should work.
+                    logger.debug(f'Working around potential UIT+ RatchetHelper spawn issue. '
+                                 f'Trying {login_node} once more.')
+                    retry_on_dp_route_error = False
+                    continue
+
+                self.connected = False
+                msg = f'Error while connecting to node {login_node}: {e}'
                 logger.info(msg)
-                raise MaxRetriesError(msg)
-
-        try:
-            system = [sys for sys, nodes in self._login_nodes.items() if login_node in nodes][0]
-        except Exception:
-            raise ValueError('{} login node not found in available nodes'.format(login_node))
-
-        self._login_node = login_node
-        self._system = system
-        self._username = self._userinfo['SYSTEMS'][self._system.upper()]['USERNAME']
-        self._uit_url = self._uit_urls[login_node]
-        self.connected = True
-
-        try:
-            # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
-            self._call(':', working_dir='.', timeout=20)
-        except UITError as e:
-            self.connected = False
-            msg = f'Error while connecting to node {login_node}: {e}'
-            logger.info(msg)
-            if retry_on_failure is False:
-                raise UITError(msg)
-            elif retry_on_failure and num_retries > 0:
-                logger.debug(f'Retrying connection {num_retries} more time(s)')
-                num_retries -= 1
-                exclude_login_nodes = list(exclude_login_nodes) + [login_node]
-                return self.connect(
-                    system=system, exclude_login_nodes=exclude_login_nodes,
-                    retry_on_failure=retry_on_failure, num_retries=num_retries
-                )
+                if retry_on_failure is False:
+                    raise UITError(msg)
+                elif retry_on_failure is True and num_retries > 0:
+                    # Try a different login node
+                    logger.debug(f'Retrying connection {num_retries} more time(s) to this HPC {system}')
+                    num_retries -= 1
+                    exclude_login_nodes = list(exclude_login_nodes) + [login_node]
+                    login_node = None
+                    retry_on_dp_route_error = True
+                    continue
+                else:
+                    raise MaxRetriesError(msg)
             else:
-                raise MaxRetriesError(msg)
-        else:
-            msg = 'Connected successfully to {} on {}'.format(login_node, system)
-            logger.info(msg)
-            return msg
+                msg = 'Connected successfully to {} on {}'.format(login_node, system)
+                logger.info(msg)
+                return msg
 
     def get_auth_url(self):
         """Generate Authorization URL with UIT Server.
@@ -468,7 +479,7 @@ class Client:
         elif raise_on_error:
             raise UITError(resp.get('error', resp.get('stderr', resp)))
         else:
-            return 'ERROR!\n' + resp.get('stdout') + resp.get('stderr')
+            return f"ERROR!\n{resp.get('stdout')=}\n{resp.get('stderr')=}"
 
     @_ensure_connected
     @robust()
