@@ -416,13 +416,6 @@ class HpcPath(Path, PurePosixPath):
     def _get_metadata(self):
         if not self.is_absolute():
             self._str = str(self.uit_client.HOME / self)
-        try:
-            ls_text = self.uit_client.call(f'ls -ldL {self.as_posix()}')  # -L dereferences symlinks
-        except UITError:
-            raise ValueError(f'Invalid file path {self.as_posix()}')
-        self._is_dir = False
-        self._is_file = False
-        self._ls = None
 
         if self.name == '':
             # If I don't have a name, don't consider myself a directory or file.
@@ -430,17 +423,16 @@ class HpcPath(Path, PurePosixPath):
             # It has something to do with loading the home directory for the first time.
             return
 
-        if ls_text.startswith('d'):
-            self._is_dir = True
-            self._ls = self.uit_client.list_dir(self.as_posix())
-            if 'error' in self._ls:
-                # Try our own 'ls -l' if UIT+ returns any error, which happens if there is a broken symlink
-                self._ls = self.parse_list_dir(self.as_posix())
-        elif ls_text.startswith('-'):
+        self._is_dir = True
+        self._is_file = False
+        self._ls = self.uit_client.list_dir(self.as_posix())
+        if self._ls.get('error') == 'File supplied is not a directory.':
+            self._is_dir = False
             self._is_file = True
             self._ls = ''
-        else:
-            raise ValueError(f'Invalid file path {self.as_posix()}')
+        elif 'error' in self._ls:
+            # Try our own 'ls -l' if UIT+ returns any error, which happens if there is a broken symlink
+            self._ls = self.parse_list_dir(self.as_posix())
 
     def parse_list_dir(self, base_path):
         TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
