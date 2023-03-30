@@ -442,7 +442,7 @@ class Client:
         try:
             r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file,
                               timeout=timeout)
-        except requests.Timeout as e:
+        except requests.Timeout:
             if raise_on_error:
                 raise UITError('Request Timeout')
             else:
@@ -492,7 +492,7 @@ class Client:
         try:
             r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self.headers, data=data, files=files,
                               verify=self.ca_file, timeout=timeout)
-        except requests.Timeout as e:
+        except requests.Timeout:
             raise UITError('Request Timeout')
         logger.debug(self._debug_uit(locals()))
 
@@ -522,7 +522,7 @@ class Client:
         try:
             r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
                               stream=True, timeout=timeout)
-        except requests.Timeout as e:
+        except requests.Timeout:
             raise UITError('Request Timeout')
         logger.debug(self._debug_uit(locals()))
 
@@ -561,7 +561,7 @@ class Client:
         try:
             r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self.headers, data=data,
                               verify=self.ca_file, timeout=timeout)
-        except requests.Timeout as e:
+        except requests.Timeout:
             raise UITError('Request Timeout')
         logger.debug(self._debug_uit(locals()))
 
