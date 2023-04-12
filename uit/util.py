@@ -10,15 +10,18 @@ from functools import wraps
 from time import sleep
 from .exceptions import MaxRetriesError
 
+import logging
+logger = logging.getLogger(__name__)
 
-def robust(retries=5):
-    """
-    Robust wrapper for client methods. Will retry, reties times if failed due to DP routing error.
-    """  # noqa: E501
+
+def robust(retries=1):
+    """Robust wrapper for client methods. Will retry, reties times if failed due to DP routing error.
+
+    This is set to 1 retry because UIT+ should repair the SSH Tunnel immediately."""
     def wrap(func):
         @wraps(func)
         def wrap_f(*args, **kwargs):
-            attempts = 1
+            attempts = 0
 
             last_exception = None
 
@@ -29,15 +32,17 @@ def robust(retries=5):
                     # "DP Route error" indicates failure of SSH Tunnel client on UIT Plus server.
                     # Successive calls should work.
                     if 'DP Route error' in str(e):
+                        if attempts < retries:
+                            logger.info(
+                                f"DP Route error detected, @robust() is retrying {retries - attempts} more time(s).")
                         attempts += 1
                         last_exception = e
-                        continue
+                        sleep(1)
                     else:
                         # Raise other Runtime Errors
                         raise
-                sleep(1)
-            kwarg_str = ', '.join(['{}="{}"'.format(k, v) for k, v in kwargs.items()])
 
+            kwarg_str = ', '.join(['{}="{}"'.format(k, v) for k, v in kwargs.items()])
             raise MaxRetriesError(
                 f'Max number of retries reached without success for method: {func.__name__}({kwarg_str}). '
                 f'Last exception encountered: {last_exception}'

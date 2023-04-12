@@ -243,7 +243,7 @@ class Client:
         import webbrowser
         webbrowser.open(auth_url)
 
-    def connect(self, system=None, login_node=None, exclude_login_nodes=(), retry_on_failure=False, num_retries=3):
+    def connect(self, system=None, login_node=None, exclude_login_nodes=(), retry_on_failure=None, num_retries=3):
         """Connect this client to the UIT servers.
 
         Args:
@@ -251,6 +251,11 @@ class Client:
             login_node (str): Specific node name to connect to. Cannot be used with system arg.
             exclude_login_nodes (list): Nodes to exclude when selecting a login node. Ignored if login_node is
                 specified.
+            retry_on_failure (bool):
+                True will attempt to connect to different login nodes.
+                False will only attempt one connection.
+                Default of None will automatically pick False if login_node is set, otherwise it will pick True.
+            num_retries (int): Number of connection attempts. Requires retry_on_failure=True
         """
         # get access token from file
         # populate userinfo and header info
@@ -260,9 +265,17 @@ class Client:
         if all([system, login_node]) or not any([system, login_node]):
             raise ValueError('Please specify at least one of system or login_node and not both')
 
+        if retry_on_failure is None:
+            retry_on_failure = login_node is None  # Default to no retry when only one login node is specified
+
         if login_node is None:
             # pick random login node for system
-            login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
+            try:
+                login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
+            except IndexError:
+                msg = f'Error while connecting to {system}. No more login nodes to try.'
+                logger.info(msg)
+                raise MaxRetriesError(msg)
 
         try:
             system = [sys for sys, nodes in self._login_nodes.items() if login_node in nodes][0]
@@ -276,13 +289,17 @@ class Client:
         self.connected = True
 
         try:
-            self.call(':')
+            # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
+            self.call(':', working_dir='.', timeout=25)
         except UITError as e:
             self.connected = False
             msg = f'Error while connecting to node {login_node}: {e}'
             logger.info(msg)
-            if retry_on_failure and num_retries > 0:
-                logger.debug(f'Retrying connection {num_retries} more time(s)')
+            if retry_on_failure is False:
+                raise UITError(msg)
+            elif retry_on_failure is True and num_retries > 0:
+                # Try a different login node
+                logger.debug(f'Retrying connection {num_retries} more time(s) to this HPC {system}')
                 num_retries -= 1
                 exclude_login_nodes = list(exclude_login_nodes) + [login_node]
                 return self.connect(
@@ -398,17 +415,16 @@ class Client:
 
     @_ensure_connected
     @robust()
-    def call(self, command, working_dir=None, full_response=False, raise_on_error=True):
+    def call(self, command, working_dir=None, full_response=False, raise_on_error=True, timeout=120):
         """Execute commands on the HPC via the exec endpoint.
 
         Args:
             command (str): The command to run.
             working_dir (str, optional, default=None): Working directory from which to run the command.
-                If None the the users $HOME directory will be used
-            full_response(bool, default=False):
-                If True return the full JSON response from the UIT+ server.
-            raise_on_error(bool, default=True):
-                If True then an error is raised if the call is not successful.
+                If None, the users $HOME directory will be used.
+            full_response (bool, optional, default=False): If True return the full JSON response from the UIT+ server.
+            raise_on_error (bool, optional, default=True): If True then an exception is raised if the command fails.
+            timeout (int, optional, default=120): Number of seconds to limit the duration of the requests.post() call.
 
         Returns:
             str: stdout from the command.
@@ -423,7 +439,14 @@ class Client:
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         logger.info(f"call command='{FG_CYAN}{command}{ALL_OFF}'    {working_dir=}")
         debug_start_time = time.perf_counter()
-        r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file)
+        try:
+            r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file,
+                              timeout=timeout)
+        except requests.Timeout:
+            if raise_on_error:
+                raise UITError('Request Timeout')
+            else:
+                return 'ERROR! Request Timeout'
         logger.debug(self._debug_uit(locals()))
 
         if r.status_code == 504:
@@ -441,16 +464,18 @@ class Client:
         elif raise_on_error:
             raise UITError(resp.get('error', resp.get('stderr', resp)))
         else:
-            return 'ERROR!\n' + resp.get('stdout') + resp.get('stderr')
+            return f"ERROR!\n{resp.get('stdout')=}\n{resp.get('stderr')=}"
 
     @_ensure_connected
     @robust()
-    def put_file(self, local_path, remote_path=None):
+    def put_file(self, local_path, remote_path=None, timeout=30):
         """Put files on the HPC via the putfile endpoint.
 
         Args:
             local_path (str): Local file to upload.
-            remote_path (str): Remote file to upload to.
+            remote_path (str): Remote file to upload to. Do not use shell shortcuts like ~ or variables like $HOME.
+            timeout(int): Number of seconds to limit the duration of the requests.post() call,
+                although ongoing data transfer will not trigger a timeout.
 
         Returns:
             str: API response as json
@@ -464,19 +489,25 @@ class Client:
         files = {'file': local_path.open(mode='rb')}
         logger.info(f"put_file {local_path=}    {remote_path=}")
         debug_start_time = time.perf_counter()
-        r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self.headers, data=data, files=files,
-                          verify=self.ca_file)
+        try:
+            r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self.headers, data=data, files=files,
+                              verify=self.ca_file, timeout=timeout)
+        except requests.Timeout:
+            raise UITError('Request Timeout')
         logger.debug(self._debug_uit(locals()))
+
         return r.json()
 
     @_ensure_connected
     @robust()
-    def get_file(self, remote_path, local_path=None):
+    def get_file(self, remote_path, local_path=None, timeout=30):
         """Get a file from the HPC via the getfile endpoint.
 
         Args:
             remote_path (str): Remote file to download.
             local_path (str): local file to download to.
+            timeout(int): Number of seconds to limit the duration of the requests.post() call,
+                although ongoing data transfer will not trigger a timeout.
 
         Returns:
             Path: local_path
@@ -486,11 +517,15 @@ class Client:
         remote_path = self._resolve_path(remote_path)
         data = {'file': remote_path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
-        logger.info(f"get_file {remote_path=}    {local_path=}")
         debug_start_time = time.perf_counter()
-        r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
-                          stream=True)
+        logger.info(f"get_file {remote_path=}    {local_path=}   {debug_start_time=}")
+        try:
+            r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
+                              stream=True, timeout=timeout)
+        except requests.Timeout:
+            raise UITError('Request Timeout')
         logger.debug(self._debug_uit(locals()))
+
         if r.status_code != 200:
             raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
                                "not have permission to access it.".format(r.status_code, remote_path))
@@ -502,11 +537,14 @@ class Client:
 
     @_ensure_connected
     @robust()
-    def list_dir(self, path=None, parse=True, as_df=False):
+    def list_dir(self, path=None, parse=True, as_df=False, timeout=30):
         """Get a detailed directory listing from the HPC via the listdirectory endpoint.
 
         Args:
-            path (str): Directory to list
+            path (str): Directory to list.
+            parse (bool): False returns the output of 'ls -la', and True parses that into a JSON dictionary.
+            as_df (bool): Return a pandas DataFrame.
+            timeout(int): Number of seconds to limit the duration of the requests.post() call.
 
         Returns:
             str: The API response as JSON
@@ -520,9 +558,13 @@ class Client:
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         logger.info(f"list_dir {path=}")
         debug_start_time = time.perf_counter()
-        r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self.headers, data=data,
-                          verify=self.ca_file)
+        try:
+            r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self.headers, data=data,
+                              verify=self.ca_file, timeout=timeout)
+        except requests.Timeout:
+            raise UITError('Request Timeout')
         logger.debug(self._debug_uit(locals()))
+
         result = r.json()
 
         if as_df and 'path' in result:
@@ -767,15 +809,14 @@ class Client:
         if not logger.isEnabledFor(logging.DEBUG):
             return
 
-        debug_end_time = time.perf_counter()
-        time_text = f"{debug_end_time - local_vars['debug_start_time']:.2f}s"
-
-        debug_header = f" {FG_RED}time={time_text}{ALL_OFF}    node={self.login_node}"
-
         try:
             resp = local_vars['r'].json()
         except requests.exceptions.JSONDecodeError:
             resp = {}
+
+        debug_end_time = time.perf_counter()
+        time_text = f"{debug_end_time - local_vars['debug_start_time']:.2f}s"
+        debug_header = f" {FG_RED}time={time_text}{ALL_OFF}    node={self.login_node}"
 
         if resp.get('exitcode') is not None:
             debug_header += f"    rc={resp.get('exitcode')}"
@@ -800,11 +841,11 @@ class Client:
             if not isinstance(debug_stacktrace_allowlist, list):
                 debug_stacktrace_allowlist = []
         else:
-            debug_stacktrace_allowlist = ['pyuit']
-        # This only shows the 'pyuit' directory by default. To change which directories are shown in the stacktrace,
+            debug_stacktrace_allowlist = ['uit']
+        # This only shows the 'uit' directory by default. To change which directories are shown in the stacktrace,
         # modify the PyUIT yaml config file (default location is ~/.uit) with a list like this:
         # debug_stacktrace_allowlist:
-        #   - pyuit
+        #   - uit
         #   - your_codebase_dir
 
         # To disable the stacktrace, put "debug_stacktrace_allowlist:" in the config file with no list below it

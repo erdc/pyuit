@@ -6,7 +6,7 @@ import panel as pn
 from .utils import make_bk_label
 
 from ..uit import Client, HPC_SYSTEMS
-from ..exceptions import MaxRetriesError
+from ..exceptions import UITError, MaxRetriesError
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class HpcConnect(param.Parameterized):
                 exclude_login_nodes=self.exclude_nodes,
                 retry_on_failure=retry,
             )
-        except MaxRetriesError as e:
+        except (UITError, MaxRetriesError) as e:
             logger.exception(e)
             self.exclude_nodes.append(self.uit_client.login_node)
             self.disconnect()
