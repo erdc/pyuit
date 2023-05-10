@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 DEFAULT_CA_FILE = dodcerts.where()
 DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
-HPC_SYSTEMS = ['onyx', 'narwhal']
+HPC_SYSTEMS = ['mustang', 'onyx', 'narwhal']
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
 
 FG_RED = "\033[31m"
@@ -589,7 +589,7 @@ class Client:
         if not parse:
             return result
 
-        return self._parse_hpc_output(result, as_df, remove_last_line=True)
+        return self._parse_hpc_output(result, as_df)
 
     @_ensure_connected
     @robust()
@@ -770,7 +770,7 @@ class Client:
 
     @classmethod
     def _parse_hpc_output(cls, output, as_df, columns=None, delimiter=None, delimiter_char='=',
-                          num_header_lines=3, remove_last_line=False):
+                          num_header_lines=3):
         if output:
             delimiter = delimiter or cls._parse_hpc_delimiter(output, delimiter_char=delimiter_char)
 
@@ -782,7 +782,8 @@ class Client:
                     header_lines = header.splitlines()[-num_header_lines:]
                     columns = cls._parse_hpc_headers(header_lines, delimiter)
 
-            if remove_last_line:
+            if not lines[-1]:
+                # remove the last line if it's empty
                 lines = lines[:-1]
         else:
             lines = []

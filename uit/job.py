@@ -15,8 +15,9 @@ class PbsJob:
 
     def __init__(self, script, client=None, label='pyuit', workspace=None,
                  transfer_input_files=None, home_input_files=None, archive_input_files=None,
-                 working_dir=None, description=None, metadata=None):
+                 working_dir=None, description=None, metadata=None, post_processing_script=None):
         self.script = script
+        self.post_processing_script = post_processing_script
         self.client = client or Client()
         workspace = workspace or Path.cwd()
         self.workspace = Path(workspace)
@@ -26,10 +27,12 @@ class PbsJob:
         self.description = description
         self.metadata = metadata or dict()
         self.label = label
+        self.cleanup = False
         self._working_dir = working_dir
         self._job_id = None
         self._status = None
         self._qstat = None
+        self._post_processing_job_id = None
         self._remote_workspace_id = None
         self._remote_workspace = None
 
@@ -93,6 +96,9 @@ class PbsJob:
     def job_id(self):
         return self._job_id
 
+    def post_processing_job_id(self):
+        return self._post_processing_job_id
+
     @property
     def job_number(self):
         return re.split('\.|\[', self.job_id)[0]  # noqa: W605
@@ -105,11 +111,10 @@ class PbsJob:
     def qstat(self):
         return self._qstat
 
-    def submit(self, working_dir=None, remote_name=None, local_temp_dir=''):
+    def submit(self, remote_name=None, local_temp_dir=''):
         """Submit a Job to HPC queue.
 
         Args:
-            working_dir(str): Path to working dir on supercomputer in which to run pbs script.
             remote_name(str): Custom name for pbs script on supercomputer. Defaults to "run.pbs".
             local_temp_dir(str): Path to local temporary directory if unable to write to os temp dir.
 
@@ -119,7 +124,7 @@ class PbsJob:
         if self.job_id is not None:
             # TODO: log a warning stating that the job has already been submitted
             return self.job_id
-        # TODO: check to make sure system on self.client is compatible with self.script
+        assert self.client.system == self.script.system
 
         working_dir = self.working_dir.as_posix()
         try:
@@ -135,11 +140,28 @@ class PbsJob:
         self._job_id = self.client.submit(self.script, working_dir=working_dir,
                                           remote_name=remote_name, local_temp_dir=local_temp_dir)
 
+        if self.post_processing_script:
+            assert self.client.system == self.post_processing_script.system
+            self.post_processing_script.set_directive('-W', f'depend=afterany:{self.job_id}')
+            self._post_processing_job_id = self.client.submit(
+                self.post_processing_script,
+                working_dir=working_dir,
+                remote_name=f'{remote_name.rstrip(".pbs")}_post_processing.pbs',
+                local_temp_dir=local_temp_dir,
+            )
+
         if remote_name == self.pbs_submit_script_name:
             self.client.call(f'mv {self.pbs_submit_script_name} {self.name}.{self.job_number}.pbs',
                              working_dir=working_dir)
 
         return self.job_id
+
+    def set_default_post_processing_script(self, execution_block):
+        self.post_processing_script = PbsScript(
+            name=f'{self.name}_post_processing', project_id=self.script.project_id,
+            num_nodes=1, processes_per_node=1, max_time='1:00:00', system=self.script.system,
+            queue='transfer', node_type='transfer', execution_block=execution_block,
+        )
 
     def terminate(self):
         return self._execute('qdel')
@@ -190,7 +212,7 @@ class PbsJob:
         return '\n'.join([f'archive get - C ${{ARCHIVE_HOME}} {f}' for f in self.archive_input_files])
 
     def _schedule_cleanup(self):
-        self.cleanup = False  # TODO rethink how cleanup should work
+        pass
         # if self.cleanup:
         #     # Render cleanup script
         #     cleanup_walltime = strfdelta(self.max_cleanup_time, '%H:%M:%S')

@@ -23,7 +23,13 @@ NODE_TYPES = {
         'gpu': 128,
         'bigmem': 128,
         'transfer': 1,
-    }
+    },
+    'mustang': {
+        'compute': 48,
+        'gpu': 48,
+        'bigmem': 48,
+        'transfer': 1,
+    },
 }
 
 
@@ -60,7 +66,7 @@ class PbsScript(object):
             e.g. (0, 9) or (0, 9, 3) (default=None).
     """
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
-                 queue='debug', node_type='compute', system='onyx', array_indices=None):
+                 queue='debug', node_type='compute', system='onyx', array_indices=None, execution_block=None):
 
         if not name:
             raise ValueError('Parameter "name" is required.')
@@ -90,7 +96,7 @@ class PbsScript(object):
         self._module_use = []
         self._environment_variables = collections.OrderedDict()
         self._execution_block = None
-        self.execution_block = ''  # User defined execution block
+        self.execution_block = execution_block or ''  # User defined execution block
         self.configure_job_dir = False
 
     def __repr__(self):
