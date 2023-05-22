@@ -518,13 +518,12 @@ class Client:
         data = {'file': remote_path}
         data = {'options': json.dumps(data, default=encode_pure_posix_path)}
         debug_start_time = time.perf_counter()
-        logger.info(f"get_file {remote_path=}    {local_path=}   {debug_start_time=}")
+        logger.info(f"get_file {remote_path=}    {local_path=}")
         try:
             r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
                               stream=True, timeout=timeout)
         except requests.Timeout:
             raise UITError('Request Timeout')
-        logger.debug(self._debug_uit(locals()))
 
         if r.status_code != 200:
             raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
@@ -533,6 +532,9 @@ class Client:
             for chunk in r.iter_content(chunk_size=1024):
                 if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
+            local_file_size = f.tell()  # tell() returns the file seek pointer which is at the end of the file
+        logger.debug(self._debug_uit(locals()))
+
         return local_path
 
     @_ensure_connected
@@ -812,12 +814,22 @@ class Client:
 
         try:
             resp = local_vars['r'].json()
-        except requests.exceptions.JSONDecodeError:
+        except (requests.exceptions.JSONDecodeError, RuntimeError):
+            # get_file only returns file contents, not json, so it always causes RuntimeError.
             resp = {}
 
         debug_end_time = time.perf_counter()
         time_text = f"{debug_end_time - local_vars['debug_start_time']:.2f}s"
         debug_header = f" {FG_RED}time={time_text}{ALL_OFF}    node={self.login_node}"
+
+        if local_vars.get('local_file_size'):
+            debug_header += f"    filesize={local_vars['local_file_size']}"
+        elif local_vars.get('local_path'):
+            try:
+                local_file_size = local_vars['local_path'].stat().st_size
+                debug_header += f"    filesize={local_file_size}"
+            except OSError:
+                pass
 
         if resp.get('exitcode') is not None:
             debug_header += f"    rc={resp.get('exitcode')}"
@@ -873,10 +885,8 @@ class Client:
                         nice_trace += (
                             f"\n    {i}: {trimmed_filename}:"
                             f"{stacktrace[i].lineno} {stacktrace[i].name}()"
-                            f"    {stacktrace[i].line.encode('ascii', 'backslashreplace').decode('ascii')}"
+                            f"    {stacktrace[i].line}"
                         )
-                        # This uses encode('ascii') because the logging module did not like the
-                        # unicode characters in file browser buttons
                         break
 
         return f"{debug_header}{nice_stdout}{nice_stderr}{nice_trace}"
