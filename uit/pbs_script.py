@@ -200,7 +200,7 @@ class PbsScript(object):
 
     @property
     def number_of_sub_jobs(self):
-        if self._array_indices is not None:
+        if self._array_indices:
             return self._array_indices[1] + 1
 
     @property
