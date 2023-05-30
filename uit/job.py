@@ -164,7 +164,12 @@ class PbsJob:
         )
 
     def terminate(self):
-        return self._execute('qdel')
+        if self.job_id:
+            return self._execute('qdel')
+        else:
+            # Avoid running "qdel None" which causes an error. There is nothing to terminate in PBS, so return True.
+            # This is often the result of a job that created files on the HPC but failed to create the PBS job.
+            return True
 
     def hold(self):
         return self._execute('qhold')
