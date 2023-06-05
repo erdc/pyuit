@@ -70,5 +70,5 @@ target/
 # ViM Files
 *.swp
 
-# Jupyter Notebook Checkpoints
+# Jupyter Notebook checkpoints
 .ipynb_checkpoints
