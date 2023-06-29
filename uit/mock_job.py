@@ -1,10 +1,7 @@
-import os
 import re
 from datetime import datetime
 from pathlib import PurePosixPath, Path
 import logging
-
-import pandas as pd
 
 from .uit import Client
 from .pbs_script import PbsScript, NODE_ARGS
@@ -14,7 +11,7 @@ from .execution_block import EXECUTION_BLOCK_TEMPLATE
 logger = logging.getLogger(__name__)
 
 
-class PbsJob:
+class MockPbsJob:
 
     def __init__(self, script, client=None, label='pyuit', workspace=None,
                  transfer_input_files=None, home_input_files=None, archive_input_files=None,
@@ -99,7 +96,6 @@ class PbsJob:
     def job_id(self):
         return self._job_id
 
-    @property
     def post_processing_job_id(self):
         return self._post_processing_job_id
 
@@ -168,12 +164,7 @@ class PbsJob:
         )
 
     def terminate(self):
-        if self.job_id:
-            return self._execute('qdel', additional_options=self.post_processing_job_id)
-        else:
-            # Avoid running "qdel None" which causes an error. There is nothing to terminate in PBS, so return True.
-            # This is often the result of a job that created files on the HPC but failed to create the PBS job.
-            return True
+        return self._execute('qdel')
 
     def hold(self):
         return self._execute('qhold')
@@ -181,10 +172,9 @@ class PbsJob:
     def release(self):
         return self._execute('qrls')
 
-    def _execute(self, cmd, additional_options=None):
-        additional_options = additional_options or ''
+    def _execute(self, cmd):
         try:
-            self.client.call(command=f'{cmd} {self.job_id} {additional_options}')
+            self.client.call(command=f'{cmd} {self.job_id}')
             return True
         except Exception as e:
             if cmd == 'qdel' and ('qdel: Job has finished' in str(e) or 'qdel: Unknown Job Id' in str(e)):
@@ -248,107 +238,23 @@ class PbsJob:
         #                                                                     f'cleanup.{execute_job_id}.pbs')
 
     def update_status(self):
-        self.update_statuses([self])
+        status = self.client.status(self.job_id)[0]
+        #return "I completed PBSJob.update_status"
+        self._qstat = status
+        self._status = status['status']
         return self.status
 
-    def _get_log_file_name(self, log_type):
-        """
-        Returns the file name for `log_type`
-        Args:
-            log_type (str): the type of log: "o" for stdout or "e" for stderr
+    def _get_log_file_path(self, log_type):
+        return self.working_dir / f'{self.name}.{log_type}{self.job_number}'
 
-        Returns: The name of the log file for this job.
-
-        """
-        return f'{self.name}.{log_type}{self.job_number}'
-
-    def _get_local_log_file_path(self, log_type: str):
-        """
-        Gets the local path where the log file is saved.
-        Args:
-            log_type (str): the type of log: "o" for stdout or "e" for stderr
-
-        Returns: The full path to the log file in the local workspace (as a Path object).
-
-        """
-        return self.workspace / self._get_log_file_name(log_type)
-
-    def _get_remote_log_file_path(self, log_type: str):
-        """
-        Gets the remote path (on the HPC) where the log file is created.
-        Args:
-            log_type (str): the type of log: "o" for stdout or "e" for stderr
-
-        Returns: The full path to the log file on the HPC system (as a PurePosixPath object).
-
-        """
-        return self.working_dir / self._get_log_file_name(log_type)
-
-    def get_cached_file_contents(self, remote_path, local_path=None, bytes=None, start_from=0):
-        """
-        Gets the file contents from a locally cached file. If file is not cached locally it will first copy the file from the HPC system to the local workspace.
-        Args:
-            remote_path (str, PurePosixPath): location of remote file to get contents of. It is resolved using `self.resolve_path`.
-            local_path (str, Path): location to cache `remote_path`. Default is `None`. If not provided then it will be derived from `remote_path`.
-            bytes (int): number of bytes to read from file. If `None` then the whole file will be read. Defaults to `None`.
-            start_from (int): number of bytes to skip before reading file. Default is `0`. If negative it will read from the end of the end of the file.
-
-        Returns: The contents of the file.
-
-        """
-        remote_path = self.resolve_path(remote_path)
-        local_path = local_path or self.workspace / remote_path.relative_to(self.working_dir)
-        if not local_path.exists():
-            local_path.parent.mkdir(parents=True, exist_ok=True)
-            self.client.get_file(remote_path, local_path)
-            if not local_path.exists():
-                raise RuntimeError(f'Unable to retrieve {remote_path}')
-
-        size = local_path.stat().st_size
-        if start_from > size:
-            logger.warning(
-                f'Requested to read contents of {local_path} starting from {start_from},'
-                f' but the file is only {size} bytes long.'
-            )
-        with local_path.open('rb') as f:
-            if start_from < 0:
-                start_from = max(-size, start_from)
-                f.seek(start_from, os.SEEK_END)
-            else:
-                f.seek(start_from)
-            log_contents = f.read(bytes).decode()
-        return log_contents
-
-    def _get_cached_log(self, log_type, bytes=None, start_from=0):
-        """
-        Gets the contents of a log file. Checks local workspace first, and if not present copies the file from the HPC system to the local workspace.
-        Args:
-            log_type (str): the type of log: "o" for stdout or "e" for stderr
-
-        Returns: The contents of the log. If the file cannot be copied from the HPC then raises a RuntimeError
-
-        """
-        local_path = self._get_local_log_file_path(log_type)
-        remote_path = self._get_remote_log_file_path(log_type)
-        return self.get_cached_file_contents(remote_path, local_path, bytes=bytes, start_from=start_from)
-
-    def _get_log(self, log_type, filename=None, bytes=None, start_from=0):
-        """
-        Gets the contents of a log file, and optionally saves the file to disk.
-        Args:
-            log_type (str): the type of log: "o" for stdout or "e" for stderr
-            filename (str, Path): file location to write the file contents to.
-
-        Returns: File contents as a string.
-
-        """
+    def _get_log(self, log_type, filename=None):
         try:
             if self.status in ['F', 'X']:
-                log_contents = self._get_cached_log(log_type, bytes=bytes, start_from=start_from)
+                log_contents = self.client.call(f'cat {self._get_log_file_path(log_type)}')
             else:
                 log_contents = self.client.call(f'qpeek {self.job_id}')
                 if log_contents == 'Unknown Job ID\n':
-                    log_contents = self._get_cached_log(log_type, bytes=bytes, start_from=start_from)
+                    log_contents = self.client.call(f'cat {self._get_log_file_path(log_type)}')
                 else:
                     index = {'o': 0, 'e': 1}[log_type]
                     log_parts = log_contents.split(f'{self.job_id.split(".")[0]} STDERR')[index].split('\n', 1)
@@ -357,8 +263,7 @@ class PbsJob:
                     except IndexError:
                         log_contents = ''
         except Exception as e:
-            log_contents = f'ERROR retrieving log: {str(e)}'
-            logger.exception(e)
+            log_contents = str(e)
 
         if filename is not None:
             with Path(filename).open('w') as log:
@@ -370,22 +275,18 @@ class PbsJob:
         """
         Resolves strings with variables relating to the job id.
         """
-        path = PurePosixPath(path).as_posix()
-        path = path.replace('$JOB_NAME', self.name)
         path = path.replace('$JOB_ID', self.job_id)
         path = path.replace('$JOB_NUMBER', self.job_number)
-        if self.post_processing_job_id:
-            path = path.replace('$POST_PROCESSING_JOB_NUMBER', self._clean_job_id(self.post_processing_job_id))
         path = PurePosixPath(path)
         if path.is_absolute():
             return path
-        return self.working_dir / path
+        return self.run_dir / path
 
-    def get_stdout_log(self, filename=None, bytes=None, start_from=0):
-        return self._get_log('o', filename, bytes=bytes, start_from=start_from)
+    def get_stdout_log(self, filename=None):
+        return self._get_log('o', filename)
 
-    def get_stderr_log(self, filename=None, bytes=None, start_from=0):
-        return self._get_log('e', filename, bytes=bytes, start_from=start_from)
+    def get_stderr_log(self, filename=None):
+        return self._get_log('e', filename)
 
     def get_custom_log(self, log_path, num_lines=None, head=False, filename=None):
         log_path = self.resolve_path(log_path)
@@ -405,50 +306,28 @@ class PbsJob:
 
         return log_contents
 
-    @staticmethod
-    def _clean_job_id(job_id):
-        return job_id.split('.')[0]
-
     @classmethod
-    def update_statuses(cls, jobs, as_df=False):
+    def update_statuses(cls, jobs, statuses = None,as_df=False):
         client = jobs[0].client
+     #   jobs = jobs[not(job._status == 'F' or job._status[-1]=='*') for job in jobs]
+        jobs = [job for job in jobs if job._status == None or (not (job._status == 'F' or job._status[-1] == '*'))]
         job_ids = [j.job_id for j in jobs]
-        job_ids.extend([j.post_processing_job_id for j in jobs if j.post_processing_job_id])
-        statuses = client.status(job_ids, as_df=as_df)
-        status_dicts = statuses.to_dict(orient='records') if as_df else statuses
-        status_dicts = {cls._clean_job_id(status['job_id']): status for status in status_dicts}
-        updated_status_dicts = {}
-        for job in jobs:
-            clean_job_id = cls._clean_job_id(job.job_id)
-            status = status_dicts[clean_job_id]
 
+    #    statuses = client.status(job_ids, as_df=as_df)
+    #    status_dicts = statuses.to_dict(orient='records') if as_df else statuses
+        status_dicts = statuses.copy()
+        for job, status in zip(jobs, status_dicts):
+            assert job.job_id.startswith(status['job_id'].split('.')[0])  # job id can be cutoff in the status output
             if 'status' not in status.keys() or (status['status'] == '' or status['status'] == None):
-                if job._qstat['elapsed_time'][-1] != '*': job._qstat['elapsed_time'] += '*'
+                if job._status[-1] != '*': job._status += '*'
                 if 'status' in job._qstat.keys():
                     job._qstat['status'] = job._status
                 else:
-                    job._qstat['status'] = 'F'
-            # elif (status['status'] == 'F' or status['status'] == 'X'):
-            #     job._qstat['status'] = status['status']
-            #     job._status = status['status']
-            elif (status['elapsed_time'] == '--' and status['status'] != 'Q') and (
-                    status['status'] != 'H' and status['status'] != 'B'):
-                #    if job._qstat['elapsed_time'][-1] != '*': job._qstat['elapsed_time'] += '*'
-                job._qstat['status'] = status['status']
-                job._status = status['status']
+                    job._qstat = {'status': '*'}
+                status = job._qstat.copy()
             else:
                 job._status = status['status']
                 job._qstat = status
-
-            updated_status_dicts[clean_job_id] = job._qstat
-
-            if status['status'] in ('F',) and job.post_processing_job_id:
-                pp_status = status_dicts[cls._clean_job_id(job.post_processing_job_id)]
-                job._status = pp_status['status']
-                if job._status == 'Q':  # don't set the status back to "Submitted" for the post-processing job
-                    job._status = 'R'
-
-        statuses = pd.DataFrame.from_dict(updated_status_dicts).T if as_df else updated_status_dicts
         return statuses
 
     @classmethod
@@ -463,8 +342,8 @@ class PbsJob:
         return instance
 
 
-class PbsArrayJob(PbsJob):
-    class PbsArraySubJob(PbsJob):
+class MockPbsArrayJob(MockPbsJob):
+    class PbsArraySubJob(MockPbsJob):
         def __init__(self, parent, job_index):
             super().__init__(parent.script, parent.client, parent.label, parent.workspace,
                              working_dir=parent.working_dir)
@@ -485,40 +364,34 @@ class PbsArrayJob(PbsJob):
             return self._job_id
 
         @property
-        def run_dir_name(self):
-            return f'run_{self.job_index}'
-
-        @property
         def run_dir(self):
-            return self.working_dir / self.run_dir_name
+            return self.working_dir / f'run_{self.job_index}'
 
         def submit(self, **kwargs):
             raise AttributeError('ArraySubJobs cannot be submitted. Submit must be called on the parent.')
 
-        def _get_log_file_name(self, log_type):
-            file_path = super()._get_log_file_name(log_type)
+        def _get_log_file_path(self, log_type):
+            file_path = super()._get_log_file_path(log_type).as_posix()
             return file_path + f'.{self.job_index}'
 
         def resolve_path(self, path):
             """
             Resolves strings with variables relating to the job id.
             """
-            pppath = PurePosixPath(path)
-            path = pppath.as_posix()
-            if not pppath.is_absolute() and '$RUN_DIR' not in path:
-                path = f'$RUN_DIR/{path}'  # resolve relative to sub-job run directory
             path = path.replace('$JOB_INDEX', str(self.job_index))
-            path = path.replace('$RUN_DIR', self.run_dir_name)
             return super().resolve_path(path)
 
     def __init__(self, script, **kwargs):
+        print("initializing array job")
         assert script._array_indices is not None
         super().__init__(script, **kwargs)
         self._sub_jobs = None
 
-    def update_status(self):
+    def update_status(self,statuses=None):
         all_jobs = [self] + self.sub_jobs
-        self.update_statuses(all_jobs)
+#        all_jobs = [self]
+#        print("all jobs:",all_jobs)
+        self.update_statuses(all_jobs,statuses)
         self._qstat = {j.job_id: j.qstat for j in all_jobs}
         return self.status
 
@@ -593,13 +466,14 @@ def get_job_from_id(job_id, uit_client, with_historic=True):
 
 
 def _process_l_directives(pbs_script):
-    matches = re.findall(r'^#PBS -l (.*)', pbs_script, flags=re.MULTILINE)
+    matches = re.findall('#PBS -l (.*)', pbs_script)
     d = dict()
     for match in matches:
         if 'walltime' in match:
             d['walltime'] = match.split('=')[1]
         else:
-            d.update({k: v for k, v in [i.split('=') for i in match.split(':')]})
+            d.update({k: v for k, v in [i.split('=') for i in matches[0].split(':')]})
+
     return d
 
 
@@ -608,7 +482,7 @@ def get_job_from_pbs_script(job_id, pbs_script, uit_client):
     working_dir = script.parent
     logger.debug(f'PBS script parent: {working_dir}')
     pbs_script = uit_client.call(f'cat {pbs_script}')
-    matches = re.findall(r'^#PBS -(.*)', pbs_script, flags=re.MULTILINE)
+    matches = re.findall('#PBS -(.*)', pbs_script)
     directives = {k: v for k, v in [(i.split() + [''])[:2] for i in matches]}
     directives['l'] = _process_l_directives(pbs_script)
 

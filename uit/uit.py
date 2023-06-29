@@ -701,7 +701,6 @@ class Client:
 
     def _process_status_command(self, cmd, parse, full, as_df):
         result = self.call(cmd)
-
         if not parse:
             return result
 
