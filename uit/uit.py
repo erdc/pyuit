@@ -822,14 +822,16 @@ class Client:
         time_text = f"{debug_end_time - local_vars['debug_start_time']:.2f}s"
         debug_header = f" {FG_RED}time={time_text}{ALL_OFF}    node={self.login_node}"
 
+        local_file_size = None
         if local_vars.get('local_file_size'):
-            debug_header += f"    filesize={local_vars['local_file_size']}"
+            local_file_size = int(local_vars['local_file_size'])
         elif local_vars.get('local_path'):
             try:
                 local_file_size = local_vars['local_path'].stat().st_size
-                debug_header += f"    filesize={local_file_size}"
             except OSError:
                 pass
+        if local_file_size is not None:
+            debug_header += f"    filesize={local_file_size:,}"
 
         if resp.get('exitcode') is not None:
             debug_header += f"    rc={resp.get('exitcode')}"

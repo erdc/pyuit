@@ -190,7 +190,7 @@ class PbsScript(object):
 
     @property
     def job_array_directives(self):
-        if self._array_indices is not None:
+        if self._array_indices:
             options = f'{self._array_indices[0]}-{self._array_indices[1]}'
             try:
                 options += f':{self._array_indices[2]}'
@@ -205,9 +205,9 @@ class PbsScript(object):
 
     @property
     def job_array_indices(self):
-        if self._array_indices is not None:
+        if self._array_indices:
             indices = list(self._array_indices)
-            indices[1] += 1  # unlike Python PBS is inclusive of the last index
+            indices[1] += 1  # unlike Python, PBS is inclusive of the last index
             return list(range(*indices))
 
     def set_directive(self, directive, value):

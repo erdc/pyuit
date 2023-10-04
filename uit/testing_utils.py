@@ -92,9 +92,12 @@ class MockClient(Client):
 
     def list_dir(self, path=None, parse=True, as_df=False):
         p = Path(path)
-        dirs = [{'name': x.name, 'path': str(x)} for x in p.iterdir() if x.is_dir()]
-        files = [{'name': x.name, 'path': str(x)} for x in p.iterdir() if x.is_file()]
-        return {'dirs': dirs, 'files': files}
+        try:
+            dirs = [{'name': x.name, 'path': str(x)} for x in p.iterdir() if x.is_dir()]
+            files = [{'name': x.name, 'path': str(x)} for x in p.iterdir() if x.is_file()]
+            return {'dirs': dirs, 'files': files}
+        except NotADirectoryError:
+            return {'success': 'false', 'error': 'File supplied is not a directory.'}
 
 
 mock_client = MockClient()
