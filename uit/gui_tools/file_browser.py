@@ -344,7 +344,7 @@ class FileBrowser(param.Parameterized):
             self, parameters=self.controls + ['path_text'], widgets=self.control_styles, show_name=False,
         )[:]
         args = {'listing': self.file_listing_widget}
-        code = 'listing.css_classes.push("pn-loading", "arcs"); listing.properties.css_classes.change.emit();'
+        code = 'listing.css_classes.push("pn-loading", "arc"); listing.properties.css_classes.change.emit();'
         self.file_listing_widget.jscallback(args=args, value=code)
         for wg in widgets[:-1]:
             wg.js_on_click(args=args, code=code)
@@ -589,7 +589,7 @@ class FileSelector(param.Parameterized):
 
         browse_toggle.js_on_click(
             args={'btn': browse_toggle},
-            code='btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit();',
+            code='btn.css_classes.push("pn-loading", "arc"); btn.properties.css_classes.change.emit();',
         )
 
         return pn.Row(file_path, browse_toggle, width_policy='max', margin=0)
@@ -671,10 +671,14 @@ class FileViewer(param.Parameterized):
     @param.depends('update_btn')
     def view(self):
         file_path = self.file_select.file_path
+        viewer = pn.widgets.Ace(
+            value=self.file_contents, min_height=500, sizing_mode='stretch_both',
+            readonly=True, filename=file_path, theme='monokai',
+        )
         return pn.Column(
             pn.widgets.TextInput(value=file_path, disabled=True),
-            pn.widgets.Ace(value=self.file_contents, min_height=500, sizing_mode='stretch_both',
-                           readonly=True, filename=file_path),
+            viewer.param.theme,
+            viewer,
             sizing_mode='stretch_both',
         )
 

@@ -264,11 +264,11 @@ class LogsTab(TabView):
     @param.depends('parent.active_job', 'log', watch=True)
     def get_log(self):
         job = self.active_job
-        if job is not None:
+        if job is not None and self.log is not None:
             if self.log == 'stdout':
-                log_content = job.get_stdout_log()
+                log_content = job.get_stdout_log(bytes=100_000, start_from=-100_000)
             elif self.log == 'stderr':
-                log_content = job.get_stderr_log()
+                log_content = job.get_stderr_log(bytes=100_000, start_from=-100_000)
             else:
                 try:
                     log_content = job.get_custom_log(self.log, num_lines=self.num_log_lines)
@@ -281,29 +281,31 @@ class LogsTab(TabView):
 
     @param.depends('log_content')
     def panel(self):
-        log_content = pn.pane.Str(self.log_content, sizing_mode='stretch_both')
+        log_content = pn.widgets.Ace.from_param(
+            self.param.log_content,
+            readonly=True, theme='monokai', sizing_mode='stretch_both', min_height=500
+        )
 
         refresh_btn = pn.widgets.Button.from_param(self.param.refresh_btn, button_type='primary', width=100)
         args = {'log': log_content, 'btn': refresh_btn}
-        code = 'btn.css_classes.push("pn-loading", "arcs"); btn.properties.css_classes.change.emit(); ' \
-               'log.css_classes.push("pn-loading", "arcs"); log.properties.css_classes.change.emit();'
+        code = 'btn.css_classes.push("pn-loading", "arc"); btn.properties.css_classes.change.emit(); ' \
+               'log.css_classes.push("pn-loading", "arc"); log.properties.css_classes.change.emit();'
         refresh_btn.js_on_click(args=args, code=code)
 
         if self.is_array:
-            sub_job_selector = pn.Param(self.parent.param.selected_sub_job)[0]
-            sub_job_selector.width = 300
+            sub_job_selector = pn.widgets.Select.from_param(self.parent.param.selected_sub_job, width=300)
             sub_job_selector.jscallback(args=args, value=code)
         else:
             sub_job_selector = None
 
-        log_type_selector = pn.Param(self.param['log'])[0]
-        log_type_selector.width = 300
+        log_type_selector = pn.widgets.Select.from_param(self.param['log'], width=300)
         log_type_selector.jscallback(args, value=code)
 
         return pn.Column(
             sub_job_selector,
             log_type_selector,
             refresh_btn,
+            log_content.param.theme,
             log_content,
             sizing_mode='stretch_both'
         )
@@ -336,29 +338,25 @@ class FileViewerTab(TabView):
 class StatusTab(TabView):
     title = param.String(default='Status')
     statuses = param.DataFrame(precedence=0.1)
-    update_status = param.Action(lambda self: self.update_statuses(), precedence=0.2)
+    update_status = param.Action(lambda self: self.update_statuses(update_cache=True), precedence=0.2)
     terminate_btn = param.Action(lambda self: None, label='Terminate', precedence=0.3)
     yes_btn = param.Action(lambda self: self.terminate_job(), label='Yes', precedence=0.4)
     cancel_btn = param.Action(lambda self: None, label='Cancel', precedence=0.5)
     disable_update = param.Boolean()
 
     @param.depends('parent.selected_job', watch=True)
-    def update_statuses(self):
+    def update_statuses(self, update_cache=False):
         if self.selected_job is not None:
-            if self.disable_update:
-                qstat = self.selected_job.qstat
-                if qstat is None:
-                    statuses = None
-                elif self.is_array:
-                    statuses = pd.DataFrame.from_dict(qstat).T
-                else:
-                    statuses = pd.DataFrame(qstat, index=[0])
-            else:
-                jobs = [self.selected_job]
-                if self.is_array:
-                    jobs += self.selected_job.sub_jobs
-                statuses = PbsJob.update_statuses(jobs, as_df=True)
+            if update_cache:
+                self.selected_job.update_status()
                 self.update_terminate_btn()
+            qstat = self.selected_job.qstat
+            if qstat is None:
+                statuses = None
+            elif self.is_array:
+                statuses = pd.DataFrame.from_dict(qstat).T
+            else:
+                statuses = pd.DataFrame(qstat, index=[0])
             if statuses is not None:
                 statuses.set_index('job_id', inplace=True)
             self.statuses = statuses
@@ -409,10 +407,10 @@ class StatusTab(TabView):
             cancel_btn.js_on_click(args=args, code=cancel_code)
 
             code = (
-                'btn.css_classes.push("pn-loading", "arcs"); '
+                'btn.css_classes.push("pn-loading", "arc"); '
                 'btn.properties.css_classes.change.emit(); '
                 'other_btn.disabled=true; '
-                'statuses_table.css_classes.push("pn-loading", "arcs"); '
+                'statuses_table.css_classes.push("pn-loading", "arc"); '
                 'statuses_table.properties.css_classes.change.emit();'
             )
 
