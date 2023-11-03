@@ -421,14 +421,25 @@ class PbsJob:
         for job in jobs:
             clean_job_id = cls._clean_job_id(job.job_id)
             status = status_dicts[clean_job_id]
-            updated_status_dicts[clean_job_id] = status
-            job._qstat = status
             job._status = status['status']
+
             if status['status'] in ('F',) and job.post_processing_job_id:
                 pp_status = status_dicts[cls._clean_job_id(job.post_processing_job_id)]
                 job._status = pp_status['status']
                 if job._status == 'Q':  # don't set the status back to "Submitted" for the post-processing job
                     job._status = 'R'
+
+            if (
+                    status['elapsed_time'] == '--'
+                    and status['status'] not in ('Q', 'H', 'B')
+                    and not isinstance(job, PbsArrayJob)
+            ):
+                if job._qstat['elapsed_time'][-1] != '*': job._qstat['elapsed_time'] += '*'
+                job._qstat['status'] = status['status']
+            else:
+                job._qstat = status
+
+            updated_status_dicts[clean_job_id] = job._qstat
 
         statuses = pd.DataFrame.from_dict(updated_status_dicts).T if as_df else updated_status_dicts
         return statuses
