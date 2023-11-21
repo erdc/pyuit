@@ -241,7 +241,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     submit_btn = param.Action(lambda self: self._submit(), label='Submit', constant=True, precedence=10)
     validate_btn = param.Action(lambda self: self._validate(), label='Validate', constant=True, precedence=10)
-    cancel_btn = param.Action(lambda self: self.cancel(), label='Cancel', precedence=10)
+    cancel_btn = param.Action(lambda self: self.param.trigger('cancel_btn'), label='Cancel', precedence=10)
     previous_btn = param.Action(lambda self: self._previous(), label='Previous', precedence=10)
     disable_validation = param.Boolean(label='Override Validation')
     validated = param.Boolean()
@@ -310,6 +310,10 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             self.cancel()
             self.validated = False
             self.is_submitable()
+
+    @param.depends('cancel_btn', watch=True)
+    def triggered_cancel(self):
+        self.cancel()
 
     def cancel(self):
         pass
