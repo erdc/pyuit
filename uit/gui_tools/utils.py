@@ -27,11 +27,11 @@ class HpcConfigurable(param.Parameterized):
     modules_to_unload = param.ListSelector(default=[])
 
     @param.depends('uit_client', watch=True)
-    def update_configurable_hpc_parameters(self):
+    def update_configurable_hpc_parameters(self, reset=False):
         if not (self.uit_client and self.uit_client.connected):
             return
 
-        self.load_config_file()
+        self.load_config_file(reset = reset)
         self.param.modules_to_unload.objects = sorted(self.uit_client.get_loaded_modules())
         self.param.modules_to_load.objects = self._get_modules_available_to_load()
         self.modules_to_load = self._validate_modules(self.param.modules_to_load.objects, self.modules_to_load)
@@ -62,7 +62,7 @@ class HpcConfigurable(param.Parameterized):
                 logger.info(f'Module "{m}" is  invalid.')
         return sorted(modules)
 
-    def load_config_file(self):
+    def load_config_file(self, reset=False):
         config_file = Path(self.configuration_file)
         if config_file.is_file():
             with config_file.open() as f:
@@ -71,6 +71,9 @@ class HpcConfigurable(param.Parameterized):
             if modules:
                 self.modules_to_load = self.modules_to_load or modules.get('load')
                 self.modules_to_unload = self.modules_to_unload or modules.get('unload')
+            if reset:
+                self.environment_variables = OrderedDict(config.get('environment_variables'))
+            else:
             self.environment_variables = self.environment_variables or OrderedDict(config.get('environment_variables'))
 
 
