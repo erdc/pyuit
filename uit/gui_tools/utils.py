@@ -74,7 +74,7 @@ class HpcConfigurable(param.Parameterized):
             if reset:
                 self.environment_variables = OrderedDict(config.get('environment_variables'))
             else:
-            self.environment_variables = self.environment_variables or OrderedDict(config.get('environment_variables'))
+                self.environment_variables = self.environment_variables or OrderedDict(config.get('environment_variables'))
 
 
 class HpcWorkspaces(HpcConfigurable):
