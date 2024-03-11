@@ -15,10 +15,10 @@ from urllib.parse import urljoin, urlencode  # noqa: F401
 
 import dodcerts
 import requests
-import yaml
 from flask import Flask, request, render_template_string
 from werkzeug.serving import make_server
 
+from .config import parse_config, DEFAULT_CA_FILE
 from .pbs_script import PbsScript
 from .util import robust, HpcEnv
 from .exceptions import UITError, MaxRetriesError
@@ -33,10 +33,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
-DEFAULT_CA_FILE = dodcerts.where()
-DEFAULT_CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.uit')
-HPC_SYSTEMS = ['mustang', 'onyx', 'narwhal']
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
+
 
 FG_RED = "\033[31m"
 FG_CYAN = "\033[36m"
@@ -84,7 +82,6 @@ class Client:
         # Set arg-based attributes
         self.client_id = client_id
         self.client_secret = client_secret
-        self.config_file = config_file
         self.session_id = session_id
         self.scope = scope
         self.token = token
@@ -96,15 +93,8 @@ class Client:
         # Environmental variable cache
         self.env = HpcEnv(self)
 
-        if self.config_file is None:
-            self.config_file = DEFAULT_CONFIG_FILE
-        try:
-            with open(self.config_file, 'r') as f:
-                self._config = yaml.safe_load(f)
-        except IOError:
-            pass  # This config file is rarely used, so ignore errors if it doesn't exist
-        except yaml.YAMLError as e:
-            logger.error(f"Error while parsing config file '{self.config_file}': {e}")
+        if config_file:
+            self._config = parse_config(config_file)
 
         if self.client_id is None:
             self.client_id = os.environ.get('UIT_ID')
@@ -114,17 +104,18 @@ class Client:
 
         if (self.client_id is None or self.client_secret is None) and self.token is None:
             if self._config:
-                self.client_id = self._config.get('client_id')
-                self.client_secret = self._config.get('client_secret')
+                self.client_id = self.client_id or self._config.get('client_id')
+                self.client_secret = self.client_secret or self._config.get('client_secret')
 
-        if self.client_id is None and self.client_secret is None and self.token is None:
+        if (self.client_id is None or self.client_secret is None) and self.token is None:
             raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
-                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + self.config_file + ' OR provide an '
+                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + config_file + ' OR provide an '
                              'access token as a kwarg.')
 
         if session_id is None:
             self.session_id = os.urandom(16).hex()
 
+    @staticmethod
     def _ensure_connected(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):

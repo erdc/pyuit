@@ -56,10 +56,26 @@ If the ``Client`` does not receive they ``Client ID`` and ``Client Secret`` keys
   client_id: <YOUR_CLIENT_ID>
   client_secret: <YOUR_CLIENT_SECRET>
 
-If you have a configuration file located somewhere other than :file:`~/.uit` then you need to pass the path to the file into the ``Client`` constructor::
+If you have a configuration file located somewhere other than :file:`~/.uit` then you either need to specify the path in the `UIT_CONFIG_FILE` environment variable or pass the path to the file into the ``Client`` constructor::
 
+  export UIT_CONFIG_FILE="/path/to/your/uit/config/file"
   c = Client(config_file="/path/to/your/uit/config/file")
 
+PyUIT comes with a default specification of the nodes types for the DSRC HPC systems which should work in most situations. In the rare event that the default is not sufficient, it can be overridden by specifying a custom file in the :file:`~/.uit` configuration file or by defining a `UIT_NODE_TYPES_FILE` environment variable::
+
+  node_types_file: /path/to/your/node_types/file
+  export UIT_NODE_TYPES_FILE="/path/to/your/node_types/file"
+
+The file should be a CSV file with a header row specifying the system and then the node types and value rows specifying the system and then number of cores on each node type. For example::
+
+  system,compute,gpu,bigmem,transfer,mla,highclock
+  nautilus,128,128,128,1,128,32
+
+The ``dodcerts`` library is used to provide the default Certificate Authority bundle. If a custom certificate bundle file is required it can be specified in the :file:`~/.uit` configuration file or by using the ``UIT_CA_FILE`` environment variable. It can also be passed into the ``Client`` constructor::
+
+  ca_file: /path/to/custom/dod/ca/bundle
+  export UIT_CA_FILE="/path/to/custom/dod/ca/bundle"
+  c = Client(ca_file="/path/to/custom/dod/ca/bundle")
 
 **CONDA BUILD**
 

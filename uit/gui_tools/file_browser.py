@@ -99,16 +99,16 @@ class FileTransfer(param.Parameterized):
     )
 
     from_location = param.ObjectSelector(
-        default='onyx',
-        objects=['jim', 'onyx', 'local'],
+        default='local',
+        objects=['local'],
         precedence=0.21
     )
     from_directory = param.String(
         precedence=0.22
     )
     to_location = param.ObjectSelector(
-        default='onyx',
-        objects=['jim', 'onyx', 'local'],
+        default='local',
+        objects=['local'],
         precedence=0.31
     )
     to_directory = param.String(
