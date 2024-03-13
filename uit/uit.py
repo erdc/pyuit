@@ -94,6 +94,8 @@ class Client:
 
         if config_file:
             self._config = parse_config(config_file)
+        else:
+            self._config = DEFAULT_CONFIG
 
         if self.client_id is None:
             self.client_id = os.environ.get('UIT_ID')
