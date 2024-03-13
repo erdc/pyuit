@@ -371,7 +371,7 @@ class Client:
         self._userinfo = data.get('userinfo')
         self._user = self._userinfo.get('USERNAME')
         logger.info(f"get_userinfo user='{self._user}'")
-        self._systems = [sys.lower() for sys in self._userinfo['SYSTEMS'].keys()]
+        self._systems = sorted([sys.lower() for sys in self._userinfo['SYSTEMS'].keys()])
         self._login_nodes = {
             system:
                 [node['HOSTNAME'].split('.')[0] for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
