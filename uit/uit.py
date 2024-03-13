@@ -13,7 +13,6 @@ from itertools import chain
 from pathlib import PurePosixPath, Path
 from urllib.parse import urljoin, urlencode  # noqa: F401
 
-import dodcerts
 import requests
 from flask import Flask, request, render_template_string
 from werkzeug.serving import make_server
