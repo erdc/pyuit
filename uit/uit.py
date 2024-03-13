@@ -17,7 +17,7 @@ import requests
 from flask import Flask, request, render_template_string
 from werkzeug.serving import make_server
 
-from .config import parse_config, DEFAULT_CA_FILE
+from .config import parse_config, DEFAULT_CA_FILE, DEFAULT_CONFIG
 from .pbs_script import PbsScript
 from .util import robust, HpcEnv
 from .exceptions import UITError, MaxRetriesError
