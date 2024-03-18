@@ -184,9 +184,6 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         else:
             self.env_values[index].value = self.file_browser.value[0]
 
-    def get_versions(self, uit_client):
-        return []
-
     @param.depends('environment_variables')
     def environment_variables_view(self):
         self.environment_variables.pop('', None)  # Clear blank key if there is one
@@ -194,23 +191,12 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         self.env_values = list()
         self.env_browsers = list()
         self.env_delete_buttons = list()
-        alert_pane = pn.pane.Str('')
 
         for i, (k, v) in enumerate(self.environment_variables.items()):
-            if k == 'HELIOS_VERSION':
-                if v not in self.get_versions(self.uit_client):
-                    alert_pane = pn.pane.Alert(alert_type='warning', object=f'Environment profile Helios version {v} is not in the list of current Helios software. Resetting to {self.get_versions(self.uit_client)[0]}')
-                    v = self.get_versions(self.uit_client)[0]
-                name_widget = self.env_var_widget(val=k, tag=f'env_key_{i}', disabled=True)
-                val_widget = pn.widgets.Select(value=v, options=self.param.version.objects, css_classes=[f'env_val_{i}'], tag=f'env_val_{i}')
-                val_widget.param.watch(self.update_environ, ['value'], onlychanged=True)
-                browser_widget = None
-                delete_btn = None
-            else:
-                name_widget = self.env_var_widget(val=k, tag=f'env_key_{i}')
-                val_widget = self.env_var_widget(val=str(v), tag=f'env_val_{i}')
-                browser_widget = self.env_file_browser_widget(tag=f'env_browser_{i}')
-                delete_btn = self.env_delete_btn(tag=f'env_del_{i}')
+            name_widget = self.env_var_widget(val=k, tag=f'env_key_{i}')
+            val_widget = self.env_var_widget(val=str(v), tag=f'env_val_{i}')
+            browser_widget = self.env_file_browser_widget(tag=f'env_browser_{i}')
+            delete_btn = self.env_delete_btn(tag=f'env_del_{i}')
             self.env_names.append(name_widget)
             self.env_values.append(val_widget)
             self.env_browsers.append(browser_widget)
@@ -229,7 +215,6 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         self.env_values[0].name = 'Value'
 
         return pn.Card(
-            *[pn.Row(alert_pane)],
             *[pn.Row(k, v, b, d, sizing_mode='stretch_width') for k, v, b, d in
               zip_longest(self.env_names, self.env_values, self.env_browsers, self.env_delete_buttons)],
             self.file_browser_col,

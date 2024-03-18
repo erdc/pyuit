@@ -31,7 +31,7 @@ class HpcConfigurable(param.Parameterized):
         if not (self.uit_client and self.uit_client.connected):
             return
 
-        self.load_config_file(reset = reset)
+        self.load_config_file(reset=reset)
         self.param.modules_to_unload.objects = sorted(self.uit_client.get_loaded_modules())
         self.param.modules_to_load.objects = self._get_modules_available_to_load()
         self.modules_to_load = self._validate_modules(self.param.modules_to_load.objects, self.modules_to_load)
