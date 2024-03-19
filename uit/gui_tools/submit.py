@@ -354,7 +354,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def execution_block(self):
         return ''
 
-    @param.depends('job_name', watch=True)
+    @param.depends('job_name', 'environment_variables', watch=True)
     def is_submitable(self):
         self.error_messages[:] = []
         if not self.job_name:
