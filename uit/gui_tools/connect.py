@@ -5,7 +5,7 @@ import panel as pn
 
 from .utils import make_bk_label
 
-from ..uit import Client, HPC_SYSTEMS
+from ..uit import Client
 from ..exceptions import UITError, MaxRetriesError
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class HpcAuthenticate(param.Parameterized):
 
 class HpcConnect(param.Parameterized):
     uit_client = param.ClassSelector(Client)
-    system = param.ObjectSelector(default=HPC_SYSTEMS[0], objects=HPC_SYSTEMS)
+    system = param.ObjectSelector()
     login_node = param.ObjectSelector(default=None, objects=[None], label='Login Node')
     exclude_nodes = param.ListSelector(default=list(), objects=[], label='Exclude Nodes')
     connected = param.Boolean(default=False, allow_None=True)
@@ -77,7 +77,13 @@ class HpcConnect(param.Parameterized):
             name='HPC System',
         )
 
-    @param.depends('system', 'uit_client', watch=True)
+    @param.depends('uit_client', watch=True)
+    def update_system_options(self):
+        if self.uit_client is not None:
+            self.param.system.objects = self.uit_client.systems
+            self.system = self.uit_client.systems[0]
+
+    @param.depends('system', watch=True)
     def update_node_options(self):
         if self.uit_client is not None:
             options = self.uit_client.login_nodes[self.system]

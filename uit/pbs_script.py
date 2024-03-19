@@ -2,36 +2,30 @@ import collections
 import datetime
 import os
 import io
+import csv
+from pathlib import Path
+from importlib.resources import files
+
+from .config import DEFAULT_CONFIG
+
+node_types_file = os.environ.get('UIT_NODE_TYPES_FILE', DEFAULT_CONFIG.get('node_types_file'))
+try:
+    node_types_file = Path(node_types_file)
+    assert node_types_file.is_file()
+except:
+    node_types_file = files('uit') / 'node_types.csv'
 
 
-NODE_TYPES = {
-    'jim': {
-        'compute': 36,
-        'gpu': 28,
-        'bigmem': 32,
-        'transfer': 1,
-    },
-    'onyx': {
-        'compute': 44,
-        'gpu': 22,
-        'bigmem': 44,
-        'transfer': 1,
-        'knl': 64,
-    },
-    'narwhal': {
-        'compute': 128,
-        'gpu': 128,
-        'bigmem': 128,
-        'transfer': 1,
-    },
-    'mustang': {
-        'compute': 48,
-        'gpu': 48,
-        'bigmem': 48,
-        'transfer': 1,
-    },
-}
+# parse node type info
+with node_types_file.open() as csv_file:
+    reader = csv.reader(csv_file)
+    headers = next(reader)
+    node_types = {}
+    for row in reader:
+        d = dict(zip(headers, row))
+        node_types[d.pop('system')] = d
 
+NODE_TYPES = node_types
 
 NODE_ARGS = dict(
     compute='compute',
@@ -42,6 +36,7 @@ NODE_ARGS = dict(
 
 
 def factors(n):
+    n = int(n)
     return sorted(set([j for k in [[i, n // i] for i in range(1, int(n ** 0.5) + 1) if not n % i] for j in k]))
 
 
@@ -61,12 +56,12 @@ class PbsScript(object):
                 If passed as a string it should be in the form "HH:MM:SS".
         node_type (str): Type of node on which the job should run (default='debug').
         queue (str): Name of the queue into which to submit the job (default='compute').
-        system (str): Name of the system to run on (default='onyx').
+        system (str): Name of the system to run on (default='carpenter').
         array_indices (tuple): Indices for a job array in the following format: (start, end, [step])
             e.g. (0, 9) or (0, 9, 3) (default=None).
     """
     def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
-                 queue='debug', node_type='compute', system='onyx', array_indices=None, execution_block=None):
+                 queue='debug', node_type='compute', system='carpenter', array_indices=None, execution_block=None):
 
         if not name:
             raise ValueError('Parameter "name" is required.')
@@ -108,18 +103,25 @@ class PbsScript(object):
     def _validate_system(self):
         systems = list(NODE_TYPES.keys())
         if self.system not in systems:
-            raise ValueError(f'Please specify a valid system. Must be one of: {systems}')
+            raise ValueError(
+                f'"{self.system}" is not a valid system. Please specify a valid system. Must be one of: {systems}'
+            )
 
     def _validate_node_type(self):
         node_types = list(NODE_TYPES[self.system].keys())
         if self.node_type not in node_types:
-            raise ValueError(f'Please specify a valid node type: {node_types}')
+            raise ValueError(
+                f'"{self.node_type}" is not a valid note type. Please specify a valid node type: {node_types}'
+            )
 
     def _validate_processes_per_node(self):
         processes_per_node = factors(NODE_TYPES[self.system][self.node_type])
         if self.processes_per_node not in processes_per_node:
-            raise ValueError(f'Please specify valid "processes_per_node" for the given node type [{self.node_type}] '
-                             f'and System [{self.system}].\nMust be one of: {processes_per_node}')
+            raise ValueError(
+                f'The value "{self.processes_per_node}" is not valid. '
+                f'Please specify a valid "processes_per_node" for the given node type [{self.node_type}] '
+                f'and System [{self.system}].\nMust be one of: {processes_per_node}'
+            )
 
     @staticmethod
     def _create_block_header_string(header):
