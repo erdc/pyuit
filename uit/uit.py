@@ -110,7 +110,7 @@ class Client:
 
         if (self.client_id is None or self.client_secret is None) and self.token is None:
             raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
-                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + config_file + ' OR provide an '
+                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + str(config_file) + ' OR provide an '
                              'access token as a kwarg.')
 
         if session_id is None:
