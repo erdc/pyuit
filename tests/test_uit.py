@@ -1,14 +1,14 @@
 import unittest
 from unittest import mock
 from pathlib import PurePosixPath
-from uit.uit import Client
+from uit import Client
 
 
 class TestUIT(unittest.TestCase):
 
     def setUp(self):
-        from uit.uit import Client
-        with mock.patch('uit.uit.Client.get_userinfo') as _:
+        from uit import Client
+        with mock.patch('uit.Client.get_userinfo') as _:
             self.client = Client(token='test_token')
             self.client.connected = True
 
@@ -33,17 +33,17 @@ class TestUIT(unittest.TestCase):
             builtins.__import__ = real_import
         self.assertEqual(uit_test.has_pandas, False)
 
-    @mock.patch('uit.uit.open')
-    @mock.patch('uit.uit.yaml.safe_load')
+    @mock.patch('uit.config.open')
+    @mock.patch('uit.config.yaml.safe_load')
     def test_init_no_token(self, mock_yaml, _):
         mock_yaml.return_value = {
             'client_id': 'client_id',
             'client_secret': 'client_secret'
         }
-        Client()
+        Client(config_file='test')
 
-    @mock.patch('uit.uit.open')
-    @mock.patch('uit.uit.yaml.safe_load')
+    @mock.patch('uit.config.open')
+    @mock.patch('uit.config.yaml.safe_load')
     def test_init_no_credentials(self, mock_yaml, _):
         mock_yaml.return_value = {}
         self.assertRaises(ValueError, Client)
@@ -54,25 +54,25 @@ class TestUIT(unittest.TestCase):
             RuntimeError, self.client.call, 'cmd'
         )
 
-    @mock.patch('uit.uit.Client')
+    @mock.patch('uit.Client')
     def test_HOME(self, _):
         self.client.env.HOME = 'HOME env'
         res = self.client.HOME
         self.assertEqual(PurePosixPath('HOME env'), res)
 
-    @mock.patch('uit.uit.Client')
+    @mock.patch('uit.Client')
     def test_WORKDIR(self, _):
         self.client.env.WORKDIR = 'WORKDIR'
         res = self.client.WORKDIR
         self.assertEqual(PurePosixPath('WORKDIR'), res)
 
-    @mock.patch('uit.uit.Client')
+    @mock.patch('uit.Client')
     def test_WORKDIR2(self, _):
         self.client.env.WORKDIR2 = 'WORKDIR2'
         res = self.client.WORKDIR2
         self.assertEqual(PurePosixPath('WORKDIR2'), res)
 
-    @mock.patch('uit.uit.Client')
+    @mock.patch('uit.Client')
     def test_CENTER(self, _):
         self.client.env.CENTER = 'CENTER'
         res = self.client.CENTER
@@ -108,8 +108,8 @@ class TestUIT(unittest.TestCase):
     def test_username(self):
         self.assertEqual(None, self.client.username)
 
-    @mock.patch('uit.uit.Client.call')
-    @mock.patch('uit.uit.Client.put_file')
+    @mock.patch('uit.Client.call')
+    @mock.patch('uit.Client.put_file')
     def test_submit(self, _, mock_call):
         mock_call.return_value = 'J001'
 
@@ -117,16 +117,16 @@ class TestUIT(unittest.TestCase):
 
         self.assertEqual('J001', ret)
 
-    @mock.patch('uit.uit.Client.call')
-    @mock.patch('uit.uit.Client.put_file')
+    @mock.patch('uit.Client.call')
+    @mock.patch('uit.Client.put_file')
     def test_submit_runtime_error(self, mock_put_file, mock_call):
         mock_put_file.return_value = {'success': 'false', 'error': 'test_error'}
         mock_call.return_value = 'J001'
 
         self.assertRaises(RuntimeError, self.client.submit, pbs_script='test_script.sh', working_dir='\\test\\workdir')
 
-    @mock.patch('uit.uit.Client.call')
-    @mock.patch('uit.uit.Client.put_file')
+    @mock.patch('uit.Client.call')
+    @mock.patch('uit.Client.put_file')
     def test_submit_call_error(self, _, mock_call):
         mock_call.side_effect = RuntimeError
 

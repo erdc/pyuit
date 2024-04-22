@@ -7,7 +7,7 @@ import shutil
 class MockClient(Client):
     def __init__(self, *args, **kwargs):
         super().__init__(token='mock_token')
-        self.connect('onyx')
+        self.connect('testhpc')
 
     @property
     def WORKDIR(self):
@@ -23,12 +23,12 @@ class MockClient(Client):
         self._userinfo = {
             'USERNAME': 'mock_user',
             'SYSTEMS': {
-                'ONYX': {
+                'TESTHPC': {
                     'LOGIN_NODES': [
                         {
-                            'HOSTNAME': 'onyx01',
+                            'HOSTNAME': 'testhpc01',
                             'USERNAME': 'mock_user',
-                            'URLS': {'UIT': 'onyx01@mock.gov'}
+                            'URLS': {'UIT': 'testhpc01@mock.gov'}
                         },
                     ]
                 }
@@ -106,7 +106,7 @@ mock_script = PbsScript(
     name='mock_script',
     project_id='mock_project_id',
     num_nodes=1,
-    processes_per_node=44,
+    processes_per_node=1,
     max_time='00:00:01'
 )
 
@@ -116,7 +116,7 @@ mock_array_script = PbsScript(
     name='mock_script',
     project_id='mock_project_id',
     num_nodes=1,
-    processes_per_node=44,
+    processes_per_node=1,
     max_time='00:00:01',
     array_indices=(0, 2)
 )
