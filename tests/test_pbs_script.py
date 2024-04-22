@@ -81,14 +81,14 @@ class TestPBSScript(unittest.TestCase):
 
     def test_set_directive(self):
         # Call the method
-        self.pbs.set_directive('-J', 'OepnGL')
+        self.pbs.set_directive('-l', 'application=other')
 
         # Get the list of namedtuple
         ret = self.pbs._optional_directives
 
         # Test the results
-        self.assertEqual('-J', ret[0].directive)
-        self.assertEqual('OepnGL', ret[0].options)
+        self.assertEqual('-l', ret[0].directive)
+        self.assertEqual('application=other', ret[0].options)
 
     def test_get_directive(self):
         self.pbs.set_directive('-A', 'C++')
@@ -117,15 +117,15 @@ class TestPBSScript(unittest.TestCase):
         self.assertEqual('test', res)
 
     def test_get_directives(self):
-        self.pbs.set_directive('-J', 'OepnGL')
-        self.pbs.set_directive('-A', 'C++')
+        self.pbs.set_directive('-l', 'application=other')
+        self.pbs.set_directive('-o', 'stdout.log')
 
         # Call the method
         res = self.pbs.optional_directives
 
         # Test the result
-        self.assertEqual('OepnGL', res[0].options)
-        self.assertEqual('C++', res[1].options)
+        self.assertEqual('application=other', res[0].options)
+        self.assertEqual('stdout.log', res[1].options)
 
     def test_module_use(self):
         self.pbs.module_use('path')
@@ -216,12 +216,12 @@ class TestPBSScript(unittest.TestCase):
 
     def test_get_render_optional_directives_block(self):
         self.pbs.set_directive('-A', 'ADH')
-        self.pbs.set_directive('-J', 'OpenMP')
+        self.pbs.set_directive('-o', 'stdout.log')
 
         res = self.pbs.render_optional_directives_block()
 
         self.assertIn('#PBS -A ADH', res)
-        self.assertIn('#PBS -J OpenMP', res)
+        self.assertIn('#PBS -o stdout.log', res)
 
     def test_load_module(self):
         # load anaconda module
@@ -280,7 +280,7 @@ class TestPBSScript(unittest.TestCase):
 
         self.pbs.swap_module('Anaconda', 'OpenMP')
 
-        self.pbs.set_directive('-J', 'OpenMP')
+        self.pbs.set_directive('-o', 'stdout.log')
 
         self.pbs.set_directive('-T', 'OpenGL')
 
@@ -296,7 +296,7 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn('module load C++', render_str)
         self.assertIn('module unload OpenGL', render_str)
         self.assertIn('module swap Anaconda OpenMP', render_str)
-        self.assertIn('#PBS -J OpenMP', render_str)
+        self.assertIn('#PBS -o stdout.log', render_str)
         self.assertIn('#PBS -T OpenGL', render_str)
 
     @mock.patch('uit.pbs_script.PbsScript.render')
