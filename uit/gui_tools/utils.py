@@ -362,6 +362,7 @@ class StatusTab(TabView):
                 statuses = pd.DataFrame(qstat, index=[0])
             if statuses is not None:
                 statuses.set_index('job_id', inplace=True)
+                statuses = statuses[['username', 'queue', 'jobname', 'session_id', 'nds', 'tsk', 'requested_memory', 'requested_time', 'status', 'elapsed_time']]
             self.statuses = statuses
 
     def terminate_job(self):
