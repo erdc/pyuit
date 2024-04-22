@@ -176,47 +176,38 @@ class TestPBSScript(unittest.TestCase):
         res = pbs_script.render_required_directives_block()
         self.assertIn('#PBS -l select=5:ncpus=1', res)
 
-    def test_get_render_required_directives_block_for_onyx_compute_node(self):
-        pbs_script = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time="20:30:30",
-                            node_type='compute', system='onyx')
-        expected = f'#PBS -l select={pbs_script.num_nodes}:ncpus={NODE_TYPES["onyx"]["compute"]}:' \
+    def test_get_render_required_directives_block_for_carpenter_compute_node(self):
+        pbs_script = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=24, max_time="20:30:30",
+                            node_type='compute', system='carpenter')
+        expected = f'#PBS -l select={pbs_script.num_nodes}:ncpus={NODE_TYPES["carpenter"]["compute"]}:' \
                    f'mpiprocs={pbs_script.processes_per_node}'
 
         res = pbs_script.render_required_directives_block()
         self.assertIn(expected, res)
 
-    def test_get_render_required_directives_block_for_onyx_gpu_node(self):
-        pbs_script = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time="20:30:30",
-                            node_type='gpu', system='onyx')
-        expected = f'#PBS -l select={pbs_script.num_nodes}:ncpus={NODE_TYPES["onyx"]["gpu"]}:' \
+    def test_get_render_required_directives_block_for_carpenter_gpu_node(self):
+        pbs_script = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=32, max_time="20:30:30",
+                            node_type='gpu', system='carpenter')
+        expected = f'#PBS -l select={pbs_script.num_nodes}:ncpus={NODE_TYPES["carpenter"]["gpu"]}:' \
                    f'mpiprocs={pbs_script.processes_per_node}:ngpus=1'
 
         res = pbs_script.render_required_directives_block()
         self.assertIn(expected, res)
 
-    def test_get_render_required_directives_block_for_onyx_bigmem_node(self):
-        pbs_script = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=11, max_time="20:30:30",
-                            node_type='bigmem', system='onyx')
-        expected = f'#PBS -l select={pbs_script.num_nodes}:ncpus={NODE_TYPES["onyx"]["bigmem"]}:' \
+    def test_get_render_required_directives_block_for_carpenter_bigmem_node(self):
+        pbs_script = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=24, max_time="20:30:30",
+                            node_type='bigmem', system='carpenter')
+        expected = f'#PBS -l select={pbs_script.num_nodes}:ncpus={NODE_TYPES["carpenter"]["bigmem"]}:' \
                    f'mpiprocs={pbs_script.processes_per_node}:bigmem=1'
 
         res = pbs_script.render_required_directives_block()
         self.assertIn(expected, res)
 
-    def test_get_render_required_directives_block_for_onyx_transfer_node(self):
+    def test_get_render_required_directives_block_for_carpenter_transfer_node(self):
         pbs_script = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=1, max_time="20:30:30",
-                            node_type='transfer', system='onyx')
+                            node_type='transfer', system='carpenter')
         res = pbs_script.render_required_directives_block()
         self.assertIn('PBS -l select=5:ncpus=1', res)
-
-    def test_get_render_required_directives_block_for_onyx_knl_node(self):
-        pbs_script = PbsScript(name='test1', project_id='P001', num_nodes=5, processes_per_node=1, max_time="20:30:30",
-                            node_type='knl', system='onyx')
-        expected = f'#PBS -l select={pbs_script.num_nodes}:ncpus={NODE_TYPES["onyx"]["knl"]}:' \
-                   f'mpiprocs={pbs_script.processes_per_node}:nmics=1'
-
-        res = pbs_script.render_required_directives_block()
-        self.assertIn(expected, res)
 
     def test_get_render_optional_directives_block(self):
         self.pbs.set_directive('-A', 'ADH')
@@ -295,7 +286,7 @@ class TestPBSScript(unittest.TestCase):
         self.assertIn("#PBS -A P001", render_str)
         self.assertIn("#PBS -N test1", render_str)
         self.assertIn("#PBS -q debug", render_str)
-        self.assertIn("#PBS -l select=5:ncpus=44:mpiprocs=1", render_str)
+        self.assertIn("#PBS -l select=5:ncpus=192:mpiprocs=1", render_str)
         self.assertIn("#PBS -l walltime=20:30:30", render_str)
         self.assertIn('module load C++', render_str)
         self.assertIn('module unload OpenGL', render_str)
