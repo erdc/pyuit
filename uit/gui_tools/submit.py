@@ -24,12 +24,15 @@ class PbsScriptInputs(param.Parameterized):
     processes_per_node = param.ObjectSelector(default=1, objects=[], label='Processes per Node', precedence=5.2)
     wall_time = param.String(default='01:00:00', label='Wall Time', precedence=6)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
+    max_wall_time = param.String(default='Not Found', label='Max Walltime', precedence=7.1)
+    max_nodes = param.String(default='Not Found', label='Max Nodes', precedence=7.2)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
     notification_email = param.String(label='Notification E-mail(s)', precedence=9)
     notify_start = param.Boolean(default=True, label='when job begins', precedence=9.1)
     notify_end = param.Boolean(default=True, label='when job ends', precedence=9.2)
 
     SHOW_USAGE_TABLE_MAX_WIDTH = 1030
+    queue_limits = dict()
 
     @staticmethod
     def get_default(value, objects):
@@ -48,11 +51,22 @@ class PbsScriptInputs(param.Parameterized):
         self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
         self.param.queue.objects = self.uit_client.get_queues()
         self.queue = self.get_default(self.queue, self.param.queue.objects)
+        self.queue_limits = self.uit_client.get_queue_limits()
+        self.max_wall_time = self.queue_limits[self.queue]['walltime']
+        self.max_nodes = self.queue_limits[self.queue]['nodes']
 
     @param.depends('queue', watch=True)
     def update_queue_depended_bounds(self):
         if self.queue == 'debug':
             self.wall_time = '00:10:00'
+
+    @param.depends('queue', watch=True)
+    def update_max_wall_time_info(self):
+        self.max_wall_time = self.queue_limits[self.queue]['walltime']
+
+    @param.depends('queue', watch=True)
+    def update_max_nodes_info(self):
+        self.max_nodes = self.queue_limits[self.queue]['nodes']
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):
@@ -87,6 +101,8 @@ class PbsScriptInputs(param.Parameterized):
                 self.param.processes_per_node,
                 self.param.wall_time,
                 self.param.queue,
+                self.param.max_wall_time,
+                self.param.max_nodes,
             ),
             pn.layout.WidgetBox(
                 pn.widgets.TextInput.from_param(self.param.notification_email, placeholder='john.doe@example.com'),

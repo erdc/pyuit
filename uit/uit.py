@@ -25,6 +25,7 @@ from .exceptions import UITError, MaxRetriesError
 # optional dependency
 try:
     import pandas as pd
+
     has_pandas = True
 except ImportError:
     has_pandas = False
@@ -33,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
-
 
 FG_RED = "\033[31m"
 FG_CYAN = "\033[36m"
@@ -56,6 +56,7 @@ class Client:
             not provided.
         token (str): Token from current UIT authorization.
     """
+
     def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
                  token=None, port=5000):
         if ca_file is None:
@@ -111,7 +112,7 @@ class Client:
         if (self.client_id is None or self.client_secret is None) and self.token is None:
             raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
                              '(UIT_ID, UIT_SECRET) or in auth config file: ' + config_file + ' OR provide an '
-                             'access token as a kwarg.')
+                                                                                             'access token as a kwarg.')
 
         if session_id is None:
             self.session_id = os.urandom(16).hex()
@@ -125,6 +126,7 @@ class Client:
                                    f'Run "Client.connect" to connect to a system.')
 
             return func(self, *args, **kwargs)
+
         return wrapper
 
     @property
@@ -375,7 +377,7 @@ class Client:
         self._login_nodes = {
             system:
                 [node['HOSTNAME'].split('.')[0] for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
-                for system in self._systems
+            for system in self._systems
         }
 
         self._uit_urls = [
@@ -673,6 +675,27 @@ class Client:
         other_queues = set([i.split()[0] for i in output.splitlines()][2:]) - set(standard_queues)
         all_queues = standard_queues + sorted([q for q in other_queues if '_' not in q])
         return all_queues
+
+    @_ensure_connected
+    def get_queue_limits(self):
+        queues = self.get_queues()
+        raw_queue_stats = json.loads(self.call('qstat -Q -f -F json'))["Queue"]
+        q_sts = {q: raw_queue_stats[q] for q in queues if q in raw_queue_stats.keys()}
+
+        rm_l = "resources_max"
+        wt_l = "walltime"
+        n_ls = ['Batch', 'bigmem_nodes', 'gpu_nodes', 'compute_nodes', 'mpiprocs', 'ncpus', 'nodect']
+        n_l = "nodes"
+
+        wall_time_maxes = {q: (q_sts[q][rm_l][wt_l]
+                               if rm_l in q_sts[q] and wt_l in q_sts[q][rm_l] else 'Not Found')
+                           for q in queues}
+        node_maxes = {q: str((sum(int(q_sts[q][rm_l][n_l]) for n_l in n_ls if n_l in q_sts[q][rm_l]))
+                             if rm_l in q_sts[q] and not set(n_ls).isdisjoint(q_sts[q][rm_l]) else 'Not Found')
+                      for q in queues}
+        maxes = {q: {wt_l: wall_time_maxes[q], n_l: node_maxes[q]} for q in queues}
+
+        return maxes
 
     @_ensure_connected
     def get_available_modules(self, flatten=False):
