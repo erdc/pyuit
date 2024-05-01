@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
 
-
 FG_RED = "\033[31m"
 FG_CYAN = "\033[36m"
 ALL_OFF = "\033[0m"
@@ -56,6 +55,7 @@ class Client:
             not provided.
         token (str): Token from current UIT authorization.
     """
+
     def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
                  token=None, port=5000):
         if ca_file is None:
@@ -109,9 +109,11 @@ class Client:
                 self.client_secret = self.client_secret or self._config.get('client_secret')
 
         if (self.client_id is None or self.client_secret is None) and self.token is None:
-            raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
-                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + str(config_file) + ' OR provide an '
-                             'access token as a kwarg.')
+            raise ValueError(
+                f'Please provide either the client_id and client_secret as kwargs, environment vars '
+                f'(UIT_ID, UIT_SECRET) or in auth config file: {config_file} OR provide an '
+                f'access token as a kwarg.'
+            )
 
         if session_id is None:
             self.session_id = os.urandom(16).hex()
