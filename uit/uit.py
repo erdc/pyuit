@@ -684,16 +684,20 @@ class Client:
 
         rm_l = "resources_max"
         wt_l = "walltime"
-        n_ls = ['Batch', 'bigmem_nodes', 'gpu_nodes', 'compute_nodes', 'mpiprocs', 'ncpus', 'nodect']
-        n_l = "nodes"
+        bm_l = 'bigmem_nodes'
+        gpu_l = 'gpu_nodes'
+        cmp_l = 'compute_nodes'
 
-        wall_time_maxes = {q: (q_sts[q][rm_l][wt_l]
-                               if rm_l in q_sts[q] and wt_l in q_sts[q][rm_l] else 'Not Found')
-                           for q in queues}
-        node_maxes = {q: str((sum(int(q_sts[q][rm_l][n_l]) for n_l in n_ls if n_l in q_sts[q][rm_l]))
-                             if rm_l in q_sts[q] and not set(n_ls).isdisjoint(q_sts[q][rm_l]) else 'Not Found')
-                      for q in queues}
-        maxes = {q: {wt_l: wall_time_maxes[q], n_l: node_maxes[q]} for q in queues}
+        def queue_stat_determine(stat):
+            return str(q_sts[q][rm_l][stat]) if rm_l in q_sts[q] and stat in q_sts[q][rm_l] else 'Not Found'
+
+        maxes = dict()
+        for q in queues:
+            maxes[q] = {wt_l: queue_stat_determine(wt_l),
+                        'bigmem': queue_stat_determine(bm_l),
+                        'gpu': queue_stat_determine(gpu_l),
+                        'compute': queue_stat_determine(cmp_l),
+                        'transfer': 'Not Found'}
 
         return maxes
 
