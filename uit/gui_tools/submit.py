@@ -23,6 +23,7 @@ class PbsScriptInputs(param.Parameterized):
     nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1)
     processes_per_node = param.ObjectSelector(default=1, objects=[], label='Processes per Node', precedence=5.2)
     wall_time = param.String(default='01:00:00', label='Wall Time', precedence=6)
+    wall_time_alert = pn.pane.Alert(visible=False)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
     max_wall_time = param.String(default='Not Found', label='Max Wall Time', precedence=7.1)
     max_nodes = param.String(default='Not Found', label='Max Nodes', precedence=7.2)
@@ -54,70 +55,54 @@ class PbsScriptInputs(param.Parameterized):
         self.queue_limits = self.uit_client.get_queue_limits()
         self.max_wall_time = self.queue_limits[self.queue]['walltime']
         self.max_nodes = self.queue_limits[self.queue][self.node_type]
+        #self.alert = pn.pane.Alert(visible=False)
 
     @param.depends('queue', watch=True)
     def update_queue_depended_bounds(self):
         if self.queue == 'debug':
             self.wall_time = '00:10:00'
 
+    def set_wall_time_alert(self, visible, alert_type='warning', message=''):
+        self.wall_time_alert.alert_type = alert_type
+        self.wall_time_alert.object = message
+        self.wall_time_alert.visible = visible
+
     @param.depends('queue', watch=True)
     def update_max_wall_time_info(self):
         self.max_wall_time = self.queue_limits[self.queue]['walltime']
 
+    @param.depends('queue', 'wall_time', watch=True)
     def validate_wall_time(self):
-        wall_time_pattern = '[0-9]{2,}\:[0-9]{2}\:[0-9]{2}'
+        wall_time_pattern = r'[0-9]{2,}\:[0-9]{2}\:[0-9]{2}'
         if re.fullmatch(wall_time_pattern, self.wall_time) is None:
-            self.wall_time = '00:00:00'
+            self.set_wall_time_alert(True,
+                                     alert_type="danger",
+                                     message="Wall time value is not formatted correctly")
+        elif int(self.wall_time[-2]) >= 6:
+            self.set_wall_time_alert(True,
+                                     alert_type="warning",
+                                     message="Wall time second is too large")
+        elif int(self.wall_time[-5]) >= 6:
+            self.set_wall_time_alert(True,
+                                     alert_type="warning",
+                                     message="Wall time minute is too large")
+        elif re.fullmatch(wall_time_pattern, self.max_wall_time) is None:
+            self.set_wall_time_alert(False)
+        elif int(self.wall_time.replace(':', '')) > int(self.max_wall_time.replace(':', '')):
+            self.set_wall_time_alert(True,
+                                     alert_type="warning",
+                                     message="Wall time is greater than maximum for queue")
         else:
-            wt_comps = [int(comp) for comp in self.wall_time.split(':')]
-            wt_comps_bd = [wt_comps[0]] + [comp if comp < 60 else 59 for comp in wt_comps[1:]]
+            self.set_wall_time_alert(False)
 
-            if re.fullmatch(wall_time_pattern, self.max_wall_time) is None:
-                self.wall_time = ":".join([str(comp) if comp > 9 else '0' + str(comp) for comp in wt_comps_bd])
-            else:
-
-                wt_num = sum([comps * pow(100, idx) for idx, comps in zip(range(len(wt_comps_bd), -1, -1), wt_comps_bd)])
-                mwt_comps = self.max_wall_time.split(':')
-                mwt_num = sum([int(comp) * pow(100, idx) for idx, comp in zip(range(len(mwt_comps), -1, -1), mwt_comps)])
-
-                if wt_num < mwt_num:
-                    self.wall_time = ":".join([str(comp) if comp > 9 else '0'+str(comp) for comp in wt_comps_bd])
-                else:
-                    self.wall_time = self.max_wall_time
-
-    @param.depends('wall_time', watch=True)
-    def validate_wall_time_on_wall_time_change(self):
-        self.validate_wall_time()
-
-    @param.depends('queue', watch=True)
-    def validate_wall_time_on_queue_change(self):
-        self.validate_wall_time()
-
+    @param.depends('queue', 'node_type', watch=True)
     def update_node_bounds(self):
-        if self.max_nodes.isdigit():
-            self.param.nodes.bounds = (1, int(self.max_nodes))
-        else:
-            self.param.nodes.bounds = (1, 1000)
-
-    @param.depends('queue', watch=True)
-    def update_node_bounds_on_queue(self):
-        self.update_node_bounds()
-
-    @param.depends('node_type', watch=True)
-    def update_node_bounds_on_type(self):
-        self.update_node_bounds()
-
-    @param.depends('queue', watch=True)
-    def update_max_nodes_info_on_queue(self):
         if len(self.queue_limits) != 0:
             self.max_nodes = self.queue_limits[self.queue][self.node_type]
-            self.update_node_bounds()
-
-    @param.depends('node_type', watch=True)
-    def update_max_nodes_info_on_type(self):
-        if len(self.queue_limits) != 0:
-            self.max_nodes = self.queue_limits[self.queue][self.node_type]
-            self.update_node_bounds()
+            if self.max_nodes.isdigit():
+                self.param.nodes.bounds = (1, int(self.max_nodes))
+            else:
+                self.param.nodes.bounds = (1, 1000)
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):
@@ -151,6 +136,7 @@ class PbsScriptInputs(param.Parameterized):
                 pn.widgets.Spinner.from_param(self.param.nodes),
                 self.param.processes_per_node,
                 self.param.wall_time,
+                self.wall_time_alert,
                 self.param.queue,
                 pn.Row(
                         pn.widgets.StaticText.from_param(self.param.max_wall_time, placeholder='Not Found'),
