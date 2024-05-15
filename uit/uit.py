@@ -25,7 +25,6 @@ from .exceptions import UITError, MaxRetriesError
 # optional dependency
 try:
     import pandas as pd
-
     has_pandas = True
 except ImportError:
     has_pandas = False
@@ -34,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
 QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
+
 
 FG_RED = "\033[31m"
 FG_CYAN = "\033[36m"
@@ -56,7 +56,6 @@ class Client:
             not provided.
         token (str): Token from current UIT authorization.
     """
-
     def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
                  token=None, port=5000):
         if ca_file is None:
@@ -111,8 +110,8 @@ class Client:
 
         if (self.client_id is None or self.client_secret is None) and self.token is None:
             raise ValueError('Please provide either the client_id and client_secret as kwargs, environment vars '
-                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + config_file + ' OR provide an '
-                                                                                             'access token as a kwarg.')
+                             '(UIT_ID, UIT_SECRET) or in auth config file: ' + str(config_file) + ' OR provide an '
+                             'access token as a kwarg.')
 
         if session_id is None:
             self.session_id = os.urandom(16).hex()
@@ -126,7 +125,6 @@ class Client:
                                    f'Run "Client.connect" to connect to a system.')
 
             return func(self, *args, **kwargs)
-
         return wrapper
 
     @property
@@ -377,7 +375,7 @@ class Client:
         self._login_nodes = {
             system:
                 [node['HOSTNAME'].split('.')[0] for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
-            for system in self._systems
+                for system in self._systems
         }
 
         self._uit_urls = [
