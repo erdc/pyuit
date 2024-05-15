@@ -33,7 +33,7 @@ class PbsScriptInputs(param.Parameterized):
     notify_end = param.Boolean(default=True, label='when job ends', precedence=9.2)
 
     SHOW_USAGE_TABLE_MAX_WIDTH = 1030
-    queue_limits = dict()
+    wall_time_maxes = None
 
     @staticmethod
     def get_default(value, objects):
@@ -52,9 +52,9 @@ class PbsScriptInputs(param.Parameterized):
         self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
         self.param.queue.objects = self.uit_client.get_queues()
         self.queue = self.get_default(self.queue, self.param.queue.objects)
-        self.queue_limits = self.uit_client.get_queue_limits()
-        self.max_wall_time = self.queue_limits[self.queue]['walltime']
-        self.max_nodes = self.queue_limits[self.queue][self.node_type]
+        self.wall_time_maxes = self.uit_client.get_wall_time_maxes()
+        self.max_wall_time = self.wall_time_maxes[self.queue]
+        self.max_nodes = NODE_TYPES[self.uit_client.system][self.node_type]
         #self.alert = pn.pane.Alert(visible=False)
 
     @param.depends('queue', watch=True)
@@ -69,7 +69,7 @@ class PbsScriptInputs(param.Parameterized):
 
     @param.depends('queue', watch=True)
     def update_max_wall_time_info(self):
-        self.max_wall_time = self.queue_limits[self.queue]['walltime']
+        self.max_wall_time = self.wall_time_maxes[self.queue]
 
     @param.depends('queue', 'wall_time', watch=True)
     def validate_wall_time(self):
@@ -97,12 +97,11 @@ class PbsScriptInputs(param.Parameterized):
 
     @param.depends('queue', 'node_type', watch=True)
     def update_node_bounds(self):
-        if len(self.queue_limits) != 0:
-            self.max_nodes = self.queue_limits[self.queue][self.node_type]
-            if self.max_nodes.isdigit():
-                self.param.nodes.bounds = (1, int(self.max_nodes))
-            else:
-                self.param.nodes.bounds = (1, 1000)
+        self.max_nodes = NODE_TYPES[self.uit_client.system][self.node_type]
+        if self.max_nodes.isdigit():
+            self.param.nodes.bounds = (1, int(self.max_nodes))
+        else:
+            self.param.nodes.bounds = (1, 1000)
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):

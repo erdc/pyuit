@@ -30,6 +30,9 @@ try:
 except ImportError:
     has_pandas = False
 
+import csv
+from importlib.resources import files
+
 logger = logging.getLogger(__name__)
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
@@ -677,29 +680,18 @@ class Client:
         return all_queues
 
     @_ensure_connected
-    def get_queue_limits(self):
+    def get_wall_time_maxes(self):
         queues = self.get_queues()
         raw_queue_stats = json.loads(self.call('qstat -Q -f -F json'))["Queue"]
         q_sts = {q: raw_queue_stats[q] for q in queues if q in raw_queue_stats.keys()}
 
-        rm_l = "resources_max"
-        wt_l = "walltime"
-        bm_l = 'bigmem_nodes'
-        gpu_l = 'gpu_nodes'
-        cmp_l = 'compute_nodes'
-
-        def queue_stat_determine(stat):
-            return str(q_sts[q][rm_l][stat]) if rm_l in q_sts[q] and stat in q_sts[q][rm_l] else 'Not Found'
-
-        maxes = dict()
+        wall_time_maxes = dict()
         for q in queues:
-            maxes[q] = {wt_l: queue_stat_determine(wt_l),
-                        'bigmem': queue_stat_determine(bm_l),
-                        'gpu': queue_stat_determine(gpu_l),
-                        'compute': queue_stat_determine(cmp_l),
-                        'transfer': 'Not Found'}
+            wall_time_maxes[q] = str(q_sts[q]["resources_max"]["walltime"]) \
+                if "resources_max" in q_sts[q] and "walltime" in q_sts[q]["resources_max"] \
+                else 'Not Found'
 
-        return maxes
+        return wall_time_maxes
 
     @_ensure_connected
     def get_available_modules(self, flatten=False):
