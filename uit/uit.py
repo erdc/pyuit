@@ -30,9 +30,6 @@ try:
 except ImportError:
     has_pandas = False
 
-import csv
-from importlib.resources import files
-
 logger = logging.getLogger(__name__)
 
 UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
