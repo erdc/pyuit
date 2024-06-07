@@ -282,7 +282,7 @@ class Client:
 
         try:
             # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
-            self.call(':', working_dir='.', timeout=25)
+            self.call(':', working_dir='.', timeout=35)
         except UITError as e:
             self.connected = False
             msg = f'Error while connecting to node {login_node}: {e}'
