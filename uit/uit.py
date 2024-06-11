@@ -282,7 +282,7 @@ class Client:
 
         try:
             # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
-            self.call(':', working_dir='.', timeout=25)
+            self.call(':', working_dir='.', timeout=35)
         except UITError as e:
             self.connected = False
             msg = f'Error while connecting to node {login_node}: {e}'
@@ -579,7 +579,9 @@ class Client:
         Returns:
             str: The API response
         """
-        result = self.call('show_usage')
+        # 'module reload' is a workaround for users with a default shell of /bin/csh on Warhawk.
+        # UIT+ runs commands in a bash script, and that combination drops part of the PATH for show_usage.
+        result = self.call('module reload >/dev/null 2>&1; show_usage')
         if not parse:
             return result
 
