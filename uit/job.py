@@ -498,8 +498,6 @@ class PbsArrayJob(PbsJob):
             """
             pppath = PurePosixPath(path)
             path = pppath.as_posix()
-            if not pppath.is_absolute() and '$RUN_DIR' not in path:
-                path = f'$RUN_DIR/{path}'  # resolve relative to sub-job run directory
             path = path.replace('$JOB_INDEX', str(self.job_index))
             path = path.replace('$RUN_DIR', self.run_dir_name)
             return super().resolve_path(path)
