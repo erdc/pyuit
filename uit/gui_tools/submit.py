@@ -69,23 +69,16 @@ class PbsScriptInputs(param.Parameterized):
 
     @param.depends('queue', watch=True)
     def update_max_wall_time_info(self):
-        self.max_wall_time = self.wall_time_maxes[self.queue]
+        if self.wall_time_maxes is not None:
+            self.max_wall_time = self.wall_time_maxes[self.queue]
 
     @param.depends('queue', 'wall_time', watch=True)
     def validate_wall_time(self):
-        wall_time_pattern = r'[0-9]{2,}\:[0-9]{2}\:[0-9]{2}'
+        wall_time_pattern = r'[0-9]+\:[0-9]{2}\:[0-9]{2}'
         if re.fullmatch(wall_time_pattern, self.wall_time) is None:
             self.set_wall_time_alert(True,
                                      alert_type="danger",
                                      message="Wall time value is not formatted correctly")
-        elif int(self.wall_time[-2]) >= 6:
-            self.set_wall_time_alert(True,
-                                     alert_type="warning",
-                                     message="Wall time second is too large")
-        elif int(self.wall_time[-5]) >= 6:
-            self.set_wall_time_alert(True,
-                                     alert_type="warning",
-                                     message="Wall time minute is too large")
         elif re.fullmatch(wall_time_pattern, self.max_wall_time) is None:
             self.set_wall_time_alert(False)
         elif int(self.wall_time.replace(':', '')) > int(self.max_wall_time.replace(':', '')):
