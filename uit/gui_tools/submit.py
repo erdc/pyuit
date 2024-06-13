@@ -24,9 +24,10 @@ class PbsScriptInputs(param.Parameterized):
     processes_per_node = param.ObjectSelector(default=1, objects=[], label='Processes per Node', precedence=5.2)
     wall_time = param.String(default='01:00:00', label='Wall Time', precedence=6)
     wall_time_alert = pn.pane.Alert(visible=False)
+    node_alert = pn.pane.Alert(visible=False)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
     max_wall_time = param.String(default='Not Found', label='Max Wall Time', precedence=7.1)
-    max_nodes = param.String(default='Not Found', label='Max Nodes', precedence=7.2)
+    max_nodes = param.String(default='Not Found', label='Max Processes', precedence=7.2)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
     notification_email = param.String(label='Notification E-mail(s)', precedence=9)
     notify_start = param.Boolean(default=True, label='when job begins', precedence=9.1)
@@ -34,6 +35,7 @@ class PbsScriptInputs(param.Parameterized):
 
     SHOW_USAGE_TABLE_MAX_WIDTH = 1030
     wall_time_maxes = None
+    node_maxes = None
 
     @staticmethod
     def get_default(value, objects):
@@ -52,9 +54,10 @@ class PbsScriptInputs(param.Parameterized):
         self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
         self.param.queue.objects = self.uit_client.get_queues()
         self.queue = self.get_default(self.queue, self.param.queue.objects)
+        self.node_maxes = self.uit_client.get_node_maxes()
+        self.max_nodes = self.node_maxes[self.queue]#NODE_TYPES[self.uit_client.system][self.node_type]
         self.wall_time_maxes = self.uit_client.get_wall_time_maxes()
         self.max_wall_time = self.wall_time_maxes[self.queue]
-        self.max_nodes = NODE_TYPES[self.uit_client.system][self.node_type]
         #self.alert = pn.pane.Alert(visible=False)
 
     @param.depends('queue', watch=True)
@@ -66,6 +69,11 @@ class PbsScriptInputs(param.Parameterized):
         self.wall_time_alert.alert_type = alert_type
         self.wall_time_alert.object = message
         self.wall_time_alert.visible = visible
+
+    def set_node_alert(self, visible, alert_type='warning', message=''):
+        self.node_alert.alert_type = alert_type
+        self.node_alert.object = message
+        self.node_alert.visible = visible
 
     @param.depends('queue', watch=True)
     def update_max_wall_time_info(self):
@@ -90,11 +98,21 @@ class PbsScriptInputs(param.Parameterized):
 
     @param.depends('queue', 'node_type', watch=True)
     def update_node_bounds(self):
-        self.max_nodes = NODE_TYPES[self.uit_client.system][self.node_type]
-        if self.max_nodes.isdigit():
-            self.param.nodes.bounds = (1, int(self.max_nodes))
+        if self.node_maxes is not None:
+            self.max_nodes = self.node_maxes[self.queue]
+
+    @param.depends('queue', 'nodes', 'processes_per_node', watch=True)
+    def validate_node_cores(self):
+        if self.max_nodes == 'Not Found':
+            self.set_node_alert(False)
         else:
-            self.param.nodes.bounds = (1, 1000)
+            total_process = self.nodes * self.processes_per_node
+            if total_process > int(self.max_nodes):
+                self.set_node_alert(True,
+                                     alert_type="warning",
+                                     message="Number of processes is greater than maximum for queue")
+            else:
+                self.set_node_alert(False)
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):
@@ -129,6 +147,7 @@ class PbsScriptInputs(param.Parameterized):
                 self.param.processes_per_node,
                 self.param.wall_time,
                 self.wall_time_alert,
+                self.node_alert,
                 self.param.queue,
                 pn.Row(
                         pn.widgets.StaticText.from_param(self.param.max_wall_time, placeholder='Not Found'),
