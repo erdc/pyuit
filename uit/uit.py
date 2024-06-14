@@ -677,10 +677,12 @@ class Client:
         return all_queues
 
     @_ensure_connected
-    def get_node_maxes(self):
-        queues = self.get_queues()
-        raw_queue_stats = json.loads(self.call('qstat -Q -f -F json'))['Queue']
-        q_sts = {q: raw_queue_stats[q] for q in queues if q in raw_queue_stats.keys()}
+    def get_raw_queue_stats(self):
+        return json.loads(self.call('qstat -Q -f -F json'))['Queue']
+
+    @_ensure_connected
+    def get_node_maxes(self, queues, queues_stats):
+        q_sts = {q: queues_stats[q] for q in queues if q in queues_stats.keys()}
 
         ncpus_maxes = dict()
         for q in queues:
@@ -691,10 +693,8 @@ class Client:
         return ncpus_maxes
 
     @_ensure_connected
-    def get_wall_time_maxes(self):
-        queues = self.get_queues()
-        raw_queue_stats = json.loads(self.call('qstat -Q -f -F json'))['Queue']
-        q_sts = {q: raw_queue_stats[q] for q in queues if q in raw_queue_stats.keys()}
+    def get_wall_time_maxes(self, queues, queues_stats):
+        q_sts = {q: queues_stats[q] for q in queues if q in queues_stats.keys()}
 
         wall_time_maxes = dict()
         for q in queues:

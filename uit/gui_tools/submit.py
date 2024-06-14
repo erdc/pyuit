@@ -45,6 +45,8 @@ class PbsScriptInputs(param.Parameterized):
         if not self.uit_client.connected:
             return
 
+        queues_stats = self.uit_client.get_raw_queue_stats()
+
         self.subproject_usage = self.uit_client.show_usage(as_df=True)
         subprojects = self.subproject_usage.subproject.to_list()
         self.param.hpc_subproject.objects = subprojects
@@ -54,9 +56,9 @@ class PbsScriptInputs(param.Parameterized):
         self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
         self.param.queue.objects = self.uit_client.get_queues()
         self.queue = self.get_default(self.queue, self.param.queue.objects)
-        self.node_maxes = self.uit_client.get_node_maxes()
+        self.node_maxes = self.uit_client.get_node_maxes(self.param.queue.objects, queues_stats)
         self.max_nodes = self.node_maxes[self.queue]#NODE_TYPES[self.uit_client.system][self.node_type]
-        self.wall_time_maxes = self.uit_client.get_wall_time_maxes()
+        self.wall_time_maxes = self.uit_client.get_wall_time_maxes(self.param.queue.objects, queues_stats)
         self.max_wall_time = self.wall_time_maxes[self.queue]
         #self.alert = pn.pane.Alert(visible=False)
 
