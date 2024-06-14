@@ -23,13 +23,19 @@ class PbsScriptInputs(param.Parameterized):
     nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1)
     processes_per_node = param.ObjectSelector(default=1, objects=[], label='Processes per Node', precedence=5.2)
     wall_time = param.String(default='01:00:00', label='Wall Time', precedence=6)
+    wall_time_alert = pn.pane.Alert(visible=False)
+    node_alert = pn.pane.Alert(visible=False)
     queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
+    max_wall_time = param.String(default='Not Found', label='Max Wall Time', precedence=7.1)
+    max_nodes = param.String(default='Not Found', label='Max Processes', precedence=7.2)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
     notification_email = param.String(label='Notification E-mail(s)', precedence=9)
     notify_start = param.Boolean(default=True, label='when job begins', precedence=9.1)
     notify_end = param.Boolean(default=True, label='when job ends', precedence=9.2)
 
     SHOW_USAGE_TABLE_MAX_WIDTH = 1030
+    wall_time_maxes = None
+    node_maxes = None
 
     @staticmethod
     def get_default(value, objects):
@@ -38,6 +44,8 @@ class PbsScriptInputs(param.Parameterized):
     def update_hpc_connection_dependent_defaults(self):
         if not self.uit_client.connected:
             return
+
+        queues_stats = self.uit_client.get_raw_queue_stats()
 
         self.subproject_usage = self.uit_client.show_usage(as_df=True)
         subprojects = self.subproject_usage.subproject.to_list()
@@ -48,11 +56,65 @@ class PbsScriptInputs(param.Parameterized):
         self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
         self.param.queue.objects = self.uit_client.get_queues()
         self.queue = self.get_default(self.queue, self.param.queue.objects)
+        self.node_maxes = self.uit_client.get_node_maxes(self.param.queue.objects, queues_stats)
+        self.max_nodes = self.node_maxes[self.queue]#NODE_TYPES[self.uit_client.system][self.node_type]
+        self.wall_time_maxes = self.uit_client.get_wall_time_maxes(self.param.queue.objects, queues_stats)
+        self.max_wall_time = self.wall_time_maxes[self.queue]
+        #self.alert = pn.pane.Alert(visible=False)
 
     @param.depends('queue', watch=True)
     def update_queue_depended_bounds(self):
         if self.queue == 'debug':
             self.wall_time = '00:10:00'
+
+    def set_wall_time_alert(self, visible, alert_type='warning', message=''):
+        self.wall_time_alert.alert_type = alert_type
+        self.wall_time_alert.object = message
+        self.wall_time_alert.visible = visible
+
+    def set_node_alert(self, visible, alert_type='warning', message=''):
+        self.node_alert.alert_type = alert_type
+        self.node_alert.object = message
+        self.node_alert.visible = visible
+
+    @param.depends('queue', watch=True)
+    def update_max_wall_time_info(self):
+        if self.wall_time_maxes is not None:
+            self.max_wall_time = self.wall_time_maxes[self.queue]
+
+    @param.depends('queue', 'wall_time', watch=True)
+    def validate_wall_time(self):
+        wall_time_pattern = r'[0-9]+\:[0-9]{2}\:[0-9]{2}'
+        if re.fullmatch(wall_time_pattern, self.wall_time) is None:
+            self.set_wall_time_alert(True,
+                                     alert_type="danger",
+                                     message="Wall time value is not formatted correctly")
+        elif re.fullmatch(wall_time_pattern, self.max_wall_time) is None:
+            self.set_wall_time_alert(False)
+        elif int(self.wall_time.replace(':', '')) > int(self.max_wall_time.replace(':', '')):
+            self.set_wall_time_alert(True,
+                                     alert_type="warning",
+                                     message="Wall time is greater than maximum for queue")
+        else:
+            self.set_wall_time_alert(False)
+
+    @param.depends('queue', 'node_type', watch=True)
+    def update_node_bounds(self):
+        if self.node_maxes is not None:
+            self.max_nodes = self.node_maxes[self.queue]
+
+    @param.depends('queue', 'nodes', 'processes_per_node', watch=True)
+    def validate_node_cores(self):
+        if self.max_nodes == 'Not Found':
+            self.set_node_alert(False)
+        else:
+            total_process = self.nodes * self.processes_per_node
+            if total_process > int(self.max_nodes):
+                self.set_node_alert(True,
+                                     alert_type="warning",
+                                     message="Number of processes is greater than maximum for queue")
+            else:
+                self.set_node_alert(False)
 
     @param.depends('node_type', watch=True)
     def update_processes_per_node(self):
@@ -86,7 +148,13 @@ class PbsScriptInputs(param.Parameterized):
                 pn.widgets.Spinner.from_param(self.param.nodes),
                 self.param.processes_per_node,
                 self.param.wall_time,
+                self.wall_time_alert,
+                self.node_alert,
                 self.param.queue,
+                pn.Row(
+                        pn.widgets.StaticText.from_param(self.param.max_wall_time, placeholder='Not Found'),
+                        pn.widgets.StaticText.from_param(self.param.max_nodes, placeholder='Not Found'),
+                ),
             ),
             pn.layout.WidgetBox(
                 pn.widgets.TextInput.from_param(self.param.notification_email, placeholder='john.doe@example.com'),
