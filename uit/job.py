@@ -434,7 +434,8 @@ class PbsJob:
                     and status['status'] not in ('Q', 'H', 'B')
                     and not isinstance(job, PbsArrayJob)
             ):
-                if job._qstat['elapsed_time'][-1] != '*': job._qstat['elapsed_time'] += '*'
+                if job._qstat['elapsed_time'][-1] != '*':
+                    job._qstat['elapsed_time'] += '*'
                 job._qstat['status'] = status['status']
             else:
                 job._qstat = status
