@@ -291,8 +291,8 @@ class LogsTab(TabView):
 
         refresh_btn = pn.widgets.Button.from_param(self.param.refresh_btn, button_type='primary', width=100)
         args = {'log': log_content, 'btn': refresh_btn}
-        code = 'btn.css_classes.push("pn-loading", "arc"); btn.properties.css_classes.change.emit(); ' \
-               'log.css_classes.push("pn-loading", "arc"); log.properties.css_classes.change.emit();'
+        code = 'btn.css_classes.push("pn-loading", "pn-arc"); btn.properties.css_classes.change.emit(); ' \
+               'log.css_classes.push("pn-loading", "pn-arc"); log.properties.css_classes.change.emit();'
         refresh_btn.js_on_click(args=args, code=code)
 
         if self.is_array:
@@ -411,10 +411,10 @@ class StatusTab(TabView):
             cancel_btn.js_on_click(args=args, code=cancel_code)
 
             code = (
-                'btn.css_classes.push("pn-loading", "arc"); '
+                'btn.css_classes.push("pn-loading", "pn-arc"); '
                 'btn.properties.css_classes.change.emit(); '
                 'other_btn.disabled=true; '
-                'statuses_table.css_classes.push("pn-loading", "arc"); '
+                'statuses_table.css_classes.push("pn-loading", "pn-arc"); '
                 'statuses_table.properties.css_classes.change.emit();'
             )
 

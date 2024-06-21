@@ -146,7 +146,7 @@ class HpcConnect(param.Parameterized):
         connect_btn = pn.widgets.Button.from_param(self.param.connect_btn, button_type='success', width=100)
         connect_btn.js_on_click(
             args={'btn': connect_btn, },
-            code='btn.css_classes.push("pn-loading", "arc"); btn.properties.css_classes.change.emit();'
+            code='btn.css_classes.push("pn-loading", "pn-arc"); btn.properties.css_classes.change.emit();'
         )
 
         if self.connected is None:
