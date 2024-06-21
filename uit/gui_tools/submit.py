@@ -152,8 +152,8 @@ class PbsScriptInputs(param.Parameterized):
                 self.node_alert,
                 self.param.queue,
                 pn.Row(
-                        pn.widgets.StaticText.from_param(self.param.max_wall_time, placeholder='Not Found'),
-                        pn.widgets.StaticText.from_param(self.param.max_nodes, placeholder='Not Found'),
+                        pn.widgets.StaticText.from_param(self.param.max_wall_time),
+                        pn.widgets.StaticText.from_param(self.param.max_nodes),
                 ),
             ),
             pn.layout.WidgetBox(

@@ -582,7 +582,7 @@ class FileSelector(param.Parameterized):
         self.param.browse_toggle.label = 'Browse'
 
     def input_row(self):
-        file_path = pn.widgets.TextInput.from_param(self.param.file_path, sizing_mode='stretch_width', show_name=False)
+        file_path = pn.widgets.TextInput.from_param(self.param.file_path, sizing_mode='stretch_width')
         browse_toggle = pn.widgets.Button.from_param(
             self.param.browse_toggle, button_type='primary', width=100, align='end'
         )
