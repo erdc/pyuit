@@ -135,11 +135,13 @@ class PbsScriptInputs(param.Parameterized):
     def pbs_options_view(self):
         self.update_hpc_connection_dependent_defaults()
         return pn.Column(
-            pn.Card(
-                pn.widgets.Tabulator.from_param(self.param.subproject_usage, width=self.SHOW_USAGE_TABLE_MAX_WIDTH),
-                title='Subproject Usage Summary',
-                sizing_mode='stretch_width',
-                collapsed=True,
+            pn.Column(
+                pn.Card(
+                    pn.widgets.Tabulator.from_param(self.param.subproject_usage, width=self.SHOW_USAGE_TABLE_MAX_WIDTH),
+                    title='Subproject Usage Summary',
+                    sizing_mode='stretch_width',
+                    collapsed=True,
+                )
             ),
             pn.Column(
                 self.param.hpc_subproject,
@@ -467,17 +469,15 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def submit_view(self):
         self.is_submitable()
         return pn.Column(
-            self.view,
+            pn.widgets.TextInput.from_param(self.param.job_name),
             self.action_button,
             self.error_messages,
             name='Submit',
             sizing_mode='stretch_both',
         )
 
-    def view(self):
-        return pn.Param(self.param.job_name)
-
     def panel(self):
+
         return pn.Column(
             '# Submit Job',
             pn.widgets.Button.from_param(self.param.previous_btn, button_type='primary', width=100),
