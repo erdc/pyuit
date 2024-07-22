@@ -332,7 +332,9 @@ class PbsScript(object):
         Returns:
             str: All module calls.
         """
-        opt_list = [self._create_block_header_string('Modules')]
+        opt_list = [self._create_block_header_string('Modules'),
+                    "# Avoid 'module: command not found' error when default shell is /bin/csh",
+                    "source ${MODULESHOME}/init/bash"]
         for path in self._module_use:
             opt_list.append(f'module use --append {path}')
         for key, value in self._modules.items():
