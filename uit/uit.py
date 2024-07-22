@@ -677,6 +677,34 @@ class Client:
         return all_queues
 
     @_ensure_connected
+    def get_raw_queue_stats(self):
+        return json.loads(self.call('qstat -Q -f -F json'))['Queue']
+
+    @_ensure_connected
+    def get_node_maxes(self, queues, queues_stats):
+        q_sts = {q: queues_stats[q] for q in queues if q in queues_stats.keys()}
+
+        ncpus_maxes = dict()
+        for q in queues:
+            ncpus_maxes[q] = str(q_sts[q]['resources_max']['ncpus']) \
+                if 'resources_max' in q_sts[q] and 'ncpus' in q_sts[q]['resources_max'] \
+                else "Not Found"
+
+        return ncpus_maxes
+
+    @_ensure_connected
+    def get_wall_time_maxes(self, queues, queues_stats):
+        q_sts = {q: queues_stats[q] for q in queues if q in queues_stats.keys()}
+
+        wall_time_maxes = dict()
+        for q in queues:
+            wall_time_maxes[q] = str(q_sts[q]['resources_max']['walltime']) \
+                if 'resources_max' in q_sts[q] and 'walltime' in q_sts[q]['resources_max'] \
+                else "Not Found"
+
+        return wall_time_maxes
+
+    @_ensure_connected
     def get_available_modules(self, flatten=False):
         output = self.call('module avail')
         output = re.sub('.*:ERROR:.*', '', output)
