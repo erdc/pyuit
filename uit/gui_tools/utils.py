@@ -187,8 +187,8 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     def panel(self):
         return pn.Column(
             f'# {self.title}',
-            self.header_panel,
-            self.tabs_panel,
+            pn.Column(self.header_panel),
+            pn.Column(self.tabs_panel),
             sizing_mode='stretch_both',
         )
 
@@ -284,7 +284,7 @@ class LogsTab(TabView):
 
     @param.depends('log_content')
     def panel(self):
-        log_content = pn.widgets.Ace.from_param(
+        log_content = pn.widgets.CodeEditor.from_param(
             self.param.log_content,
             readonly=True, theme='monokai', sizing_mode='stretch_both', min_height=500
         )
