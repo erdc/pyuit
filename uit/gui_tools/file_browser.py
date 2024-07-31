@@ -671,7 +671,7 @@ class FileViewer(param.Parameterized):
     @param.depends('update_btn')
     def view(self):
         file_path = self.file_select.file_path
-        viewer = pn.widgets.Ace(
+        viewer = pn.widgets.CodeEditor(
             value=self.file_contents, min_height=500, sizing_mode='stretch_both',
             readonly=True, filename=file_path, theme='monokai',
         )
