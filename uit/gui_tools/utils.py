@@ -187,8 +187,8 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     def panel(self):
         return pn.Column(
             f'# {self.title}',
-            self.header_panel,
-            self.tabs_panel,
+            pn.Column(self.header_panel),
+            pn.Column(self.tabs_panel),
             sizing_mode='stretch_both',
         )
 
