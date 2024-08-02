@@ -364,9 +364,16 @@ class HpcPath(Path, PurePosixPath):
 
     """
     _has_init = hasattr(Path, '_init')  # i.e. Python 3.7
+    _has_from_parts = hasattr(Path, '_from_parts')  # i.e. Python < 3.12
 
     def __init__(self, *args, is_dir=None, uit_client=None):
-        super().__init__()
+        if self._has_from_parts:
+            super().__init__()
+        else:
+            super().__init__(*args)
+        self.__initialize__(is_dir=is_dir, uit_client=uit_client)
+
+    def __initialize__(self, is_dir=None, uit_client=None):
         self._is_dir = is_dir
         self.uit_client = uit_client
         self._is_file = None if is_dir is None else not is_dir
@@ -379,13 +386,15 @@ class HpcPath(Path, PurePosixPath):
         self._is_dir = is_dir
 
     def __new__(cls, *args, is_dir=None, uit_client=None):
-        if cls._has_init:
-            self = cls._from_parts(args, init=False)
+        if cls._has_from_parts:
+            if cls._has_init:
+                self = cls._from_parts(args, init=False)
+            else:
+                self = cls._from_parts(args)
         else:
-            self = cls._from_parts(args)
+            self =  super().__new__(cls, *args)
         self._init(is_dir=is_dir, uit_client=uit_client)
         return self
-
     def __truediv__(self, key):
         new_path = super().__truediv__(key)
         new_path.__init__(uit_client=self.uit_client)
