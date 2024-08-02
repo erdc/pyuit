@@ -396,7 +396,7 @@ class StatusTab(TabView):
             )
 
             terminate_confirmation = pn.Column(
-                msg, pn.Row(yes_btn, cancel_btn, margin=20), background='#ffffff',
+                msg, pn.Row(yes_btn, cancel_btn, margin=20),  styles={"background": "#ffffff"},
             )
 
             args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'statuses_table': statuses_table,
