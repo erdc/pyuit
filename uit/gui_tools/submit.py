@@ -425,14 +425,14 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         return ''
 
     @param.depends('job_name', watch=True)
-    def is_submitable(self, error_messages: list=None):
+    def is_submitable(self, error_messages: list = None):
         self.error_messages[:] = error_messages or []
         if not self.job_name:
             self.error_messages.append(
                 pn.pane.Alert('* You must first enter a Job Name above before you can proceed.',
                               alert_type='danger')
             )
-        elif re.match('^[^*&%\\/\s]*$', self.job_name) is None:  # noqa: W605
+        elif re.match(r'^[^*&%\\/\s]*$', self.job_name) is None:  # noqa: W605
             self.error_messages.append(
                 pn.pane.Alert('* Job Name cannot contain spaces or any of the following characters: * & % \\ /',
                               alert_type='danger')
@@ -469,12 +469,16 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def submit_view(self):
         self.is_submitable()
         return pn.Column(
-            pn.widgets.TextInput.from_param(self.param.job_name),
+            self.view(),
             self.action_button,
             self.error_messages,
             name='Submit',
             sizing_mode='stretch_both',
         )
+
+    def view(self):
+        # override to customize submit tab
+        return pn.Param(self.param.job_name)
 
     def panel(self):
 
