@@ -187,8 +187,8 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     def panel(self):
         return pn.Column(
             f'# {self.title}',
-            self.header_panel,
-            self.tabs_panel,
+            pn.Column(self.header_panel),
+            pn.Column(self.tabs_panel),
             sizing_mode='stretch_both',
         )
 
@@ -284,15 +284,15 @@ class LogsTab(TabView):
 
     @param.depends('log_content')
     def panel(self):
-        log_content = pn.widgets.Ace.from_param(
+        log_content = pn.widgets.CodeEditor.from_param(
             self.param.log_content,
             readonly=True, theme='monokai', sizing_mode='stretch_both', min_height=500
         )
 
         refresh_btn = pn.widgets.Button.from_param(self.param.refresh_btn, button_type='primary', width=100)
         args = {'log': log_content, 'btn': refresh_btn}
-        code = 'btn.css_classes.push("pn-loading", "arc"); btn.properties.css_classes.change.emit(); ' \
-               'log.css_classes.push("pn-loading", "arc"); log.properties.css_classes.change.emit();'
+        code = 'btn.css_classes.push("pn-loading", "pn-arc"); btn.properties.css_classes.change.emit(); ' \
+               'log.css_classes.push("pn-loading", "pn-arc"); log.properties.css_classes.change.emit();'
         refresh_btn.js_on_click(args=args, code=code)
 
         if self.is_array:
@@ -396,7 +396,7 @@ class StatusTab(TabView):
             )
 
             terminate_confirmation = pn.Column(
-                msg, pn.Row(yes_btn, cancel_btn, margin=20), background='#ffffff',
+                msg, pn.Row(yes_btn, cancel_btn, margin=20),  styles={"background": "#ffffff"},
             )
 
             args = {'update_btn': update_btn, 'terminate_btn': terminate_btn, 'statuses_table': statuses_table,
@@ -411,10 +411,10 @@ class StatusTab(TabView):
             cancel_btn.js_on_click(args=args, code=cancel_code)
 
             code = (
-                'btn.css_classes.push("pn-loading", "arc"); '
+                'btn.css_classes.push("pn-loading", "pn-arc"); '
                 'btn.properties.css_classes.change.emit(); '
                 'other_btn.disabled=true; '
-                'statuses_table.css_classes.push("pn-loading", "arc"); '
+                'statuses_table.css_classes.push("pn-loading", "pn-arc"); '
                 'statuses_table.properties.css_classes.change.emit();'
             )
 

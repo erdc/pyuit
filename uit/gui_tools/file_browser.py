@@ -344,7 +344,7 @@ class FileBrowser(param.Parameterized):
             self, parameters=self.controls + ['path_text'], widgets=self.control_styles, show_name=False,
         )[:]
         args = {'listing': self.file_listing_widget}
-        code = 'listing.css_classes.push("pn-loading", "arc"); listing.properties.css_classes.change.emit();'
+        code = 'listing.css_classes.push("pn-loading", "pn-arc"); listing.properties.css_classes.change.emit();'
         self.file_listing_widget.jscallback(args=args, value=code)
         for wg in widgets[:-1]:
             wg.js_on_click(args=args, code=code)
@@ -364,9 +364,16 @@ class HpcPath(Path, PurePosixPath):
 
     """
     _has_init = hasattr(Path, '_init')  # i.e. Python 3.7
+    _has_from_parts = hasattr(Path, '_from_parts')  # i.e. Python < 3.12
 
     def __init__(self, *args, is_dir=None, uit_client=None):
-        super().__init__()
+        if self._has_from_parts:
+            super().__init__()
+        else:
+            super().__init__(*args)
+        self.__initialize__(is_dir=is_dir, uit_client=uit_client)
+
+    def __initialize__(self, is_dir=None, uit_client=None):
         self._is_dir = is_dir
         self.uit_client = uit_client
         self._is_file = None if is_dir is None else not is_dir
@@ -379,13 +386,15 @@ class HpcPath(Path, PurePosixPath):
         self._is_dir = is_dir
 
     def __new__(cls, *args, is_dir=None, uit_client=None):
-        if cls._has_init:
-            self = cls._from_parts(args, init=False)
+        if cls._has_from_parts:
+            if cls._has_init:
+                self = cls._from_parts(args, init=False)
+            else:
+                self = cls._from_parts(args)
         else:
-            self = cls._from_parts(args)
+            self =  super().__new__(cls, *args)
         self._init(is_dir=is_dir, uit_client=uit_client)
         return self
-
     def __truediv__(self, key):
         new_path = super().__truediv__(key)
         new_path.__init__(uit_client=self.uit_client)
@@ -582,14 +591,14 @@ class FileSelector(param.Parameterized):
         self.param.browse_toggle.label = 'Browse'
 
     def input_row(self):
-        file_path = pn.widgets.TextInput.from_param(self.param.file_path, sizing_mode='stretch_width', show_name=False)
+        file_path = pn.widgets.TextInput.from_param(self.param.file_path, sizing_mode='stretch_width')
         browse_toggle = pn.widgets.Button.from_param(
             self.param.browse_toggle, button_type='primary', width=100, align='end'
         )
 
         browse_toggle.js_on_click(
             args={'btn': browse_toggle},
-            code='btn.css_classes.push("pn-loading", "arc"); btn.properties.css_classes.change.emit();',
+            code='btn.css_classes.push("pn-loading", "pn-arc"); btn.properties.css_classes.change.emit();',
         )
 
         return pn.Row(file_path, browse_toggle, width_policy='max', margin=0)
@@ -671,7 +680,7 @@ class FileViewer(param.Parameterized):
     @param.depends('update_btn')
     def view(self):
         file_path = self.file_select.file_path
-        viewer = pn.widgets.Ace(
+        viewer = pn.widgets.CodeEditor(
             value=self.file_contents, min_height=500, sizing_mode='stretch_both',
             readonly=True, filename=file_path, theme='monokai',
         )

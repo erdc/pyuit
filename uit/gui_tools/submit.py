@@ -135,11 +135,13 @@ class PbsScriptInputs(param.Parameterized):
     def pbs_options_view(self):
         self.update_hpc_connection_dependent_defaults()
         return pn.Column(
-            pn.Card(
-                pn.widgets.Tabulator.from_param(self.param.subproject_usage, width=self.SHOW_USAGE_TABLE_MAX_WIDTH),
-                title='Subproject Usage Summary',
-                sizing_mode='stretch_width',
-                collapsed=True,
+            pn.Column(
+                pn.Card(
+                    pn.widgets.Tabulator.from_param(self.param.subproject_usage, width=self.SHOW_USAGE_TABLE_MAX_WIDTH),
+                    title='Subproject Usage Summary',
+                    sizing_mode='stretch_width',
+                    collapsed=True,
+                )
             ),
             pn.Column(
                 self.param.hpc_subproject,
@@ -152,8 +154,8 @@ class PbsScriptInputs(param.Parameterized):
                 self.node_alert,
                 self.param.queue,
                 pn.Row(
-                        pn.widgets.StaticText.from_param(self.param.max_wall_time, placeholder='Not Found'),
-                        pn.widgets.StaticText.from_param(self.param.max_nodes, placeholder='Not Found'),
+                        pn.widgets.StaticText.from_param(self.param.max_wall_time),
+                        pn.widgets.StaticText.from_param(self.param.max_nodes),
                 ),
             ),
             pn.layout.WidgetBox(
@@ -235,7 +237,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         btn.on_click(self.update_environ)
         btn.js_on_click(
             args={'btn': btn},
-            code='btn.css_classes.push("pn-loading", "arc"); btn.properties.css_classes.change.emit();'
+            code='btn.css_classes.push("pn-loading", "pn-arc"); btn.properties.css_classes.change.emit();'
         )
         return btn
 
@@ -274,7 +276,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         new_val_wg = self.env_var_widget(val=None, tag='env_val_-1', disabled=True)
         new_key_wg.jscallback(
             args={'val': new_val_wg},
-            value='val.css_classes.push("pn-loading", "arc"); val.properties.css_classes.change.emit();'
+            value='val.css_classes.push("pn-loading", "pn-arc"); val.properties.css_classes.change.emit();'
         )
         self.env_names.append(new_key_wg)
         self.env_values.append(new_val_wg)
@@ -423,14 +425,14 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         return ''
 
     @param.depends('job_name', watch=True)
-    def is_submitable(self, error_messages: list=None):
+    def is_submitable(self, error_messages: list = None):
         self.error_messages[:] = error_messages or []
         if not self.job_name:
             self.error_messages.append(
                 pn.pane.Alert('* You must first enter a Job Name above before you can proceed.',
                               alert_type='danger')
             )
-        elif re.match('^[^*&%\\/\s]*$', self.job_name) is None:  # noqa: W605
+        elif re.match(r'^[^*&%\\/\s]*$', self.job_name) is None:  # noqa: W605
             self.error_messages.append(
                 pn.pane.Alert('* Job Name cannot contain spaces or any of the following characters: * & % \\ /',
                               alert_type='danger')
@@ -452,7 +454,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         action_btn = pn.widgets.Button.from_param(self.param[button], button_type=button_type, width=200)
         cancel_btn = pn.widgets.Button.from_param(self.param.cancel_btn, button_type='danger', width=200)
 
-        code = 'btn.css_classes.push("pn-loading", "arc"); btn.properties.css_classes.change.emit(); ' \
+        code = 'btn.css_classes.push("pn-loading", "pn-arc"); btn.properties.css_classes.change.emit(); ' \
                'other_btn.disabled=true;'
         action_btn.js_on_click(
             args={'btn': action_btn, 'other_btn': cancel_btn},
@@ -467,7 +469,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def submit_view(self):
         self.is_submitable()
         return pn.Column(
-            self.view,
+            self.view(),
             self.action_button,
             self.error_messages,
             name='Submit',
@@ -475,9 +477,11 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         )
 
     def view(self):
+        # override to customize submit tab
         return pn.Param(self.param.job_name)
 
     def panel(self):
+
         return pn.Column(
             '# Submit Job',
             pn.widgets.Button.from_param(self.param.previous_btn, button_type='primary', width=100),
