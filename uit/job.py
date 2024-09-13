@@ -1,5 +1,6 @@
 import os
 import re
+import inspect
 from datetime import datetime
 from pathlib import PurePosixPath, Path
 import logging
@@ -64,6 +65,12 @@ class PbsJob:
                 f"Script: {self.script.__repr__()}",
             )
         )
+
+    @staticmethod
+    async def await_if_async(result):
+        if inspect.iscoroutine(result):
+            result = await result
+        return result
 
     @property
     def name(self):
@@ -130,7 +137,7 @@ class PbsJob:
     def qstat(self):
         return self._qstat
 
-    def submit(self, remote_name=None, local_temp_dir=""):
+    async def submit(self, remote_name=None, local_temp_dir=""):
         """Submit a Job to HPC queue.
 
         Args:
@@ -147,7 +154,7 @@ class PbsJob:
 
         working_dir = self.working_dir.as_posix()
         try:
-            self.client.call(f"mkdir -p {working_dir}")
+            await self.client.call(f"mkdir -p {working_dir}")
         except RuntimeError as e:
             raise RuntimeError(
                 'Error setting up job directory on "{}": {}'.format(self.system, str(e))
@@ -158,7 +165,7 @@ class PbsJob:
 
         remote_name = remote_name or self.pbs_submit_script_name
 
-        self._job_id = self.client.submit(
+        self._job_id = await self.client.submit(
             self.script,
             working_dir=working_dir,
             remote_name=remote_name,
@@ -170,7 +177,7 @@ class PbsJob:
             self.post_processing_script.set_directive(
                 "-W", f"depend=afterany:{self.job_id}"
             )
-            self._post_processing_job_id = self.client.submit(
+            self._post_processing_job_id = await self.client.submit(
                 self.post_processing_script,
                 working_dir=working_dir,
                 remote_name=f'{remote_name.rstrip(".pbs")}_post_processing.pbs',
@@ -178,7 +185,7 @@ class PbsJob:
             )
 
         if remote_name == self.pbs_submit_script_name:
-            self.client.call(
+            await self.client.call(
                 f"mv {self.pbs_submit_script_name} {self.name}.{self.job_number}.pbs",
                 working_dir=working_dir,
             )
@@ -198,24 +205,26 @@ class PbsJob:
             execution_block=execution_block,
         )
 
-    def terminate(self):
+    async def terminate(self):
         if self.job_id:
-            return self._execute("qdel", additional_options=self.post_processing_job_id)
+            return await self._execute(
+                "qdel", additional_options=self.post_processing_job_id
+            )
         else:
             # Avoid running "qdel None" which causes an error. There is nothing to terminate in PBS, so return True.
             # This is often the result of a job that created files on the HPC but failed to create the PBS job.
             return True
 
-    def hold(self):
-        return self._execute("qhold")
+    async def hold(self):
+        return await self._execute("qhold")
 
-    def release(self):
-        return self._execute("qrls")
+    async def release(self):
+        return await self._execute("qrls")
 
-    def _execute(self, cmd, additional_options=None):
+    async def _execute(self, cmd, additional_options=None):
         additional_options = additional_options or ""
         try:
-            self.client.call(command=f"{cmd} {self.job_id} {additional_options}")
+            await self.client.call(command=f"{cmd} {self.job_id} {additional_options}")
             return True
         except Exception as e:
             if cmd == "qdel" and (
@@ -230,12 +239,12 @@ class PbsJob:
                 logger.exception(f"Error when running '{cmd}': {e}")
                 return False
 
-    def _transfer_files(self):
+    async def _transfer_files(self):
         # Transfer any files listed in transfer_input_files to working_dir on supercomputer
         for transfer_file in self.transfer_input_files:
             transfer_file = Path(transfer_file)
             remote_path = self.working_dir / transfer_file.name
-            ret = self.client.put_file(
+            ret = await self.client.put_file(
                 local_path=transfer_file, remote_path=remote_path
             )
 
@@ -286,8 +295,8 @@ class PbsJob:
         #     self.extended_properties['cleanup_job_id'] = self.client.submit(cleanup_script, self.working_dir,
         #                                                                     f'cleanup.{execute_job_id}.pbs')
 
-    def update_status(self):
-        self.update_statuses([self])
+    async def update_status(self):
+        await self.update_statuses([self])
         return self.status
 
     def _get_log_file_name(self, log_type):
@@ -323,7 +332,7 @@ class PbsJob:
         """
         return self.working_dir / self._get_log_file_name(log_type)
 
-    def get_cached_file_contents(
+    async def get_cached_file_contents(
         self, remote_path, local_path=None, bytes=None, start_from=0
     ):
         """
@@ -343,7 +352,7 @@ class PbsJob:
         )
         if not local_path.exists():
             local_path.parent.mkdir(parents=True, exist_ok=True)
-            self.client.get_file(remote_path, local_path)
+            await self.client.get_file(remote_path, local_path)
             if not local_path.exists():
                 raise RuntimeError(f"Unable to retrieve {remote_path}")
 
@@ -362,7 +371,7 @@ class PbsJob:
             log_contents = f.read(bytes).decode()
         return log_contents
 
-    def _get_cached_log(self, log_type, bytes=None, start_from=0):
+    async def _get_cached_log(self, log_type, bytes=None, start_from=0):
         """
         Gets the contents of a log file. Checks local workspace first, and if not present copies the file from the HPC system to the local workspace.
         Args:
@@ -373,11 +382,11 @@ class PbsJob:
         """
         local_path = self._get_local_log_file_path(log_type)
         remote_path = self._get_remote_log_file_path(log_type)
-        return self.get_cached_file_contents(
+        return await self.get_cached_file_contents(
             remote_path, local_path, bytes=bytes, start_from=start_from
         )
 
-    def _get_log(self, log_type, filename=None, bytes=None, start_from=0):
+    async def _get_log(self, log_type, filename=None, bytes=None, start_from=0):
         """
         Gets the contents of a log file, and optionally saves the file to disk.
         Args:
@@ -389,11 +398,11 @@ class PbsJob:
         """
         try:
             if self.status in ["F", "X"]:
-                log_contents = self._get_cached_log(
+                log_contents = await self._get_cached_log(
                     log_type, bytes=bytes, start_from=start_from
                 )
             else:
-                log_contents = self.client.call(f"qpeek {self.job_id}")
+                log_contents = await self.client.call(f"qpeek {self.job_id}")
                 if log_contents == "Unknown Job ID\n":
                     log_contents = self._get_cached_log(
                         log_type, bytes=bytes, start_from=start_from
@@ -435,13 +444,13 @@ class PbsJob:
             return path
         return self.working_dir / path
 
-    def get_stdout_log(self, filename=None, bytes=None, start_from=0):
-        return self._get_log("o", filename, bytes=bytes, start_from=start_from)
+    async def get_stdout_log(self, filename=None, bytes=None, start_from=0):
+        return await self._get_log("o", filename, bytes=bytes, start_from=start_from)
 
-    def get_stderr_log(self, filename=None, bytes=None, start_from=0):
-        return self._get_log("e", filename, bytes=bytes, start_from=start_from)
+    async def get_stderr_log(self, filename=None, bytes=None, start_from=0):
+        return await self._get_log("e", filename, bytes=bytes, start_from=start_from)
 
-    def get_custom_log(self, log_path, num_lines=None, head=False, filename=None):
+    async def get_custom_log(self, log_path, num_lines=None, head=False, filename=None):
         log_path = self.resolve_path(log_path)
         cmd = "head" if head else "tail"
         if num_lines is None:
@@ -449,7 +458,7 @@ class PbsJob:
         else:
             cmd += f" -n {num_lines}"
         try:
-            log_contents = self.client.call(f"{cmd} {log_path}")
+            log_contents = await self.client.call(f"{cmd} {log_path}")
         except RuntimeError as e:
             log_contents = str(e)
 
@@ -464,13 +473,16 @@ class PbsJob:
         return job_id.split(".")[0]
 
     @classmethod
-    def update_statuses(cls, jobs, as_df=False):
+    async def update_statuses(cls, jobs, as_df=False):
         client = jobs[0].client
-        job_ids = [j.job_id for j in jobs]
+        job_ids = [j.job_id for j in jobs if j.job_id]
         job_ids.extend(
             [j.post_processing_job_id for j in jobs if j.post_processing_job_id]
         )
-        statuses = client.status(job_ids, as_df=as_df)
+        if not job_ids:
+            # jobs that are created from resutls might not have IDs
+            return
+        statuses = await client.status(job_ids, as_df=as_df)
         status_dicts = statuses.to_dict(orient="records") if as_df else statuses
         status_dicts = {
             cls._clean_job_id(status["job_id"]): status for status in status_dicts
@@ -577,9 +589,9 @@ class PbsArrayJob(PbsJob):
         super().__init__(script, **kwargs)
         self._sub_jobs = None
 
-    def update_status(self):
+    async def update_status(self):
         all_jobs = [self] + self.sub_jobs
-        self.update_statuses(all_jobs)
+        await self.update_statuses(all_jobs)
         self._qstat = {j.job_id: j.qstat for j in all_jobs}
         return self.status
 
@@ -605,11 +617,13 @@ class PbsArrayJob(PbsJob):
         return self._sub_jobs
 
 
-def get_active_jobs(uit_client):
+async def get_active_jobs(uit_client):
     jobs = list()
-    statuses = uit_client.status(with_historic=True)
+    statuses = await uit_client.status(with_historic=True)
     if statuses:
-        statuses = uit_client.status(job_id=[j["job_id"] for j in statuses], full=True)
+        statuses = await uit_client.status(
+            job_id=[j["job_id"] for j in statuses], full=True
+        )
 
         for job_id, status in statuses.items():
             j = get_job_from_full_status(job_id, status, uit_client)
@@ -658,8 +672,10 @@ def get_job_from_full_status(job_id, status, uit_client):
     return j
 
 
-def get_job_from_id(job_id, uit_client, with_historic=True):
-    status = uit_client.status(job_id=job_id, with_historic=with_historic, full=True)
+async def get_job_from_id(job_id, uit_client, with_historic=True):
+    status = await uit_client.status(
+        job_id=job_id, with_historic=with_historic, full=True
+    )
     for job_id, full_status in status.items():
         return get_job_from_full_status(job_id, full_status, uit_client)
 
@@ -675,11 +691,11 @@ def _process_l_directives(pbs_script):
     return d
 
 
-def get_job_from_pbs_script(job_id, pbs_script, uit_client):
+async def get_job_from_pbs_script(job_id, pbs_script, uit_client):
     script = PurePosixPath(pbs_script)
     working_dir = script.parent
     logger.debug(f"PBS script parent: {working_dir}")
-    pbs_script = uit_client.call(f"cat {pbs_script}")
+    pbs_script = await uit_client.call(f"cat {pbs_script}")
     matches = re.findall(r"^#PBS -(.*)", pbs_script, flags=re.MULTILINE)
     directives = {k: v for k, v in [(i.split() + [""])[:2] for i in matches]}
     directives["l"] = _process_l_directives(pbs_script)

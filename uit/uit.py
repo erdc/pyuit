@@ -13,6 +13,7 @@ from itertools import chain
 from pathlib import PurePosixPath, Path
 from urllib.parse import urljoin, urlencode  # noqa: F401
 
+import param
 import requests
 from flask import Flask, request, render_template_string
 from werkzeug.serving import make_server
@@ -43,7 +44,7 @@ _auth_code = None
 _server = None
 
 
-class Client:
+class Client(param.Parameterized):
     """Provides a python abstraction for interacting with the UIT API.
 
     Attributes:
@@ -57,6 +58,8 @@ class Client:
         token (str): Token from current UIT authorization.
     """
 
+    token = param.String(allow_None=True)
+
     def __init__(
         self,
         ca_file=None,
@@ -67,13 +70,14 @@ class Client:
         scope="UIT",
         token=None,
         port=5000,
+        delay_token=False,
     ):
+        super().__init__(token=token)
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
 
         # Set private attribute defaults
         self._auth_code = None
-        self._token = None
         self._headers = None
         self._login_node = None
         self._login_nodes = None
@@ -87,14 +91,18 @@ class Client:
         self._callback = None
         self._available_modules = None
         self._config = None
+        self._queues = None
+        self._max_wall_times = None
 
         # Set arg-based attributes
         self.client_id = client_id
         self.client_secret = client_secret
         self.session_id = session_id
         self.scope = scope
-        self.token = token
         self.port = port
+
+        if self.token is not None:
+            self.param.trigger("token")
 
         # Set attribute defaults
         self.connected = False
@@ -122,7 +130,7 @@ class Client:
                     "client_secret"
                 )
 
-        if (
+        if not delay_token and (
             self.client_id is None or self.client_secret is None
         ) and self.token is None:
             raise ValueError(
@@ -170,14 +178,9 @@ class Client:
             self._headers = {"x-uit-auth-token": self.token} if self.token else None
         return self._headers
 
-    @property
-    def token(self):
-        return self._token
-
-    @token.setter
-    def token(self, token):
-        self._token = token
-        if token is not None:
+    @param.depends("token", watch=True)
+    def get_token_dependent_info(self):
+        if self.token is not None:
             self.get_userinfo()
 
     @property
@@ -229,6 +232,10 @@ class Client:
             except Exception as e:
                 logger.exception(e)
 
+    @property
+    def auth_func(self):
+        return self.get_token
+
     def authenticate(self, callback=None):
         """Ensure we have an access token. Request one from the user if we do not.
 
@@ -247,9 +254,9 @@ class Client:
         # start flask server
         global _server
         if _server is not None:
-            _server.auth_func = self.get_token
+            _server.auth_func = self.auth_func
         else:
-            _server = start_server(self.get_token, self.port)
+            _server = start_server(self.auth_func, self.port)
 
         auth_url = self.get_auth_url()
 
@@ -257,29 +264,9 @@ class Client:
 
         webbrowser.open(auth_url)
 
-    def connect(
-        self,
-        system=None,
-        login_node=None,
-        exclude_login_nodes=(),
-        retry_on_failure=None,
-        num_retries=3,
+    def prepare_connect(
+        self, system, login_node, exclude_login_nodes, retry_on_failure
     ):
-        """Connect this client to the UIT servers.
-
-        Args:
-            system (str): Specific system name to connect to. Cannot be used with login_node arg.
-            login_node (str): Specific node name to connect to. Cannot be used with system arg.
-            exclude_login_nodes (list): Nodes to exclude when selecting a login node. Ignored if login_node is
-                specified.
-            retry_on_failure (bool):
-                True will attempt to connect to different login nodes.
-                False will only attempt one connection.
-                Default of None will automatically pick False if login_node is set, otherwise it will pick True.
-            num_retries (int): Number of connection attempts. Requires retry_on_failure=True
-        """
-        # get access token from file
-        # populate userinfo and header info
         if self.token is None:
             raise RuntimeError(
                 "No Valid Access Tokens Found, Please run authenticate() function and try again"
@@ -320,6 +307,33 @@ class Client:
         self._username = self._userinfo["SYSTEMS"][self._system.upper()]["USERNAME"]
         self._uit_url = self._uit_urls[login_node]
         self.connected = True
+
+        return login_node, retry_on_failure
+
+    def connect(
+        self,
+        system=None,
+        login_node=None,
+        exclude_login_nodes=(),
+        retry_on_failure=None,
+        num_retries=3,
+    ):
+        """Connect this client to the UIT servers.
+
+        Args:
+            system (str): Specific system name to connect to. Cannot be used with login_node arg.
+            login_node (str): Specific node name to connect to. Cannot be used with system arg.
+            exclude_login_nodes (list): Nodes to exclude when selecting a login node. Ignored if login_node is
+                specified.
+            retry_on_failure (bool):
+                True will attempt to connect to different login nodes.
+                False will only attempt one connection.
+                Default of None will automatically pick False if login_node is set, otherwise it will pick True.
+            num_retries (int): Number of connection attempts. Requires retry_on_failure=True
+        """
+        login_node, retry_on_failure = self.prepare_connect(
+            system, login_node, exclude_login_nodes, retry_on_failure
+        )
 
         try:
             # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
@@ -732,20 +746,23 @@ class Client:
             if isinstance(job_id, (tuple, list)):
                 job_id = " ".join([j.split(".")[0] for j in job_id])
             cmd += f" -x {job_id}"
-            return self._process_status_command(
-                cmd, parse=parse, full=full, as_df=as_df
+            result = self.call(cmd)
+            return self._process_status_result(
+                result, parse=parse, full=full, as_df=as_df
             )
         else:
             # If no jobs are specified then
-            result1 = self._process_status_command(
-                cmd, parse=parse, full=full, as_df=as_df
+            result = self.call(cmd)
+            result1 = self._process_status_result(
+                result, parse=parse, full=full, as_df=as_df
             )
             if not with_historic:
                 return result1
             else:
                 cmd += " -x"
-                result2 = self._process_status_command(
-                    cmd, parse=parse, full=full, as_df=as_df
+                result = self.call(cmd)
+                result2 = self._process_status_result(
+                    result, parse=parse, full=full, as_df=as_df
                 )
 
                 if not parse:
@@ -812,8 +829,12 @@ class Client:
         return job_id.strip()
 
     @_ensure_connected
-    def get_queues(self):
-        output = self.call("qstat -Q")
+    def get_queues(self, update_cache=False):
+        if self._queues is None or update_cache:
+            self._queues = self._process_get_queues_output(self.call("qstat -Q"))
+        return self._queues
+
+    def _process_get_queues_output(self, output):
         standard_queues = [] if self.system == "jim" else QUEUES
         other_queues = set([i.split()[0] for i in output.splitlines()][2:]) - set(
             standard_queues
@@ -856,7 +877,11 @@ class Client:
 
     @_ensure_connected
     def get_available_modules(self, flatten=False):
-        output = self.call("module avail")
+        return self._process_get_available_modules_output(
+            self.call("module avail"), flatten
+        )
+
+    def _process_get_available_modules_output(self, output, flatten):
         output = re.sub(".*:ERROR:.*", "", output)
         sections = re.split("-+ (.*) -+", output)[1:]
         self._available_modules = {
@@ -869,13 +894,14 @@ class Client:
 
     @_ensure_connected
     def get_loaded_modules(self):
-        output = self.call("module list")
+        return self._process_get_loaded_modules_output(self.call("module list"))
+
+    @staticmethod
+    def _process_get_loaded_modules_output(output):
         output = re.sub(".*:ERROR:.*", "", output)
         return re.split(r"\n?\s*\d+\)\s*", output[:-1])[1:]
 
-    def _process_status_command(self, cmd, parse, full, as_df):
-        result = self.call(cmd)
-
+    def _process_status_result(self, result, parse, full, as_df):
         if not parse:
             return result
 
@@ -1018,6 +1044,10 @@ class Client:
             # get_file only returns file contents, not json, so it always causes RuntimeError.
             resp = {}
 
+        return self._process_uit_debug(resp, local_vars)
+
+    def _process_uit_debug(self, resp, local_vars):
+
         debug_end_time = time.perf_counter()
         time_text = f"{debug_end_time - local_vars['debug_start_time']:.2f}s"
         debug_header = f" {FG_RED}time={time_text}{ALL_OFF}    node={self.login_node}"
@@ -1038,10 +1068,12 @@ class Client:
 
         debug_header += f"    username={self.username}"
 
-        if local_vars["r"].status_code != 200:
-            debug_header += (
-                f"    {FG_RED}http_status={local_vars['r'].status_code}{ALL_OFF}"
-            )
+        try:
+            http_status = local_vars["r"].status
+        except AttributeError:
+            http_status = local_vars["r"].status_code
+        if http_status != 200:
+            debug_header += f"    {FG_RED}{http_status=}{ALL_OFF}"
 
         # stdout and stderr will only show up for call() and only if they contain text
         nice_stdout = ""
@@ -1178,6 +1210,13 @@ def start_server(auth_func, port=5000):
         return render_template_string(html_template)
 
     return server
+
+
+def shutdown_auth_server():
+    global _server
+    if _server is not None:
+        _server.shutdown()
+        _server = None
 
 
 def encode_pure_posix_path(obj):

@@ -1,15 +1,17 @@
+import inspect
 from collections import OrderedDict
 from pathlib import Path, PurePosixPath
 import logging
-import time
+import asyncio
 
 import param
 import panel as pn
 import pandas as pd
 import yaml
 
-from .file_browser import FileViewer
+from .file_browser import FileViewer, AsyncFileViewer, get_js_loading_code
 from ..uit import Client
+from ..async_client import AsyncClient
 from ..job import PbsArrayJob
 
 logger = logging.getLogger(__name__)
@@ -21,23 +23,41 @@ def make_bk_label(label):
     )
 
 
-class HpcConfigurable(param.Parameterized):
-    configuration_file = param.String()
+async def await_if_async(result):
+    if inspect.iscoroutine(result):
+        result = await result
+    return result
+
+
+class HpcBase(param.Parameterized):
     uit_client = param.ClassSelector(Client)
+
+    @property
+    def await_if_async(self):
+        return await_if_async
+
+
+class HpcConfigurable(HpcBase):
+    configuration_file = param.String()
     environment_variables = param.ClassSelector(OrderedDict, default=OrderedDict())
     modules_to_load = param.ListSelector(default=[])
     modules_to_unload = param.ListSelector(default=[])
 
+    def __init__(self, **params):
+        super().__init__(**params)
+        if self.uit_client:
+            self.param.trigger("uit_client")
+
     @param.depends("uit_client", watch=True)
-    def update_configurable_hpc_parameters(self, reset=False):
+    async def update_configurable_hpc_parameters(self, reset=False):
         if not (self.uit_client and self.uit_client.connected):
             return
 
         self.load_config_file(reset=reset)
         self.param.modules_to_unload.objects = sorted(
-            self.uit_client.get_loaded_modules()
+            await self.await_if_async(self.uit_client.get_loaded_modules())
         )
-        self.param.modules_to_load.objects = self._get_modules_available_to_load()
+        self.param.modules_to_load.objects = await self._get_modules_available_to_load()
         self.modules_to_load = self._validate_modules(
             self.param.modules_to_load.objects, self.modules_to_load
         )
@@ -45,10 +65,12 @@ class HpcConfigurable(param.Parameterized):
             self.param.modules_to_unload.objects, self.modules_to_unload
         )
 
-    def _get_modules_available_to_load(self):
-        modules = set(self.uit_client.get_available_modules(flatten=True)) - set(
-            self.param.modules_to_unload.objects
-        )
+    async def _get_modules_available_to_load(self):
+        modules = set(
+            await self.await_if_async(
+                self.uit_client.get_available_modules(flatten=True)
+            )
+        ) - set(self.param.modules_to_unload.objects)
         return sorted(modules)
 
     def _validate_modules(self, possible, candidates):
@@ -131,8 +153,6 @@ class PbsJobTabbedViewer(HpcWorkspaces):
 
     def __init__(self, **params):
         super().__init__(**params)
-        if self.jobs:
-            self.update_selected_job()
         self.status_tab = StatusTab(
             parent=self, disable_update=self.disable_status_update
         )
@@ -143,6 +163,8 @@ class PbsJobTabbedViewer(HpcWorkspaces):
             self.logs_tab.tab,
             self.files_tab.tab,
         ]
+        if self.jobs:
+            self.update_selected_job()
 
     def __str__(self):
         return f"<{self.__class__.__name__} job={self.selected_job}>"
@@ -222,6 +244,10 @@ class TabView(param.Parameterized):
         return self.__str__()
 
     @property
+    def await_if_async(self):
+        return await_if_async
+
+    @property
     def tab(self):
         return self.title, self.panel
 
@@ -283,17 +309,21 @@ class LogsTab(TabView):
             self.param["log"].names = {cl.split("/")[-1]: cl for cl in self.custom_logs}
 
     @param.depends("parent.active_job", "log", watch=True)
-    def get_log(self):
+    async def get_log(self):
         job = self.active_job
         if job is not None and self.log is not None:
             if self.log == "stdout":
-                log_content = job.get_stdout_log(bytes=100_000, start_from=-100_000)
+                log_content = await self.await_if_async(
+                    job.get_stdout_log(bytes=100_000, start_from=-100_000)
+                )
             elif self.log == "stderr":
-                log_content = job.get_stderr_log(bytes=100_000, start_from=-100_000)
+                log_content = await self.await_if_async(
+                    job.get_stderr_log(bytes=100_000, start_from=-100_000)
+                )
             else:
                 try:
-                    log_content = job.get_custom_log(
-                        self.log, num_lines=self.num_log_lines
+                    log_content = await self.await_if_async(
+                        job.get_custom_log(self.log, num_lines=self.num_log_lines)
                     )
                 except RuntimeError as e:
                     logger.exception(e)
@@ -316,10 +346,7 @@ class LogsTab(TabView):
             self.param.refresh_btn, button_type="primary", width=100
         )
         args = {"log": log_content, "btn": refresh_btn}
-        code = (
-            'btn.css_classes.push("pn-loading", "pn-arc"); btn.properties.css_classes.change.emit(); '
-            'log.css_classes.push("pn-loading", "pn-arc"); log.properties.css_classes.change.emit();'
-        )
+        code = f"{get_js_loading_code('btn')} {get_js_loading_code('log')}"
         refresh_btn.js_on_click(args=args, code=code)
 
         if self.is_array:
@@ -345,46 +372,67 @@ class LogsTab(TabView):
 
 class FileViewerTab(TabView):
     title = param.String(default="Files")
-    file_viewer = param.ClassSelector(FileViewer, default=FileViewer())
+    file_viewer = param.ClassSelector(FileViewer)
 
     def __init__(self, **params):
         super().__init__(**params)
+        self.file_viewer = self.file_viewer or FileViewer()
+        self.file_viewer.min_height = 1000
         self.configure_file_viewer()
+        self._layout = pn.Column(self.file_viewer)
 
     @param.depends("parent.uit_client", watch=True)
     def configure_file_viewer(self):
-        if self.uit_client is not None:
+        if self.uit_client is not None and self.file_viewer is not None:
+            file_path = self.file_viewer.file_select.file_path
+            if isinstance(self.uit_client, AsyncClient):
+                self.file_viewer = AsyncFileViewer()
+                self.file_viewer.min_height = 1000
+                self._layout[0] = self.file_viewer
             self.file_viewer.uit_client = self.uit_client
+            self.file_viewer.file_select.file_path = file_path
+
 
     @param.depends("parent.selected_job", watch=True)
     def update_file_path(self):
         if self.file_viewer:
-            self.file_viewer.file_path = str(self.selected_job.run_dir)
+            self.file_viewer.file_select.file_path = str(self.selected_job.run_dir)
 
     def panel(self):
-        panel = self.file_viewer.panel()
-        panel.min_height = 1000
-        return panel
+        return self._layout
 
 
 class StatusTab(TabView):
     title = param.String(default="Status")
     statuses = param.DataFrame(precedence=0.1)
     update_status = param.Action(
-        lambda self: self.update_statuses(update_cache=True), precedence=0.2
+        lambda self: self.param.trigger("update_status"), precedence=0.2
     )
     terminate_btn = param.Action(lambda self: None, label="Terminate", precedence=0.3)
     yes_btn = param.Action(
-        lambda self: self.terminate_job(), label="Yes", precedence=0.4
+        lambda self: self.param.trigger("yes_btn"), label="Yes", precedence=0.4
     )
     cancel_btn = param.Action(lambda self: None, label="Cancel", precedence=0.5)
     disable_update = param.Boolean()
 
+    def __init__(self, **params):
+        super().__init__(**params)
+        self._layout = pn.Column(
+            sizing_mode="stretch_width",
+        )
+
+    @param.depends("update_status", watch=True)
+    async def trigger_update_statuses(self):
+        await self.update_statuses(update_cache=True)
+
     @param.depends("parent.selected_job", watch=True)
-    def update_statuses(self, update_cache=False):
-        if self.selected_job is not None:
-            if update_cache:
-                self.selected_job.update_status()
+    async def update_statuses(self, update_cache=False):
+        if self.selected_job is None:
+            self._layout[:] = [pn.pane.HTML("<h2>No jobs are available</h2>")]
+        else:
+            qstat = self.selected_job.qstat
+            if update_cache or qstat is None:
+                await self.parent.await_if_async(self.selected_job.update_status())
                 self.update_terminate_btn()
             qstat = self.selected_job.qstat
             if qstat is None:
@@ -409,12 +457,16 @@ class StatusTab(TabView):
                         "elapsed_time",
                     ]
                 ]
+            elif self.statuses is None:
+                # ensure that the statuses panel is updated
+                self.statuses_panel()
             self.statuses = statuses
 
-    def terminate_job(self):
-        self.selected_job.terminate()
-        time.sleep(10)
-        self.update_statuses()
+    @param.depends("yes_btn", watch=True)
+    async def terminate_job(self):
+        await self.selected_job.terminate()
+        await asyncio.sleep(10)
+        await self.update_statuses()
 
     def update_terminate_btn(self):
         self.param.terminate_btn.constant = self.selected_job.status not in (
@@ -423,7 +475,7 @@ class StatusTab(TabView):
             "B",
         )
 
-    @param.depends("statuses")
+    @param.depends("statuses", watch=True)
     def statuses_panel(self):
         statuses_table = (
             pn.widgets.DataFrame.from_param(self.param.statuses, width=1300)
@@ -487,11 +539,9 @@ class StatusTab(TabView):
             cancel_btn.js_on_click(args=args, code=cancel_code)
 
             code = (
-                'btn.css_classes.push("pn-loading", "pn-arc"); '
-                "btn.properties.css_classes.change.emit(); "
-                "other_btn.disabled=true; "
-                'statuses_table.css_classes.push("pn-loading", "pn-arc"); '
-                "statuses_table.properties.css_classes.change.emit();"
+                f"{get_js_loading_code('btn')} "
+                f"{get_js_loading_code('statuses_table')} "
+                f"other_btn.disabled=true;"  # noqa
             )
 
             update_btn.js_on_click(
@@ -513,15 +563,10 @@ class StatusTab(TabView):
 
             buttons = pn.Row(update_btn, terminate_btn, terminate_confirmation)
 
-        return pn.Column(
+        self._layout[:] = [
             statuses_table,
             buttons,
-            sizing_mode="stretch_width",
-        )
+        ]
 
-    @param.depends("parent.selected_job")
     def panel(self):
-        if self.selected_job:
-            return self.statuses_panel
-        else:
-            return pn.pane.HTML("<h2>No jobs are available</h2>")
+        return self._layout

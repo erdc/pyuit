@@ -1,7 +1,7 @@
 from setuptools import setup
 
 install_requires = [
-    'flask', 'PyYAML', 'requests', 'dodcerts',
+    'aiohttp', 'flask', 'PyYAML', 'requests', 'dodcerts',
 ]
 
 extras_require = dict()
