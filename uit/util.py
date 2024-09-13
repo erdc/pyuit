@@ -107,3 +107,29 @@ class HpcEnv:
             )
 
         return self._env.get(env_var_name)
+
+
+class AsyncHpcEnv(HpcEnv):
+    def get(self, item, default=None):
+        if self._env.get(item) is None:
+            raise AttributeError(
+                f'The variable "{item}" has not yet been retreived. '
+                f'You must first await an asychronous call to `get_environment_variable("{item}")` to retreive the '
+                f"variables value."
+            )
+        return self._env.get(item) or default
+
+    async def get_environmental_variable(self, env_var_name, update=False):
+        if not self.client.connected:
+            raise RuntimeError(
+                "Must connect to system before accessing environmental variables."
+            )
+
+        if update or self._env.get(env_var_name) is None:
+            result = await self.client.call(
+                command=f"echo ${env_var_name}",
+                working_dir=".",
+            )
+            self._env[env_var_name] = result.strip() or None
+
+        return self._env.get(env_var_name)
