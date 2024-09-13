@@ -395,6 +395,7 @@ class HpcPath(Path, PurePosixPath):
             self =  super().__new__(cls, *args)
         self._init(is_dir=is_dir, uit_client=uit_client)
         return self
+
     def __truediv__(self, key):
         new_path = super().__truediv__(key)
         new_path.__initialize__(uit_client=self.uit_client)
@@ -418,7 +419,7 @@ class HpcPath(Path, PurePosixPath):
     @property
     def parent(self):
         parent = super().parent
-        parent.__init__(is_dir=True, uit_client=self.uit_client)
+        parent.__initialize__(is_dir=True, uit_client=self.uit_client)
         return parent
 
     @_ensure_connected
