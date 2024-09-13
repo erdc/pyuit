@@ -397,7 +397,7 @@ class HpcPath(Path, PurePosixPath):
         return self
     def __truediv__(self, key):
         new_path = super().__truediv__(key)
-        new_path.__init__(uit_client=self.uit_client)
+        new_path.__initialize__(uit_client=self.uit_client)
         return new_path
 
     def _ensure_connected(method):
