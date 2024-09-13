@@ -57,8 +57,8 @@ class HpcAuthenticate(param.Parameterized):
 
 class HpcConnect(param.Parameterized):
     uit_client = param.ClassSelector(Client)
-    system = param.ObjectSelector()
-    login_node = param.ObjectSelector(default=None, objects=[None], label='Login Node')
+    system = param.Selector()
+    login_node = param.Selector(default=None, objects=[None], label='Login Node')
     exclude_nodes = param.ListSelector(default=list(), objects=[], label='Exclude Nodes')
     connected = param.Boolean(default=False, allow_None=True)
     connect_btn = param.Action(lambda self: self.connect(), label='Connect')

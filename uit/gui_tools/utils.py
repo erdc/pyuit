@@ -104,8 +104,8 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     title = param.String()
     jobs = param.List()
     tabs = param.List()
-    selected_job = param.ObjectSelector(default=None, label='Job')
-    selected_sub_job = param.ObjectSelector(label='Experiment Point', precedence=0.1)
+    selected_job = param.Selector(default=None, label='Job')
+    selected_sub_job = param.Selector(label='Experiment Point', precedence=0.1)
     active_job = param.Parameter()
     custom_logs = param.List(default=[])
     ready = param.Boolean()
@@ -142,8 +142,7 @@ class PbsJobTabbedViewer(HpcWorkspaces):
     def update_selected_job(self):
         if not self.environment_variables:
             self.update_configurable_hpc_parameters()
-        self.param.selected_job.names = {j.job_id: j for j in self.jobs}
-        self.param.selected_job.objects = self.jobs
+        self.param.selected_job.objects = {j.job_id: j for j in self.jobs}
         self.selected_job = self.jobs[0] if self.jobs else None
         self.param.selected_job.precedence = 1 if len(self.jobs) > 1 else -1
 
@@ -159,8 +158,7 @@ class PbsJobTabbedViewer(HpcWorkspaces):
 
     def update_selected_sub_job(self):
         objects = [j for j in self.selected_job.sub_jobs]
-        self.param.selected_sub_job.names = {j.job_id: j for j in objects}
-        self.param.selected_sub_job.objects = objects
+        self.param.selected_sub_job.objects = {j.job_id: j for j in objects}
         if objects:
             self.selected_sub_job = objects[0]
 
@@ -245,7 +243,7 @@ class TabView(param.Parameterized):
 
 class LogsTab(TabView):
     title = param.String(default='Logs')
-    log = param.ObjectSelector(objects=[], label='Log File', precedence=0.2)
+    log = param.Selector(objects=[], label='Log File', precedence=0.2)
     log_content = param.String()
     custom_logs = param.List(default=[])
     num_log_lines = param.Integer(default=100, label='n')

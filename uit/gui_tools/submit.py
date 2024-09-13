@@ -16,16 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 class PbsScriptInputs(param.Parameterized):
-    hpc_subproject = param.ObjectSelector(default=None, label='HPC Subproject', precedence=3)
+    hpc_subproject = param.Selector(default=None, label='HPC Subproject', precedence=3)
     subproject_usage = param.DataFrame(precedence=3.1)
     workdir = param.String(default='', precedence=4)
-    node_type = param.ObjectSelector(default='', objects=[], label='Node Type', precedence=5)
+    node_type = param.Selector(default='', objects=[], label='Node Type', precedence=5)
     nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1)
-    processes_per_node = param.ObjectSelector(default=1, objects=[], label='Processes per Node', precedence=5.2)
+    processes_per_node = param.Selector(default=1, objects=[], label='Processes per Node', precedence=5.2)
     wall_time = param.String(default='01:00:00', label='Wall Time', precedence=6)
     wall_time_alert = pn.pane.Alert(visible=False)
     node_alert = pn.pane.Alert(visible=False)
-    queue = param.ObjectSelector(default=QUEUES[0], objects=QUEUES, precedence=7)
+    queue = param.Selector(default=QUEUES[0], objects=QUEUES, precedence=7)
     max_wall_time = param.String(default='Not Found', label='Max Wall Time', precedence=7.1)
     max_nodes = param.String(default='Not Found', label='Max Processes', precedence=7.2)
     submit_script_filename = param.String(default='run.pbs', precedence=8)
@@ -141,6 +141,7 @@ class PbsScriptInputs(param.Parameterized):
                     title='Subproject Usage Summary',
                     sizing_mode='stretch_width',
                     collapsed=True,
+                    margin=(10, 0),
                 )
             ),
             pn.Column(
@@ -290,6 +291,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
             self.file_browser_col,
             title='Environment Variables',
             sizing_mode='stretch_width',
+            margin=(10, 0),
         )
 
     def advanced_options_view(self):
@@ -303,6 +305,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
                 title='Modules',
                 sizing_mode='stretch_width',
                 collapsed=True,
+                margin=(10, 0),
             ),
             name='Environment',
         )
