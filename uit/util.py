@@ -7,17 +7,18 @@
 ********************************************************************************
 """
 from functools import wraps
+import logging
 from time import sleep
+import requests  # Don't import only the exception because it conflicts with Python's standard ConnectionError
 from .exceptions import MaxRetriesError
 
-import logging
 logger = logging.getLogger(__name__)
 
 
 def robust(retries=1):
-    """Robust wrapper for client methods. Will retry, reties times if failed due to DP routing error.
+    """Robust wrapper for client methods. Will retry "retries" times if failed due to specific errors.
 
-    This is set to 1 retry because UIT+ should repair the SSH Tunnel immediately."""
+    This defaults to 1 retry because UIT+ should repair the SSH Tunnel immediately for a DP Route error."""
     def wrap(func):
         @wraps(func)
         def wrap_f(*args, **kwargs):
@@ -28,19 +29,24 @@ def robust(retries=1):
             while attempts <= retries:
                 try:
                     return func(*args, **kwargs)
-                except RuntimeError as e:
-                    # "DP Route error" indicates failure of SSH Tunnel client on UIT Plus server.
-                    # Successive calls should work.
-                    if 'DP Route error' in str(e):
-                        if attempts < retries:
-                            logger.info(
-                                f"DP Route error detected, @robust() is retrying {retries - attempts} more time(s).")
-                        attempts += 1
-                        last_exception = e
-                        sleep(1)
+                except (RuntimeError, requests.exceptions.ConnectionError) as e:
+                    if isinstance(e, RuntimeError) and 'DP Route error' in str(e):
+                        # "DP Route error" indicates failure of SSH Tunnel client on UIT Plus server.
+                        # Successive calls should work.
+                        error_text = "DP Route error"
+                    elif isinstance(e, requests.exceptions.ConnectionError) and 'Connection aborted' in str(e):
+                        # Requests very rarely end early with this "aborted" error.
+                        error_text = "Connection aborted"
                     else:
-                        # Raise other Runtime Errors
+                        # Raise other RuntimeErrors and ConnectionErrors
                         raise
+
+                    if attempts < retries:
+                        logger.info(
+                            f"'{error_text}' detected, @robust() is retrying {retries - attempts} more time(s).")
+                        sleep(1)
+                    attempts += 1
+                    last_exception = e
 
             kwarg_str = ', '.join(['{}="{}"'.format(k, v) for k, v in kwargs.items()])
             raise MaxRetriesError(
