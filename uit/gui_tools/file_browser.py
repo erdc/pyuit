@@ -98,7 +98,7 @@ class FileTransfer(param.Parameterized):
         precedence=-1
     )
 
-    from_location = param.ObjectSelector(
+    from_location = param.Selector(
         default='local',
         objects=['local'],
         precedence=0.21
@@ -106,7 +106,7 @@ class FileTransfer(param.Parameterized):
     from_directory = param.String(
         precedence=0.22
     )
-    to_location = param.ObjectSelector(
+    to_location = param.Selector(
         default='local',
         objects=['local'],
         precedence=0.31
@@ -395,9 +395,10 @@ class HpcPath(Path, PurePosixPath):
             self =  super().__new__(cls, *args)
         self._init(is_dir=is_dir, uit_client=uit_client)
         return self
+
     def __truediv__(self, key):
         new_path = super().__truediv__(key)
-        new_path.__init__(uit_client=self.uit_client)
+        new_path.__initialize__(uit_client=self.uit_client)
         return new_path
 
     def _ensure_connected(method):
@@ -418,7 +419,7 @@ class HpcPath(Path, PurePosixPath):
     @property
     def parent(self):
         parent = super().parent
-        parent.__init__(is_dir=True, uit_client=self.uit_client)
+        parent.__initialize__(is_dir=True, uit_client=self.uit_client)
         return parent
 
     @_ensure_connected
@@ -623,7 +624,7 @@ class SelectFile(FileSelector):
 class FileViewer(param.Parameterized):
     update_btn = param.Action(lambda self: self.get_file_contents(), label='Update', precedence=5)
     n = param.Integer(default=500, bounds=(0, 10_000), precedence=2)
-    cmd = param.ObjectSelector(default='head', objects=['head', 'tail', 'grep'], label='Command', precedence=1)
+    cmd = param.Selector(default='head', objects=['head', 'tail', 'grep'], label='Command', precedence=1)
     line_wrap = param.Boolean(label='Line Wrap', precedence=3)
     wrap_length = param.Integer(default=100, label='Wrap Length', precedence=4)
     file_select = param.ClassSelector(FileSelector, default=FileSelector())
