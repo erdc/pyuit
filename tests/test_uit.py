@@ -1,7 +1,11 @@
 import unittest
 from unittest import mock
 from pathlib import PurePosixPath
+from http.client import RemoteDisconnected
+import requests
+
 from uit import Client
+from uit.exceptions import MaxRetriesError
 
 
 class TestUIT(unittest.TestCase):
@@ -131,3 +135,18 @@ class TestUIT(unittest.TestCase):
         mock_call.side_effect = RuntimeError
 
         self.assertRaises(RuntimeError, self.client.submit, pbs_script='test_script.sh', working_dir='\\test\\workdir')
+
+    @mock.patch('requests.post')
+    def test_robust_dp_route_error(self, mock_post):
+        """Test the @robust decorator for handling repeated DP Route errors"""
+        error_text = ("DP Route error: Failed to start tunnel connection: Start Tunnel error: ChildProcessError: "
+                      "Command failed: mk_uit_ssh_tunnel.sh")
+        mock_post.side_effect = RuntimeError(error_text)
+        self.assertRaises(MaxRetriesError, self.client.call, command='pwd', working_dir='.')
+
+    @mock.patch('requests.post')
+    def test_robust_connection_error(self, mock_post):
+        """Test the @robust decorator for handling repeated Connection aborted errors"""
+        error_text = ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+        mock_post.side_effect = requests.exceptions.ConnectionError(error_text)
+        self.assertRaises(MaxRetriesError, self.client.call, command='pwd', working_dir='.')
