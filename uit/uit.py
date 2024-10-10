@@ -859,7 +859,11 @@ class Client:
 
         if resp.get('exitcode') is not None:
             debug_header += f"    rc={resp.get('exitcode')}"
+
         debug_header += f"    username={self.username}"
+
+        if local_vars['r'].status_code != 200:
+            debug_header += f"    {FG_RED}http_status={local_vars['r'].status_code}{ALL_OFF}"
 
         # stdout and stderr will only show up for call() and only if they contain text
         nice_stdout = ""
