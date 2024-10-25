@@ -34,6 +34,7 @@ class PbsScriptInputs(param.Parameterized):
     notify_end = param.Boolean(default=True, label='when job ends', precedence=9.2)
 
     SHOW_USAGE_TABLE_MAX_WIDTH = 1030
+    DEFAULT_PROCESSES_PER_JOB = 500
     wall_time_maxes = None
     node_maxes = None
 
@@ -57,10 +58,10 @@ class PbsScriptInputs(param.Parameterized):
         self.param.queue.objects = self.uit_client.get_queues()
         self.queue = self.get_default(self.queue, self.param.queue.objects)
         self.node_maxes = self.uit_client.get_node_maxes(self.param.queue.objects, queues_stats)
-        self.max_nodes = self.node_maxes[self.queue]#NODE_TYPES[self.uit_client.system][self.node_type]
+        self.max_nodes = self.node_maxes[self.queue]
         self.wall_time_maxes = self.uit_client.get_wall_time_maxes(self.param.queue.objects, queues_stats)
         self.max_wall_time = self.wall_time_maxes[self.queue]
-        #self.alert = pn.pane.Alert(visible=False)
+        self.nodes = round(self.DEFAULT_PROCESSES_PER_JOB / self.processes_per_node)
 
     @param.depends('queue', watch=True)
     def update_queue_depended_bounds(self):
