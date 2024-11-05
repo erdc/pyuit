@@ -25,14 +25,15 @@ from .exceptions import UITError, MaxRetriesError
 # optional dependency
 try:
     import pandas as pd
+
     has_pandas = True
 except ImportError:
     has_pandas = False
 
 logger = logging.getLogger(__name__)
 
-UIT_API_URL = 'https://www.uitplus.hpc.mil/uapi/'
-QUEUES = ['standard', 'debug', 'transfer', 'background', 'HIE', 'high', 'frontier']
+UIT_API_URL = "https://www.uitplus.hpc.mil/uapi/"
+QUEUES = ["standard", "debug", "transfer", "background", "HIE", "high", "frontier"]
 
 FG_RED = "\033[31m"
 FG_CYAN = "\033[36m"
@@ -56,8 +57,17 @@ class Client:
         token (str): Token from current UIT authorization.
     """
 
-    def __init__(self, ca_file=None, config_file=None, client_id=None, client_secret=None, session_id=None, scope='UIT',
-                 token=None, port=5000):
+    def __init__(
+        self,
+        ca_file=None,
+        config_file=None,
+        client_id=None,
+        client_secret=None,
+        session_id=None,
+        scope="UIT",
+        token=None,
+        port=5000,
+    ):
         if ca_file is None:
             self.ca_file = DEFAULT_CA_FILE
 
@@ -98,21 +108,27 @@ class Client:
             self._config = DEFAULT_CONFIG
 
         if self.client_id is None:
-            self.client_id = os.environ.get('UIT_ID')
+            self.client_id = os.environ.get("UIT_ID")
 
         if self.client_secret is None:
-            self.client_secret = os.environ.get('UIT_SECRET')
+            self.client_secret = os.environ.get("UIT_SECRET")
 
-        if (self.client_id is None or self.client_secret is None) and self.token is None:
+        if (
+            self.client_id is None or self.client_secret is None
+        ) and self.token is None:
             if self._config:
-                self.client_id = self.client_id or self._config.get('client_id')
-                self.client_secret = self.client_secret or self._config.get('client_secret')
+                self.client_id = self.client_id or self._config.get("client_id")
+                self.client_secret = self.client_secret or self._config.get(
+                    "client_secret"
+                )
 
-        if (self.client_id is None or self.client_secret is None) and self.token is None:
+        if (
+            self.client_id is None or self.client_secret is None
+        ) and self.token is None:
             raise ValueError(
-                f'Please provide either the client_id and client_secret as kwargs, environment vars '
-                f'(UIT_ID, UIT_SECRET) or in auth config file: {config_file} OR provide an '
-                f'access token as a kwarg.'
+                f"Please provide either the client_id and client_secret as kwargs, environment vars "
+                f"(UIT_ID, UIT_SECRET) or in auth config file: {config_file} OR provide an "
+                f"access token as a kwarg."
             )
 
         if session_id is None:
@@ -123,10 +139,13 @@ class Client:
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             if not self.connected:
-                raise RuntimeError(f'Must connect to a system before running "{func.__name__}". '
-                                   f'Run "Client.connect" to connect to a system.')
+                raise RuntimeError(
+                    f'Must connect to a system before running "{func.__name__}". '
+                    f'Run "Client.connect" to connect to a system.'
+                )
 
             return func(self, *args, **kwargs)
+
         return wrapper
 
     @property
@@ -148,7 +167,7 @@ class Client:
     @property
     def headers(self):
         if self._headers is None:
-            self._headers = {'x-uit-auth-token': self.token} if self.token else None
+            self._headers = {"x-uit-auth-token": self.token} if self.token else None
         return self._headers
 
     @property
@@ -221,7 +240,7 @@ class Client:
         # check if we have available tokens/refresh tokens
 
         if self.token:
-            logger.info('access token available, no auth needed')
+            logger.info("access token available, no auth needed")
             self._do_callback(True)
             return
 
@@ -235,9 +254,17 @@ class Client:
         auth_url = self.get_auth_url()
 
         import webbrowser
+
         webbrowser.open(auth_url)
 
-    def connect(self, system=None, login_node=None, exclude_login_nodes=(), retry_on_failure=None, num_retries=3):
+    def connect(
+        self,
+        system=None,
+        login_node=None,
+        exclude_login_nodes=(),
+        retry_on_failure=None,
+        num_retries=3,
+    ):
         """Connect this client to the UIT servers.
 
         Args:
@@ -254,56 +281,72 @@ class Client:
         # get access token from file
         # populate userinfo and header info
         if self.token is None:
-            raise RuntimeError('No Valid Access Tokens Found, Please run authenticate() function and try again')
+            raise RuntimeError(
+                "No Valid Access Tokens Found, Please run authenticate() function and try again"
+            )
 
         if all([system, login_node]) or not any([system, login_node]):
-            raise ValueError('Please specify at least one of system or login_node and not both')
+            raise ValueError(
+                "Please specify at least one of system or login_node and not both"
+            )
 
         if retry_on_failure is None:
-            retry_on_failure = login_node is None  # Default to no retry when only one login node is specified
+            retry_on_failure = (
+                login_node is None
+            )  # Default to no retry when only one login node is specified
 
         if login_node is None:
             # pick random login node for system
             try:
-                login_node = random.choice(list(set(self._login_nodes[system]) - set(exclude_login_nodes)))
+                login_node = random.choice(
+                    list(set(self._login_nodes[system]) - set(exclude_login_nodes))
+                )
             except IndexError:
-                msg = f'Error while connecting to {system}. No more login nodes to try.'
+                msg = f"Error while connecting to {system}. No more login nodes to try."
                 logger.info(msg)
                 raise MaxRetriesError(msg)
 
         try:
-            system = [sys for sys, nodes in self._login_nodes.items() if login_node in nodes][0]
+            system = [
+                sys for sys, nodes in self._login_nodes.items() if login_node in nodes
+            ][0]
         except Exception:
-            raise ValueError('{} login node not found in available nodes'.format(login_node))
+            raise ValueError(
+                "{} login node not found in available nodes".format(login_node)
+            )
 
         self._login_node = login_node
         self._system = system
-        self._username = self._userinfo['SYSTEMS'][self._system.upper()]['USERNAME']
+        self._username = self._userinfo["SYSTEMS"][self._system.upper()]["USERNAME"]
         self._uit_url = self._uit_urls[login_node]
         self.connected = True
 
         try:
             # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
-            self.call(':', working_dir='.', timeout=35)
+            self.call(":", working_dir=".", timeout=35)
         except UITError as e:
             self.connected = False
-            msg = f'Error while connecting to node {login_node}: {e}'
+            msg = f"Error while connecting to node {login_node}: {e}"
             logger.info(msg)
             if retry_on_failure is False:
                 raise UITError(msg)
             elif retry_on_failure is True and num_retries > 0:
                 # Try a different login node
-                logger.debug(f'Retrying connection {num_retries} more time(s) to this HPC {system}')
+                logger.debug(
+                    f"Retrying connection {num_retries} more time(s) to this HPC {system}"
+                )
                 num_retries -= 1
                 exclude_login_nodes = list(exclude_login_nodes) + [login_node]
                 return self.connect(
-                    system=system, exclude_login_nodes=exclude_login_nodes,
-                    retry_on_failure=retry_on_failure, num_retries=num_retries
+                    system=system,
+                    exclude_login_nodes=exclude_login_nodes,
+                    retry_on_failure=retry_on_failure,
+                    num_retries=num_retries,
                 )
             else:
                 raise MaxRetriesError(msg)
         else:
-            msg = 'Connected successfully to {} on {}'.format(login_node, system)
+            msg = "Connected successfully to {} on {}".format(login_node, system)
             logger.info(msg)
             return msg
 
@@ -316,16 +359,16 @@ class Client:
         Returns:
             str: Authorization URL.
         """
-        url = urljoin(UIT_API_URL, 'authorize')
+        url = urljoin(UIT_API_URL, "authorize")
 
         data = {
-            'client_id': self.client_id,
-            'client_secret': self.client_secret,
-            'state': self.session_id,
-            'scope': self.scope
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "state": self.session_id,
+            "scope": self.scope,
         }
 
-        return url + '?' + urlencode(data)
+        return url + "?" + urlencode(data)
 
     def get_token(self, auth_code=None):
         """Get token from the UIT server.
@@ -334,59 +377,74 @@ class Client:
             auth_code (str): The authentication code to use.
         """
 
-        url = urljoin(UIT_API_URL, 'token')
+        url = urljoin(UIT_API_URL, "token")
 
         global _auth_code
         self._auth_code = auth_code or _auth_code
 
         # check for auth_code
         if self._auth_code is None:
-            raise RuntimeError('You must first authenticate to the UIT server and get a auth code. '
-                               'Then set the auth_code')
+            raise RuntimeError(
+                "You must first authenticate to the UIT server and get a auth code. "
+                "Then set the auth_code"
+            )
 
         # set up the data dictionary
         data = {
-            'client_id': self.client_id,
-            'client_secret': self.client_secret,
-            'state': self.session_id,
-            'scope': self.scope,
-            'code': self._auth_code
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "state": self.session_id,
+            "scope": self.scope,
+            "code": self._auth_code,
         }
 
         token = requests.post(url, data=data, verify=self.ca_file)
 
         # check the response
         if token.status_code == requests.codes.ok:
-            logger.info('Access Token request succeeded.')
+            logger.info("Access Token request succeeded.")
         else:
-            raise IOError('Token request failed.')
+            raise IOError("Token request failed.")
 
-        self.token = token.json()['access_token']
+        self.token = token.json()["access_token"]
         self._do_callback(True)
 
     @robust()
     def get_userinfo(self):
         """Get User Info from the UIT server."""
         # request user info from UIT site
-        data = requests.get(urljoin(UIT_API_URL, 'userinfo'), headers=self.headers, verify=self.ca_file).json()
-        if not data['success']:
-            raise UITError('Not Authenticated')
-        self._userinfo = data.get('userinfo')
-        self._user = self._userinfo.get('USERNAME')
+        data = requests.get(
+            urljoin(UIT_API_URL, "userinfo"), headers=self.headers, verify=self.ca_file
+        ).json()
+        if not data["success"]:
+            raise UITError("Not Authenticated")
+        self._userinfo = data.get("userinfo")
+        self._user = self._userinfo.get("USERNAME")
         logger.info(f"get_userinfo user='{self._user}'")
-        self._systems = sorted([sys.lower() for sys in self._userinfo['SYSTEMS'].keys()])
+        self._systems = sorted(
+            [sys.lower() for sys in self._userinfo["SYSTEMS"].keys()]
+        )
         self._login_nodes = {
-            system:
-                [node['HOSTNAME'].split('.')[0] for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']]
-                for system in self._systems
+            system: [
+                node["HOSTNAME"].split(".")[0]
+                for node in self._userinfo["SYSTEMS"][system.upper()]["LOGIN_NODES"]
+            ]
+            for system in self._systems
         }
 
         self._uit_urls = [
-            [{node['HOSTNAME'].split('.')[0]: node['URLS']['UIT']}
-             for node in self._userinfo['SYSTEMS'][system.upper()]['LOGIN_NODES']
-             ] for system in self._systems
+            [
+                {node["HOSTNAME"].split(".")[0]: node["URLS"]["UIT"]}
+                for node in self._userinfo["SYSTEMS"][system.upper()]["LOGIN_NODES"]
+            ]
+            for system in self._systems
         ]
-        self._uit_urls = {k: v for l in self._uit_urls for d in l for k, v in d.items()}  # noqa: E741
+        self._uit_urls = {
+            k: v
+            for _list in self._uit_urls
+            for _dict in _list
+            for k, v in _dict.items()
+        }  # noqa: E741
 
     def get_uit_url(self, login_node=None):
         """Generate the URL for a given login node
@@ -405,12 +463,19 @@ class Client:
 
         uit_url = self._uit_urls[login_node]
         # if login name provided find system
-        username = self._userinfo['SYSTEMS'][self._system.upper()]['USERNAME']
+        username = self._userinfo["SYSTEMS"][self._system.upper()]["USERNAME"]
         return uit_url, username
 
     @_ensure_connected
     @robust()
-    def call(self, command, working_dir=None, full_response=False, raise_on_error=True, timeout=120):
+    def call(
+        self,
+        command,
+        working_dir=None,
+        full_response=False,
+        raise_on_error=True,
+        timeout=120,
+    ):
         """Execute commands on the HPC via the exec endpoint.
 
         Args:
@@ -430,38 +495,48 @@ class Client:
         working_dir = self._resolve_path(working_dir)
 
         # construct the base options dictionary
-        data = {'command': command, 'workingdir': working_dir}
-        data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        data = {"command": command, "workingdir": working_dir}
+        data = {"options": json.dumps(data, default=encode_pure_posix_path)}
         logger.info(f"call command='{FG_CYAN}{command}{ALL_OFF}'    {working_dir=}")
         debug_start_time = time.perf_counter()
         try:
-            r = requests.post(urljoin(self._uit_url, 'exec'), headers=self.headers, data=data, verify=self.ca_file,
-                              timeout=timeout)
+            r = requests.post(
+                urljoin(self._uit_url, "exec"),
+                headers=self.headers,
+                data=data,
+                verify=self.ca_file,
+                timeout=timeout,
+            )
         except requests.Timeout:
             if raise_on_error:
-                raise UITError('Request Timeout')
+                raise UITError("Request Timeout")
             else:
-                return 'ERROR! Request Timeout'
+                return "ERROR! Request Timeout"
         logger.debug(self._debug_uit(locals()))
 
         if r.status_code == 504:
             if raise_on_error:
-                raise UITError('Gateway Timeout')
+                raise UITError("Gateway Timeout")
             else:
-                return 'ERROR! Gateway Timeout'
+                return "ERROR! Gateway Timeout"
 
         try:
             resp = r.json()
         except requests.exceptions.JSONDecodeError as e:
-            logger.error("JSONDecodeError '%s' - Status code: %s  Content: %s", str(e), r.status_code, r.content)
+            logger.error(
+                "JSONDecodeError '%s' - Status code: %s  Content: %s",
+                str(e),
+                r.status_code,
+                r.content,
+            )
             raise
 
         if full_response:
             return resp
-        if resp.get('success') == 'true':
-            return resp.get('stdout') + resp.get('stderr')
+        if resp.get("success") == "true":
+            return resp.get("stdout") + resp.get("stderr")
         elif raise_on_error:
-            raise UITError(resp.get('error', resp.get('stderr', resp)))
+            raise UITError(resp.get("error", resp.get("stderr", resp)))
         else:
             return f"ERROR!\n{resp.get('stdout')=}\n{resp.get('stderr')=}"
 
@@ -483,23 +558,34 @@ class Client:
         assert local_path.is_file()
         filename = local_path.name
         remote_path = self._resolve_path(remote_path, self.HOME / filename)
-        data = {'file': remote_path}
-        data = {'options': json.dumps(data, default=encode_pure_posix_path)}
-        files = {'file': local_path.open(mode='rb')}
+        data = {"file": remote_path}
+        data = {"options": json.dumps(data, default=encode_pure_posix_path)}
+        files = {"file": local_path.open(mode="rb")}
         logger.info(f"put_file {local_path=}    {remote_path=}")
         debug_start_time = time.perf_counter()
         try:
-            r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self.headers, data=data, files=files,
-                              verify=self.ca_file, timeout=timeout)
+            r = requests.post(
+                urljoin(self._uit_url, "putfile"),
+                headers=self.headers,
+                data=data,
+                files=files,
+                verify=self.ca_file,
+                timeout=timeout,
+            )
         except requests.Timeout as e:
-            raise UITError('Request Timeout') from e
+            raise UITError("Request Timeout") from e
         logger.debug(self._debug_uit(locals()))
 
         try:
             return r.json()
         except requests.exceptions.JSONDecodeError as e:
-            logger.error("JSONDecodeError '%s' - Status code: %s  Content: %s", str(e), r.status_code, r.content)
-            raise UITError('Upload error') from e
+            logger.error(
+                "JSONDecodeError '%s' - Status code: %s  Content: %s",
+                str(e),
+                r.status_code,
+                r.content,
+            )
+            raise UITError("Upload error") from e
 
     @_ensure_connected
     @robust()
@@ -518,24 +604,34 @@ class Client:
         remote_path = PurePosixPath(remote_path)
         local_path = Path(local_path) if local_path else Path() / remote_path.name
         remote_path = self._resolve_path(remote_path)
-        data = {'file': remote_path}
-        data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        data = {"file": remote_path}
+        data = {"options": json.dumps(data, default=encode_pure_posix_path)}
         debug_start_time = time.perf_counter()
         logger.info(f"get_file {remote_path=}    {local_path=}")
         try:
-            r = requests.post(urljoin(self._uit_url, 'getfile'), headers=self.headers, data=data, verify=self.ca_file,
-                              stream=True, timeout=timeout)
+            r = requests.post(
+                urljoin(self._uit_url, "getfile"),
+                headers=self.headers,
+                data=data,
+                verify=self.ca_file,
+                stream=True,
+                timeout=timeout,
+            )
         except requests.Timeout:
-            raise UITError('Request Timeout')
+            raise UITError("Request Timeout")
 
         if r.status_code != 200:
-            raise RuntimeError("UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
-                               "not have permission to access it.".format(r.status_code, remote_path))
-        with open(local_path, 'wb') as f:
+            raise RuntimeError(
+                "UIT returned a non-success status code ({}). The file '{}' may not exist, or you may "
+                "not have permission to access it.".format(r.status_code, remote_path)
+            )
+        with open(local_path, "wb") as f:
             for chunk in r.iter_content(chunk_size=1024):
                 if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
-            local_file_size = f.tell()  # tell() returns the file seek pointer which is at the end of the file
+            local_file_size = (
+                f.tell()
+            )  # tell() returns the file seek pointer which is at the end of the file
         logger.debug(self._debug_uit(locals()))
 
         return local_path
@@ -557,25 +653,39 @@ class Client:
         path = self._resolve_path(path, self.HOME)
 
         if not parse:
-            return self.call(f'ls -la {path}')
+            return self.call(f"ls -la {path}")
 
-        data = {'directory': path}
-        data = {'options': json.dumps(data, default=encode_pure_posix_path)}
+        data = {"directory": path}
+        data = {"options": json.dumps(data, default=encode_pure_posix_path)}
         logger.info(f"list_dir {path=}")
         debug_start_time = time.perf_counter()
         try:
-            r = requests.post(urljoin(self._uit_url, 'listdirectory'), headers=self.headers, data=data,
-                              verify=self.ca_file, timeout=timeout)
+            r = requests.post(
+                urljoin(self._uit_url, "listdirectory"),
+                headers=self.headers,
+                data=data,
+                verify=self.ca_file,
+                timeout=timeout,
+            )
         except requests.Timeout:
-            raise UITError('Request Timeout')
+            raise UITError("Request Timeout")
         logger.debug(self._debug_uit(locals()))
 
         result = r.json()
 
-        if as_df and 'path' in result:
-            ls = result['dirs']
-            ls.extend(result['files'])
-            columns = ('perms', 'type', 'owner', 'group', 'size', 'lastmodified', 'path', 'name')
+        if as_df and "path" in result:
+            ls = result["dirs"]
+            ls.extend(result["files"])
+            columns = (
+                "perms",
+                "type",
+                "owner",
+                "group",
+                "size",
+                "lastmodified",
+                "path",
+                "name",
+            )
             return self._as_df(ls, columns)
         return r.json()
 
@@ -592,7 +702,7 @@ class Client:
         """
         # 'module reload' is a workaround for users with a default shell of /bin/csh on Warhawk.
         # UIT+ runs commands in a bash script, and that combination drops part of the PATH for show_usage.
-        result = self.call('module reload >/dev/null 2>&1; show_usage')
+        result = self.call("module reload >/dev/null 2>&1; show_usage")
         if not parse:
             return result
 
@@ -600,29 +710,43 @@ class Client:
 
     @_ensure_connected
     @robust()
-    def status(self, job_id=None, username=None, full=False, with_historic=False, parse=True, as_df=False):
+    def status(
+        self,
+        job_id=None,
+        username=None,
+        full=False,
+        with_historic=False,
+        parse=True,
+        as_df=False,
+    ):
         username = username if username is not None else self.username
 
-        cmd = 'qstat'
+        cmd = "qstat"
 
         if full:
-            cmd += ' -f'
+            cmd += " -f"
         elif username:
-            cmd += f' -u {username}'
+            cmd += f" -u {username}"
 
         if job_id:
             if isinstance(job_id, (tuple, list)):
-                job_id = ' '.join([j.split('.')[0] for j in job_id])
-            cmd += f' -x {job_id}'
-            return self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
+                job_id = " ".join([j.split(".")[0] for j in job_id])
+            cmd += f" -x {job_id}"
+            return self._process_status_command(
+                cmd, parse=parse, full=full, as_df=as_df
+            )
         else:
             # If no jobs are specified then
-            result1 = self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
+            result1 = self._process_status_command(
+                cmd, parse=parse, full=full, as_df=as_df
+            )
             if not with_historic:
                 return result1
             else:
-                cmd += ' -x'
-                result2 = self._process_status_command(cmd, parse=parse, full=full, as_df=as_df)
+                cmd += " -x"
+                result2 = self._process_status_command(
+                    cmd, parse=parse, full=full, as_df=as_df
+                )
 
                 if not parse:
                     return result1, result2
@@ -633,7 +757,9 @@ class Client:
                     return result1
 
     @_ensure_connected
-    def submit(self, pbs_script, working_dir=None, remote_name='run.pbs', local_temp_dir=None):
+    def submit(
+        self, pbs_script, working_dir=None, remote_name="run.pbs", local_temp_dir=None
+    ):
         """Submit a PBS Script.
 
         Args:
@@ -659,20 +785,26 @@ class Client:
                 pbs_script_path = pbs_script
             else:
                 pbs_script_text = pbs_script
-                with open(pbs_script_path, 'w') as f:
+                with open(pbs_script_path, "w") as f:
                     f.write(pbs_script_text)
 
         # Transfer script to supercomputer using put_file()
         ret = self.put_file(pbs_script_path, working_dir / remote_name)
 
-        if 'success' in ret and ret['success'] == 'false':
-            raise RuntimeError('An exception occurred while submitting job script: {}'.format(ret['error']))
+        if "success" in ret and ret["success"] == "false":
+            raise RuntimeError(
+                "An exception occurred while submitting job script: {}".format(
+                    ret["error"]
+                )
+            )
 
         # Submit the script using call() with qsub command
         try:
-            job_id = self.call(f'qsub {remote_name}', working_dir=working_dir)
+            job_id = self.call(f"qsub {remote_name}", working_dir=working_dir)
         except RuntimeError as e:
-            raise RuntimeError('An exception occurred while submitting job script: {}'.format(str(e)))
+            raise RuntimeError(
+                "An exception occurred while submitting job script: {}".format(str(e))
+            )
 
         # Clean up (remove temp files)
         os.remove(pbs_script_path)
@@ -681,15 +813,17 @@ class Client:
 
     @_ensure_connected
     def get_queues(self):
-        output = self.call('qstat -Q')
-        standard_queues = [] if self.system == 'jim' else QUEUES
-        other_queues = set([i.split()[0] for i in output.splitlines()][2:]) - set(standard_queues)
-        all_queues = standard_queues + sorted([q for q in other_queues if '_' not in q])
+        output = self.call("qstat -Q")
+        standard_queues = [] if self.system == "jim" else QUEUES
+        other_queues = set([i.split()[0] for i in output.splitlines()][2:]) - set(
+            standard_queues
+        )
+        all_queues = standard_queues + sorted([q for q in other_queues if "_" not in q])
         return all_queues
 
     @_ensure_connected
     def get_raw_queue_stats(self):
-        return json.loads(self.call('qstat -Q -f -F json'))['Queue']
+        return json.loads(self.call("qstat -Q -f -F json"))["Queue"]
 
     @_ensure_connected
     def get_node_maxes(self, queues, queues_stats):
@@ -697,9 +831,11 @@ class Client:
 
         ncpus_maxes = dict()
         for q in queues:
-            ncpus_maxes[q] = str(q_sts[q]['resources_max']['ncpus']) \
-                if 'resources_max' in q_sts[q] and 'ncpus' in q_sts[q]['resources_max'] \
+            ncpus_maxes[q] = (
+                str(q_sts[q]["resources_max"]["ncpus"])
+                if "resources_max" in q_sts[q] and "ncpus" in q_sts[q]["resources_max"]
                 else "Not Found"
+            )
 
         return ncpus_maxes
 
@@ -709,18 +845,23 @@ class Client:
 
         wall_time_maxes = dict()
         for q in queues:
-            wall_time_maxes[q] = str(q_sts[q]['resources_max']['walltime']) \
-                if 'resources_max' in q_sts[q] and 'walltime' in q_sts[q]['resources_max'] \
+            wall_time_maxes[q] = (
+                str(q_sts[q]["resources_max"]["walltime"])
+                if "resources_max" in q_sts[q]
+                and "walltime" in q_sts[q]["resources_max"]  # noqa: W503
                 else "Not Found"
+            )  # noqa: W503
 
         return wall_time_maxes
 
     @_ensure_connected
     def get_available_modules(self, flatten=False):
-        output = self.call('module avail')
-        output = re.sub('.*:ERROR:.*', '', output)
-        sections = re.split('-+ (.*) -+', output)[1:]
-        self._available_modules = {a: b.split() for a, b in zip(sections[::2], sections[1::2])}
+        output = self.call("module avail")
+        output = re.sub(".*:ERROR:.*", "", output)
+        sections = re.split("-+ (.*) -+", output)[1:]
+        self._available_modules = {
+            a: b.split() for a, b in zip(sections[::2], sections[1::2])
+        }
 
         if flatten:
             return sorted(chain.from_iterable(self._available_modules.values()))
@@ -728,9 +869,9 @@ class Client:
 
     @_ensure_connected
     def get_loaded_modules(self):
-        output = self.call('module list')
-        output = re.sub('.*:ERROR:.*', '', output)
-        return re.split(r'\n?\s*\d+\)\s*', output[:-1])[1:]
+        output = self.call("module list")
+        output = re.sub(".*:ERROR:.*", "", output)
+        return re.split(r"\n?\s*\d+\)\s*", output[:-1])[1:]
 
     def _process_status_command(self, cmd, parse, full, as_df):
         result = self.call(cmd)
@@ -745,25 +886,40 @@ class Client:
             else:
                 return result
 
-        columns = ('job_id', 'username', 'queue', 'jobname', 'session_id', 'nds', 'tsk',
-                   'requested_memory', 'requested_time', 'status', 'elapsed_time')
+        columns = (
+            "job_id",
+            "username",
+            "queue",
+            "jobname",
+            "session_id",
+            "nds",
+            "tsk",
+            "requested_memory",
+            "requested_time",
+            "status",
+            "elapsed_time",
+        )
 
-        return self._parse_hpc_output(result, as_df, columns=columns, delimiter_char='-')
+        return self._parse_hpc_output(
+            result, as_df, columns=columns, delimiter_char="-"
+        )
 
     @staticmethod
     def _parse_full_status(status_str):
-        clean_status_str = status_str.replace('\n\t', '').split('Job Id: ')[1:]
+        clean_status_str = status_str.replace("\n\t", "").split("Job Id: ")[1:]
         statuses = dict()
         for status in clean_status_str:
             lines = status.splitlines()
             d = dict()
             for l in lines[1:-1]:  # noqa: E741
                 try:
-                    k, v = l.split('=', 1)
+                    k, v = l.split("=", 1)
                     d[k.strip()] = v.strip()
                 except ValueError:
-                    logger.exception('ERROR', l)
-            d['Variable_List'] = dict(kv.split('=') for kv in d.get('Variable_List').split(','))
+                    logger.exception("ERROR", l)
+            d["Variable_List"] = dict(
+                kv.split("=") for kv in d.get("Variable_List").split(",")
+            )
             statuses[lines[0]] = d
         return statuses
 
@@ -777,12 +933,14 @@ class Client:
     @staticmethod
     def _as_df(data, columns=None):
         if not has_pandas:
-            raise RuntimeError('"as_df" cannot be set to True unless the Pandas module is installed.')
+            raise RuntimeError(
+                '"as_df" cannot be set to True unless the Pandas module is installed.'
+            )
         return pd.DataFrame.from_records(data, columns=columns)
 
     @staticmethod
-    def _parse_hpc_delimiter(output, delimiter_char='='):
-        m = re.search(f'(({delimiter_char}+\s)+)', output)  # noqa: W605
+    def _parse_hpc_delimiter(output, delimiter_char="="):
+        m = re.search(rf"(({delimiter_char}+\s)+)", output)  # noqa: W605
         delimiter = m.group(0)
         return delimiter
 
@@ -796,18 +954,27 @@ class Client:
             col_name = []
             for line in header_lines:
                 if line:
-                    name_part = line[col_start: col_end].strip()
+                    name_part = line[col_start:col_end].strip()
                     if name_part:
                         col_name.append(name_part)
-            columns.append(' '.join(col_name))
+            columns.append(" ".join(col_name))
             col_start = col_end
         return columns
 
     @classmethod
-    def _parse_hpc_output(cls, output, as_df, columns=None, delimiter=None, delimiter_char='=',
-                          num_header_lines=3):
+    def _parse_hpc_output(
+        cls,
+        output,
+        as_df,
+        columns=None,
+        delimiter=None,
+        delimiter_char="=",
+        num_header_lines=3,
+    ):
         if output:
-            delimiter = delimiter or cls._parse_hpc_delimiter(output, delimiter_char=delimiter_char)
+            delimiter = delimiter or cls._parse_hpc_delimiter(
+                output, delimiter_char=delimiter_char
+            )
 
             if delimiter is not None:
                 header, content = output.split(delimiter)
@@ -830,7 +997,7 @@ class Client:
         return rows
 
     def _debug_uit(self, local_vars):
-        """ Show information about and around UIT+ calls for debug logging
+        """Show information about and around UIT+ calls for debug logging
 
         It can be called from any UIT Client method right after using requests.post().
         The recommended way to call this is:
@@ -846,7 +1013,7 @@ class Client:
             return
 
         try:
-            resp = local_vars['r'].json()
+            resp = local_vars["r"].json()
         except (requests.exceptions.JSONDecodeError, RuntimeError):
             # get_file only returns file contents, not json, so it always causes RuntimeError.
             resp = {}
@@ -856,44 +1023,50 @@ class Client:
         debug_header = f" {FG_RED}time={time_text}{ALL_OFF}    node={self.login_node}"
 
         local_file_size = None
-        if local_vars.get('local_file_size'):
-            local_file_size = int(local_vars['local_file_size'])
-        elif local_vars.get('local_path'):
+        if local_vars.get("local_file_size"):
+            local_file_size = int(local_vars["local_file_size"])
+        elif local_vars.get("local_path"):
             try:
-                local_file_size = local_vars['local_path'].stat().st_size
+                local_file_size = local_vars["local_path"].stat().st_size
             except OSError:
                 pass
         if local_file_size is not None:
             debug_header += f"    filesize={local_file_size:,}"
 
-        if resp.get('exitcode') is not None:
+        if resp.get("exitcode") is not None:
             debug_header += f"    rc={resp.get('exitcode')}"
 
         debug_header += f"    username={self.username}"
 
-        if local_vars['r'].status_code != 200:
-            debug_header += f"    {FG_RED}http_status={local_vars['r'].status_code}{ALL_OFF}"
+        if local_vars["r"].status_code != 200:
+            debug_header += (
+                f"    {FG_RED}http_status={local_vars['r'].status_code}{ALL_OFF}"
+            )
 
         # stdout and stderr will only show up for call() and only if they contain text
         nice_stdout = ""
-        if resp.get('stdout'):
-            nice_stdout = "\n  stdout='" + resp.get('stdout')[:500].replace('\n', '\\n') + "'"
-            if len(resp.get('stdout')) > 500:
+        if resp.get("stdout"):
+            nice_stdout = (
+                "\n  stdout='" + resp.get("stdout")[:500].replace("\n", "\\n") + "'"
+            )
+            if len(resp.get("stdout")) > 500:
                 nice_stdout += f"  <len:{len(resp.get('stdout'))}>"
 
         nice_stderr = ""
-        if resp.get('stderr'):
-            nice_stderr = "\n  stderr='" + resp.get('stderr')[:500].replace('\n', '\\n') + "'"
-            if len(resp.get('stderr')) > 500:
+        if resp.get("stderr"):
+            nice_stderr = (
+                "\n  stderr='" + resp.get("stderr")[:500].replace("\n", "\\n") + "'"
+            )
+            if len(resp.get("stderr")) > 500:
                 nice_stderr += f"  <len:{len(resp.get('stderr'))}>"
 
         # Show only relevant function calls and ignore standard library for the brief stacktrace
-        if self._config and 'debug_stacktrace_allowlist' in self._config:
-            debug_stacktrace_allowlist = self._config.get('debug_stacktrace_allowlist')
+        if self._config and "debug_stacktrace_allowlist" in self._config:
+            debug_stacktrace_allowlist = self._config.get("debug_stacktrace_allowlist")
             if not isinstance(debug_stacktrace_allowlist, list):
                 debug_stacktrace_allowlist = []
         else:
-            debug_stacktrace_allowlist = ['uit']
+            debug_stacktrace_allowlist = ["uit"]
         # This only shows the 'uit' directory by default. To change which directories are shown in the stacktrace,
         # modify the PyUIT yaml config file (default location is ~/.uit) with a list like this:
         # debug_stacktrace_allowlist:
@@ -901,25 +1074,35 @@ class Client:
         #   - your_codebase_dir
 
         # To disable the stacktrace, put "debug_stacktrace_allowlist:" in the config file with no list below it
-        nice_trace = ''
+        nice_trace = ""
         if debug_stacktrace_allowlist:
             stacktrace = traceback.extract_stack()
             for i in range(0, len(stacktrace)):
-                if stacktrace[i].name == 'wrapper' or stacktrace[i].name == 'wrap_f':
+                if stacktrace[i].name == "wrapper" or stacktrace[i].name == "wrap_f":
                     # ignore the decorators for call()
                     continue
-                if 'traceback.extract_stack()' in stacktrace[i].line:  # ignore this last line
+                if (
+                    "traceback.extract_stack()" in stacktrace[i].line
+                ):  # ignore this last line
                     continue
-                if 'self._debug_uit(' in stacktrace[i].line:  # ignore this function call
+                if (
+                    "self._debug_uit(" in stacktrace[i].line
+                ):  # ignore this function call
                     continue
                 for substring in debug_stacktrace_allowlist:
                     if substring in stacktrace[i].filename:
                         # Simple approach: grab the last 3 folders
-                        trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[-4:])
+                        trimmed_filename = os.sep.join(
+                            stacktrace[i].filename.split(os.sep)[-4:]
+                        )
                         # Nicer approach: try to display only the folders that start with pyuit, etc.
-                        for j, path_element in enumerate(stacktrace[i].filename.split(os.sep)):
+                        for j, path_element in enumerate(
+                            stacktrace[i].filename.split(os.sep)
+                        ):
                             if substring in path_element:
-                                trimmed_filename = os.sep.join(stacktrace[i].filename.split(os.sep)[j:])
+                                trimmed_filename = os.sep.join(
+                                    stacktrace[i].filename.split(os.sep)[j:]
+                                )
                                 break
                         nice_trace += (
                             f"\n    {i}: {trimmed_filename}:"
@@ -939,7 +1122,7 @@ class Client:
 class ServerThread(threading.Thread):
     def __init__(self, app, port, auth_func):
         threading.Thread.__init__(self)
-        self.srv = make_server('127.0.0.1', port, app)
+        self.srv = make_server("127.0.0.1", port, app)
         self.auth_func = auth_func
         self.ctx = app.app_context()
         self.ctx.push()
@@ -952,33 +1135,33 @@ class ServerThread(threading.Thread):
 
 
 def shutdown_server():
-    func = request.environ.get('werkzeug.server.shutdown')
+    func = request.environ.get("werkzeug.server.shutdown")
     if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
+        raise RuntimeError("Not running with the Werkzeug Server")
     func()
 
 
 def start_server(auth_func, port=5000):
-    app = Flask('get_uit_token')
+    app = Flask("get_uit_token")
     server = ServerThread(app, port, auth_func)
     server.start()
 
-    @app.route('/save_token', methods=['GET'])
+    @app.route("/save_token", methods=["GET"])
     def save_token():
         """
         WebHook to parse auth_code from url and retrieve access_token
         """
-        hidden = 'hidden'
+        hidden = "hidden"
         global _auth_code
         try:
-            _auth_code = request.args.get('code')
+            _auth_code = request.args.get("code")
             server.auth_func(auth_code=_auth_code)
 
-            status = 'Succeeded'
-            msg = ''
+            status = "Succeeded"
+            msg = ""
 
         except Exception as e:
-            status = 'Failed'
+            status = "Failed"
             msg = str(e)
 
         html_template = f"""
@@ -1001,4 +1184,6 @@ def encode_pure_posix_path(obj):
     if isinstance(obj, PurePosixPath):
         return obj.as_posix()
     else:
-        raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
+        raise TypeError(
+            f"Object of type {obj.__class__.__name__} is not JSON serializable"
+        )
