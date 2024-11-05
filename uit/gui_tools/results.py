@@ -8,5 +8,5 @@ logger = logging.getLogger(__name__)
 
 
 class HpcJobResultsViewer(PbsJobTabbedViewer):
-    title = param.String(default='View Results')
+    title = param.String(default="View Results")
     disable_status_update = param.Boolean(default=True)

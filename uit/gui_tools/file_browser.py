@@ -8,34 +8,33 @@ import param
 import panel as pn
 import panel.models.ace  # noqa: F401
 
-from uit import Client, UITError
+from uit import Client
 
 logger = logging.getLogger(__name__)
 
 
 class FileManager(param.Parameterized):
-    directory = param.String(
-        default=os.getcwd(),
-        precedence=0.1
-    )
+    directory = param.String(default=os.getcwd(), precedence=0.1)
     file_keyword = param.String(
-        doc='Keyword for file name. Hidden from ui.',
-        default='*',
-        precedence=-1
+        doc="Keyword for file name. Hidden from ui.", default="*", precedence=-1
     )
 
     def __init__(self, **params):
         super().__init__(**params)
-        self.cross_selector = pn.widgets.CrossSelector(name='Files', value=[], options=[], width=900)
+        self.cross_selector = pn.widgets.CrossSelector(
+            name="Files", value=[], options=[], width=900
+        )
         self._update_files()
 
     @property
     def value(self):
         return self.cross_selector.value
 
-    @param.depends('directory', watch=True)
+    @param.depends("directory", watch=True)
     def _update_files(self):
-        self.cross_selector.options = glob.glob(os.path.join(self.directory, '*' + self.file_keyword + '*'))
+        self.cross_selector.options = glob.glob(
+            os.path.join(self.directory, "*" + self.file_keyword + "*")
+        )
 
     def panel(self):
         return pn.Column(self.param.directory, self.cross_selector, width=700)
@@ -53,37 +52,36 @@ class FileManagerHPC(FileManager):
     FileManager.root or FileManager.file_keyword
 
     """
-    uit_client = param.ClassSelector(
-        Client,
-        precedence=-1
-    )
 
-    @param.depends('uit_client', watch=True)
+    uit_client = param.ClassSelector(Client, precedence=-1)
+
+    @param.depends("uit_client", watch=True)
     def _initialize_directory(self):
         if self.uit_client:
             self.directory = str(self.uit_client.WORKDIR)
             self._update_files()
 
-    @param.depends('directory', watch=True)
+    @param.depends("directory", watch=True)
     def _update_files(self):
         if self.uit_client:
             # get the ls from the client
             ls_df = self.uit_client.list_dir(
-                path=self.directory,
-                parse=True,
-                as_df=True)
+                path=self.directory, parse=True, as_df=True
+            )
 
             # catch for errors returned as dict
             if type(ls_df) is dict:
-                raise RuntimeError(f"""
+                raise RuntimeError(
+                    f"""
                 Request for directory list returned the error: {ls_df['error']}
 
                 Directory requested: {self.directory}
 
-                """)
+                """
+                )
 
             # convert dataframe to file list
-            self.file_list = ls_df['path'].to_list()
+            self.file_list = ls_df["path"].to_list()
 
             # update cross selector widget
             self.cross_selector.options = self.file_list
@@ -93,32 +91,18 @@ class FileManagerHPC(FileManager):
 
 
 class FileTransfer(param.Parameterized):
-    uit_client = param.ClassSelector(
-        Client,
-        precedence=-1
-    )
+    uit_client = param.ClassSelector(Client, precedence=-1)
 
-    from_location = param.Selector(
-        default='local',
-        objects=['local'],
-        precedence=0.21
+    from_location = param.Selector(default="local", objects=["local"], precedence=0.21)
+    from_directory = param.String(precedence=0.22)
+    to_location = param.Selector(default="local", objects=["local"], precedence=0.31)
+    to_directory = param.String(precedence=0.32)
+    file_manager = param.ClassSelector(class_=FileManager, precedence=0.4)
+    transfer_button = param.Action(
+        lambda self: self.param.trigger("transfer_button"),
+        label="Transfer",
+        precedence=1.0,
     )
-    from_directory = param.String(
-        precedence=0.22
-    )
-    to_location = param.Selector(
-        default='local',
-        objects=['local'],
-        precedence=0.31
-    )
-    to_directory = param.String(
-        precedence=0.32
-    )
-    file_manager = param.ClassSelector(
-        class_=FileManager,
-        precedence=0.4
-    )
-    transfer_button = param.Action(lambda self: self.param.trigger('transfer_button'), label='Transfer', precedence=1.0)
 
     def __init__(self, uit_client, **params):
 
@@ -127,40 +111,43 @@ class FileTransfer(param.Parameterized):
         self.file_manager = FileManagerHPC(uit_client=self.uit_client)
 
         # adjust to/from based on uit_client
-        self.param.from_location.objects = [self.uit_client.system, 'local']
+        self.param.from_location.objects = [self.uit_client.system, "local"]
         self.from_location = self.uit_client.system
-        self.param.to_location.objects = [self.uit_client.system, 'local']
+        self.param.to_location.objects = [self.uit_client.system, "local"]
         self.to_location = self.uit_client.system
 
-    @param.depends('transfer_button', watch=True)
+    @param.depends("transfer_button", watch=True)
     def transfer(self):
-        if self.from_location == 'local':
+        if self.from_location == "local":
             for local_file in self.file_manager.cross_selector.value:
                 self.uit_client.put_file(local_file, self.to_directory)
-        elif self.to_location == 'local':
+        elif self.to_location == "local":
             for remote_file in self.file_manager.cross_selector.value:
-                logger.info('transferring {}'.format(remote_file))
-                self.uit_client.get_file(remote_file,
-                                         local_path=os.path.join(self.to_directory, os.path.basename(remote_file)))
+                logger.info("transferring {}".format(remote_file))
+                self.uit_client.get_file(
+                    remote_file,
+                    local_path=os.path.join(
+                        self.to_directory, os.path.basename(remote_file)
+                    ),
+                )
 
         else:
-            logger.warning('HPC to HPC transfers are not supported.')
+            logger.warning("HPC to HPC transfers are not supported.")
 
-    @param.depends('from_directory', watch=True)
+    @param.depends("from_directory", watch=True)
     def _update_file_manager(self):
-        """
-        """
+        """ """
         self.file_manager.directory = self.from_directory
 
     def _from_location(self):
         return pn.Column(self.param.from_location, self.param.from_directory)
 
-    @param.depends('from_location', watch=True)
+    @param.depends("from_location", watch=True)
     def _to_location(self):
         remote_dir = str(self.uit_client.WORKDIR)
         local_dir = os.getcwd()
 
-        if self.from_location == 'local':
+        if self.from_location == "local":
             # set from location and dir
             self.from_directory = local_dir
 
@@ -172,7 +159,7 @@ class FileTransfer(param.Parameterized):
             self.file_manager = FileManager()
         else:
             # set to location and dir
-            self.to_location = 'local'
+            self.to_location = "local"
             self.to_directory = local_dir
             self.from_directory = remote_dir
 
@@ -182,40 +169,39 @@ class FileTransfer(param.Parameterized):
         # set cross selector directory
         self.file_manager._update_files()
 
-    @param.depends('from_directory', watch=True)
+    @param.depends("from_directory", watch=True)
     def panel(self):
         from_box = pn.WidgetBox(
-            pn.Column(
-                self._from_location,
-                pn.Column(self.file_manager.cross_selector)
-            )
+            pn.Column(self._from_location, pn.Column(self.file_manager.cross_selector))
         )
 
         to_box = pn.WidgetBox(
             pn.Column(self.param.to_location, self.param.to_directory),
             width=900,
-            width_policy='max'
+            width_policy="max",
         )
 
-        return pn.Column(
-            from_box,
-            to_box,
-            pn.Param(self.param.transfer_button)
-        )
+        return pn.Column(from_box, to_box, pn.Param(self.param.transfer_button))
 
 
 class FileBrowser(param.Parameterized):
-    """
-    """
+    """ """
+
     path = param.ClassSelector(Path, precedence=-1)
-    path_text = param.String(label='', precedence=0.3)
-    home = param.Action(lambda self: self.go_home(), label='🏠', precedence=0.1)
-    up = param.Action(lambda self: self.move_up(), label='⬆️', precedence=0.2)
-    refresh_control = param.Action(lambda self: self.validate(), label='🔄', precedence=0.25)
+    path_text = param.String(label="", precedence=0.3)
+    home = param.Action(lambda self: self.go_home(), label="🏠", precedence=0.1)
+    up = param.Action(lambda self: self.move_up(), label="⬆️", precedence=0.2)
+    refresh_control = param.Action(
+        lambda self: self.validate(), label="🔄", precedence=0.25
+    )
     callback = param.Action(lambda x: None, precedence=-1)
-    file_listing = param.ListSelector(default=[], label='Single click to select a file or directory:', precedence=0.5)
-    patterns = param.List(precedence=-1, default=['*'])
-    show_hidden = param.Boolean(default=False, label='Show Hidden Files', precedence=0.35)
+    file_listing = param.ListSelector(
+        default=[], label="Single click to select a file or directory:", precedence=0.5
+    )
+    patterns = param.List(precedence=-1, default=["*"])
+    show_hidden = param.Boolean(
+        default=False, label="Show Hidden Files", precedence=0.35
+    )
     _disabled = param.Boolean(default=False, precedence=-1)
 
     def __init__(self, delayed_init=False, disabled=False, **params):
@@ -248,7 +234,7 @@ class FileBrowser(param.Parameterized):
 
     @disabled.setter
     def disabled(self, disabled):
-        for p in self.controls + ['file_listing', 'path_text', 'show_hidden']:
+        for p in self.controls + ["file_listing", "path_text", "show_hidden"]:
             self.param[p].constant = disabled
         self._disabled = disabled
 
@@ -261,7 +247,7 @@ class FileBrowser(param.Parameterized):
 
     def stop_loading(self):
         if self.file_listing_widget is not None:
-            self.file_listing_widget.css_classes = ['uit-loading']
+            self.file_listing_widget.css_classes = ["uit-loading"]
             self.file_listing_widget.css_classes = []
             # self.file_listing_widget.param.trigger('css_classes')
 
@@ -280,7 +266,7 @@ class FileBrowser(param.Parameterized):
         self.file_listing = []
         self.do_callback()
 
-    @param.depends('file_listing', watch=True)
+    @param.depends("file_listing", watch=True)
     def move_down(self):
         if self.file_listing:
             filename = self.file_listing[0]
@@ -288,7 +274,7 @@ class FileBrowser(param.Parameterized):
             self.path_text = fn.as_posix()
             self.do_callback()
 
-    @param.depends('path_text', watch=True)
+    @param.depends("path_text", watch=True)
     def validate(self):
         """Check that inputted path is valid - set validator accordingly"""
         path = self._new_path(self.path_text)
@@ -304,18 +290,20 @@ class FileBrowser(param.Parameterized):
                 self.path = path.parent
                 self.file_listing = [path.name]
         else:
-            logger.warning(f'Invalid Directory: {path}')
+            logger.warning(f"Invalid Directory: {path}")
         self.make_options()
 
-    @param.depends('show_hidden', watch=True)
+    @param.depends("show_hidden", watch=True)
     def make_options(self):
         selected = []
         try:
-            selected = [p.name + '/' for p in self.path.glob('*') if p.is_dir()]
+            selected = [p.name + "/" for p in self.path.glob("*") if p.is_dir()]
             for pattern in self.patterns:
-                selected.extend([p.name for p in self.path.glob(pattern) if not p.is_dir()])
+                selected.extend(
+                    [p.name for p in self.path.glob(pattern) if not p.is_dir()]
+                )
             if not self.show_hidden:
-                selected = [p for p in selected if not str(p).startswith('.')]
+                selected = [p for p in selected if not str(p).startswith(".")]
         except Exception as e:
             logger.exception(str(e))
 
@@ -324,28 +312,35 @@ class FileBrowser(param.Parameterized):
 
     @property
     def controls(self):
-        return ['home', 'up', 'refresh_control']
+        return ["home", "up", "refresh_control"]
 
     @property
     def control_styles(self):
-        styles = {c: {'width': 25} for c in self.controls}
+        styles = {c: {"width": 25} for c in self.controls}
 
         styles.update(
-            path_text={'width_policy': 'max'},
+            path_text={"width_policy": "max"},
         )
         return styles
 
-    @param.depends('_disabled')
+    @param.depends("_disabled")
     def panel(self):
         self.file_listing_widget = pn.widgets.MultiSelect.from_param(
-            self.param.file_listing, height=200, width_policy='max',
-            stylesheets=[".bk-input option:hover { "
-                         "background-color: var(--design-surface-color, var(--primary-bg-subtle)); }"],
+            self.param.file_listing,
+            height=200,
+            width_policy="max",
+            stylesheets=[
+                ".bk-input option:hover { "
+                "background-color: var(--design-surface-color, var(--primary-bg-subtle)); }"
+            ],
         )
         widgets = pn.Param(
-            self, parameters=self.controls + ['path_text'], widgets=self.control_styles, show_name=False,
+            self,
+            parameters=self.controls + ["path_text"],
+            widgets=self.control_styles,
+            show_name=False,
         )[:]
-        args = {'listing': self.file_listing_widget}
+        args = {"listing": self.file_listing_widget}
         code = 'listing.css_classes.push("pn-loading", "pn-arc"); listing.properties.css_classes.change.emit();'
         self.file_listing_widget.jscallback(args=args, value=code)
         for wg in widgets[:-1]:
@@ -353,20 +348,19 @@ class FileBrowser(param.Parameterized):
         widgets[-1].jscallback(args=args, value=code)
 
         return pn.Column(
-            pn.Row(*widgets, sizing_mode='stretch_width', margin=0),
+            pn.Row(*widgets, sizing_mode="stretch_width", margin=0),
             self.param.show_hidden,
             self.file_listing_widget,
-            sizing_mode='stretch_width',
+            sizing_mode="stretch_width",
             margin=0,
         )
 
 
 class HpcPath(Path, PurePosixPath):
-    """PurePath subclass that can make some system calls on an HPC system.
+    """PurePath subclass that can make some system calls on an HPC system."""
 
-    """
-    _has_init = hasattr(Path, '_init')  # i.e. Python 3.7
-    _has_from_parts = hasattr(Path, '_from_parts')  # i.e. Python < 3.12
+    _has_init = hasattr(Path, "_init")  # i.e. Python 3.7
+    _has_from_parts = hasattr(Path, "_from_parts")  # i.e. Python < 3.12
 
     def __init__(self, *args, is_dir=None, uit_client=None):
         if self._has_from_parts:
@@ -394,7 +388,7 @@ class HpcPath(Path, PurePosixPath):
             else:
                 self = cls._from_parts(args)
         else:
-            self =  super().__new__(cls, *args)
+            self = super().__new__(cls, *args)
         self._init(is_dir=is_dir, uit_client=uit_client)
         return self
 
@@ -408,7 +402,7 @@ class HpcPath(Path, PurePosixPath):
         def wrapper(self, *args, **kwargs):
             if self.uit_client and self.uit_client.connected:
                 return method(self, *args, **kwargs)
-            logger.warning('Path has no uit client, or it is not connected!')
+            logger.warning("Path has no uit client, or it is not connected!")
 
         return wrapper
 
@@ -429,7 +423,7 @@ class HpcPath(Path, PurePosixPath):
         if not self.is_absolute():
             self._str = str(self.uit_client.HOME / self)
 
-        if self.name == '':
+        if self.name == "":
             # If I don't have a name, don't consider myself a directory or file.
             # Without this, the first directory chosen would break with a grayed-out file listing.
             # It has something to do with loading the home directory for the first time.
@@ -438,45 +432,47 @@ class HpcPath(Path, PurePosixPath):
         self._is_dir = True
         self._is_file = False
         self._ls = self.uit_client.list_dir(self.as_posix())
-        if self._ls.get('error') == 'File supplied is not a directory.':
+        if self._ls.get("error") == "File supplied is not a directory.":
             self._is_dir = False
             self._is_file = True
-            self._ls = ''
-        elif 'error' in self._ls:
+            self._ls = ""
+        elif "error" in self._ls:
             # Try our own 'ls -l' if UIT+ returns any error, which happens if there is a broken symlink
             self._ls = self.parse_list_dir(self.as_posix())
 
     def parse_list_dir(self, base_path):
-        TYPES = {'d': 'dir', '-': 'file', 'l': 'link', 's': 'dir'}
-        parsed_ls = {'path': base_path, 'dirs': [], 'files': [], 'links': []}
-        ls = self.uit_client.call(f'ls -lL {base_path}', full_response=True)
-        for f in ls['stdout'].splitlines()[1:]:
+        TYPES = {"d": "dir", "-": "file", "l": "link", "s": "dir"}
+        parsed_ls = {"path": base_path, "dirs": [], "files": [], "links": []}
+        ls = self.uit_client.call(f"ls -lL {base_path}", full_response=True)
+        for f in ls["stdout"].splitlines()[1:]:
             parts = f.split()
 
             # handle case where group name contains a space
             try:
                 int(parts[4])
             except ValueError:
-                parts[3] += f' {parts.pop(4)}'
+                parts[3] += f" {parts.pop(4)}"
 
             try:
                 perms, _, owner, group, size, mon, day, time, filename = parts[:9]
                 metadata = {
-                    'owner': owner,
-                    'path': f'{base_path}/{filename}',
-                    'size': int(size),
-                    'lastmodified': f'{mon} {day} {time}',
-                    'name': filename,
-                    'perms': perms,
-                    'type': TYPES[perms[0]],
-                    'group': group
+                    "owner": owner,
+                    "path": f"{base_path}/{filename}",
+                    "size": int(size),
+                    "lastmodified": f"{mon} {day} {time}",
+                    "name": filename,
+                    "perms": perms,
+                    "type": TYPES[perms[0]],
+                    "group": group,
                 }
             except Exception as e:
-                logger.warning(f'There was an error parsing an HPC file listing for line: "{f}"\n\n{e}')
+                logger.warning(
+                    f'There was an error parsing an HPC file listing for line: "{f}"\n\n{e}'
+                )
                 continue
-            if perms.startswith('l'):
-                metadata['link'] = parts[-1]
-            parsed_ls[metadata['type'] + 's'].append(metadata)
+            if perms.startswith("l"):
+                metadata["link"] = parts[-1]
+            parsed_ls[metadata["type"] + "s"].append(metadata)
         return parsed_ls
 
     def is_dir(self):
@@ -492,14 +488,16 @@ class HpcPath(Path, PurePosixPath):
     def _get_file_list(self, file_meta_list, is_dir):
         file_list = list()
         for p in file_meta_list:
-            file_path = p['path'].rsplit('/')[0] + f'/{p["name"]}'
-            file_list.append(HpcPath(file_path, is_dir=is_dir, uit_client=self.uit_client))
+            file_path = p["path"].rsplit("/")[0] + f'/{p["name"]}'
+            file_list.append(
+                HpcPath(file_path, is_dir=is_dir, uit_client=self.uit_client)
+            )
         return file_list
 
     def glob(self, pattern):
         result = list()
-        result.extend(self._get_file_list(self.ls['dirs'], is_dir=True))
-        result.extend(self._get_file_list(self.ls['files'], is_dir=False))
+        result.extend(self._get_file_list(self.ls["dirs"], is_dir=True))
+        result.extend(self._get_file_list(self.ls["files"], is_dir=False))
         return [r for r in result if r.match(pattern)]
 
     def exists(self):
@@ -511,23 +509,25 @@ class HpcPath(Path, PurePosixPath):
 
 class HpcFileBrowser(FileBrowser):
     path = param.ClassSelector(HpcPath)
-    workdir = param.Action(lambda self: self.go_to_workdir(), label='⚙️', precedence=0.15)
+    workdir = param.Action(
+        lambda self: self.go_to_workdir(), label="⚙️", precedence=0.15
+    )
     uit_client = param.ClassSelector(Client)
 
     def __init__(self, uit_client, **params):
-        params['uit_client'] = uit_client
+        params["uit_client"] = uit_client
         super().__init__(**params)
 
     @property
     def controls(self):
         controls = super().controls
-        controls.insert(1, 'workdir')
+        controls.insert(1, "workdir")
         return controls
 
     def _new_path(self, path):
         return HpcPath(path, uit_client=self.uit_client)
 
-    @param.depends('uit_client', watch=True)
+    @param.depends("uit_client", watch=True)
     def _initialize_path(self):
         super()._initialize_path()
 
@@ -545,11 +545,11 @@ class HpcFileBrowser(FileBrowser):
 
 
 class FileSelector(param.Parameterized):
-    file_path = param.String(default='')
+    file_path = param.String(default="")
     show_browser = param.Boolean(default=False)
-    browse_toggle = param.Action(lambda self: self.toggle(), label='Browse')
+    browse_toggle = param.Action(lambda self: self.toggle(), label="Browse")
     file_browser = param.ClassSelector(FileBrowser)
-    title = param.String(default='File Path')
+    title = param.String(default="File Path")
     help_text = param.String()
 
     def __init__(self, disabled=False, **params):
@@ -565,11 +565,11 @@ class FileSelector(param.Parameterized):
     @disabled.setter
     def disabled(self, disabled):
         self._disabled = disabled
-        for p in ['file_path', 'browse_toggle']:
+        for p in ["file_path", "browse_toggle"]:
             self.param[p].constant = disabled
         self.file_browser.disabled = disabled
 
-    @param.depends('file_browser', watch=True)
+    @param.depends("file_browser", watch=True)
     def update_callback(self):
         self.file_browser.callback = self.update_file
 
@@ -580,31 +580,33 @@ class FileSelector(param.Parameterized):
     def toggle(self):
         self.show_browser = not self.show_browser
 
-    @param.depends('file_path', watch=True)
+    @param.depends("file_path", watch=True)
     def initialize_file_browser(self):
         if self.show_browser:
             self.file_browser.path_text = self.file_path
 
-    @param.depends('show_browser')
+    @param.depends("show_browser")
     def file_browser_panel(self):
         if self.show_browser:
             self.initialize_file_browser()
-            self.param.browse_toggle.label = 'Hide'
+            self.param.browse_toggle.label = "Hide"
             return self.file_browser.panel
-        self.param.browse_toggle.label = 'Browse'
+        self.param.browse_toggle.label = "Browse"
 
     def input_row(self):
-        file_path = pn.widgets.TextInput.from_param(self.param.file_path, sizing_mode='stretch_width')
+        file_path = pn.widgets.TextInput.from_param(
+            self.param.file_path, sizing_mode="stretch_width"
+        )
         browse_toggle = pn.widgets.Button.from_param(
-            self.param.browse_toggle, button_type='primary', width=100, align='end'
+            self.param.browse_toggle, button_type="primary", width=100, align="end"
         )
 
         browse_toggle.js_on_click(
-            args={'btn': browse_toggle},
+            args={"btn": browse_toggle},
             code='btn.css_classes.push("pn-loading", "pn-arc"); btn.properties.css_classes.change.emit();',
         )
 
-        return pn.Row(file_path, browse_toggle, width_policy='max', margin=0)
+        return pn.Row(file_path, browse_toggle, width_policy="max", margin=0)
 
     @property
     def panel(self):
@@ -613,31 +615,35 @@ class FileSelector(param.Parameterized):
             self.input_row,
             pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
             self.file_browser_panel,
-            sizing_mode='stretch_width',
+            sizing_mode="stretch_width",
         )
 
 
 class SelectFile(FileSelector):
     def __init__(self, **params):
-        print('SelectFile is deprecated. Please use FileSelector instead.')
+        print("SelectFile is deprecated. Please use FileSelector instead.")
         super().__init__(**params)
 
 
 class FileViewer(param.Parameterized):
-    update_btn = param.Action(lambda self: self.get_file_contents(), label='Update', precedence=5)
+    update_btn = param.Action(
+        lambda self: self.get_file_contents(), label="Update", precedence=5
+    )
     n = param.Integer(default=500, bounds=(0, 10_000), precedence=2)
-    cmd = param.Selector(default='head', objects=['head', 'tail', 'grep'], label='Command', precedence=1)
-    line_wrap = param.Boolean(label='Line Wrap', precedence=3)
-    wrap_length = param.Integer(default=100, label='Wrap Length', precedence=4)
+    cmd = param.Selector(
+        default="head", objects=["head", "tail", "grep"], label="Command", precedence=1
+    )
+    line_wrap = param.Boolean(label="Line Wrap", precedence=3)
+    wrap_length = param.Integer(default=100, label="Wrap Length", precedence=4)
     file_select = param.ClassSelector(FileSelector, default=FileSelector())
     file_path = param.String()
     file_contents = param.String()
     uit_client = param.ClassSelector(Client)
-    grep_pattern = param.String(label='Search', precedence=1)
-    grep_context = param.Integer(label='Context Lines', default=4, precedence=1)
-    grep_ignore_case = param.Boolean(label='Ignore Case', precedence=1)
+    grep_pattern = param.String(label="Search", precedence=1)
+    grep_context = param.Integer(label="Context Lines", default=4, precedence=1)
+    grep_ignore_case = param.Boolean(label="Ignore Case", precedence=1)
 
-    @param.depends('uit_client', watch=True)
+    @param.depends("uit_client", watch=True)
     def configure_file_selector(self):
         if self.uit_client.connected:
             file_browser = HpcFileBrowser(uit_client=self.uit_client, delayed_init=True)
@@ -645,9 +651,9 @@ class FileViewer(param.Parameterized):
             self.file_select.toggle()
             self.configure_path()
 
-            self.file_select.param.watch(self.get_file_contents, 'file_path')
+            self.file_select.param.watch(self.get_file_contents, "file_path")
 
-    @param.depends('file_path', watch=True)
+    @param.depends("file_path", watch=True)
     def configure_path(self):
         self.file_path = self.file_path or str(self.uit_client.WORKDIR)
         self.file_select.file_path = self.file_path
@@ -658,69 +664,83 @@ class FileViewer(param.Parameterized):
         wrapped_lines = list()
         for line in lines:
             while len(line) > wrap_len:
-                wrapped_lines.append(line[:wrap_len] + '\n')
+                wrapped_lines.append(line[:wrap_len] + "\n")
                 line = line[wrap_len:]
             wrapped_lines.append(line)
-        return ''.join(wrapped_lines)
+        return "".join(wrapped_lines)
 
     def get_file_contents(self, event=None):
         if self.uit_client.connected:
             try:
-                if self.cmd == 'grep':
-                    case = '-i' if self.grep_ignore_case else ''
-                    options = f'{case} -C {self.grep_context} {self.grep_pattern}'
+                if self.cmd == "grep":
+                    case = "-i" if self.grep_ignore_case else ""
+                    options = f"{case} -C {self.grep_context} {self.grep_pattern}"
                 else:
-                    options = f'-n {self.n}'
-                self.file_contents = self.uit_client.call(f'{self.cmd} {options} {self.file_select.file_path}')
+                    options = f"-n {self.n}"
+                self.file_contents = self.uit_client.call(
+                    f"{self.cmd} {options} {self.file_select.file_path}"
+                )
                 if self.line_wrap:
-                    self.file_contents = self.make_wrap(self.file_contents, self.wrap_length)
+                    self.file_contents = self.make_wrap(
+                        self.file_contents, self.wrap_length
+                    )
             except Exception as e:
                 logger.debug(e)
                 # self.file_contents = f'ERROR!: {e}'
-                self.file_contents = ''
-            self.param.trigger('update_btn')
+                self.file_contents = ""
+            self.param.trigger("update_btn")
 
-    @param.depends('update_btn')
+    @param.depends("update_btn")
     def view(self):
         file_path = self.file_select.file_path
         viewer = pn.widgets.CodeEditor(
-            value=self.file_contents, min_height=500, sizing_mode='stretch_both',
-            readonly=True, filename=file_path, theme='monokai',
+            value=self.file_contents,
+            min_height=500,
+            sizing_mode="stretch_both",
+            readonly=True,
+            filename=file_path,
+            theme="monokai",
         )
         return pn.Column(
             pn.widgets.TextInput(value=file_path, disabled=True),
             viewer.param.theme,
             viewer,
-            sizing_mode='stretch_both',
+            sizing_mode="stretch_both",
         )
 
-    @param.depends('cmd')
+    @param.depends("cmd")
     def options(self):
         widgets = [pn.widgets.Select.from_param(self.param.cmd, width=100)]
-        if self.cmd == 'grep':
-            widgets.extend([
-                pn.widgets.TextInput.from_param(self.param.grep_pattern, width=100),
-                pn.widgets.Spinner.from_param(self.param.grep_context, width=100),
-                pn.widgets.Checkbox.from_param(self.param.grep_ignore_case, width=100, align='end')
-            ])
-        else:
-            widgets.append(
-                pn.widgets.Spinner.from_param(self.param.n, width=100)
+        if self.cmd == "grep":
+            widgets.extend(
+                [
+                    pn.widgets.TextInput.from_param(self.param.grep_pattern, width=100),
+                    pn.widgets.Spinner.from_param(self.param.grep_context, width=100),
+                    pn.widgets.Checkbox.from_param(
+                        self.param.grep_ignore_case, width=100, align="end"
+                    ),
+                ]
             )
-        widgets.extend([
-            pn.widgets.Checkbox.from_param(self.param.line_wrap, width=100, align='end'),
-            pn.widgets.Spinner.from_param(self.param.wrap_length, width=100),
-            pn.widgets.Button.from_param(self.param.update_btn, button_type='primary', width=100, align='end')
-        ])
+        else:
+            widgets.append(pn.widgets.Spinner.from_param(self.param.n, width=100))
+        widgets.extend(
+            [
+                pn.widgets.Checkbox.from_param(
+                    self.param.line_wrap, width=100, align="end"
+                ),
+                pn.widgets.Spinner.from_param(self.param.wrap_length, width=100),
+                pn.widgets.Button.from_param(
+                    self.param.update_btn, button_type="primary", width=100, align="end"
+                ),
+            ]
+        )
         return pn.Row(*widgets)
 
     def panel(self):
         return pn.Column(
             self.file_select.panel,
-            pn.WidgetBox(
-                self.options
-            ),
-            'press control + F to open search window',
+            pn.WidgetBox(self.options),
+            "press control + F to open search window",
             self.view,
-            sizing_mode='stretch_both',
+            sizing_mode="stretch_both",
         )
