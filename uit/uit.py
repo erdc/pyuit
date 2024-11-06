@@ -364,6 +364,7 @@ class Client:
         self.token = token.json()['access_token']
         self._do_callback(True)
 
+    @robust()
     def get_userinfo(self):
         """Get User Info from the UIT server."""
         # request user info from UIT site
