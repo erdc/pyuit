@@ -449,7 +449,11 @@ class Client:
             else:
                 return 'ERROR! Gateway Timeout'
 
-        resp = r.json()
+        try:
+            resp = r.json()
+        except requests.exceptions.JSONDecodeError as e:
+            logger.error("JSONDecodeError '%s' - Status code: %s  Content: %s", str(e), r.status_code, r.content)
+            raise
 
         if full_response:
             return resp
@@ -486,11 +490,15 @@ class Client:
         try:
             r = requests.post(urljoin(self._uit_url, 'putfile'), headers=self.headers, data=data, files=files,
                               verify=self.ca_file, timeout=timeout)
-        except requests.Timeout:
-            raise UITError('Request Timeout')
+        except requests.Timeout as e:
+            raise UITError('Request Timeout') from e
         logger.debug(self._debug_uit(locals()))
 
-        return r.json()
+        try:
+            return r.json()
+        except requests.exceptions.JSONDecodeError as e:
+            logger.error("JSONDecodeError '%s' - Status code: %s  Content: %s", str(e), r.status_code, r.content)
+            raise UITError('Upload error') from e
 
     @_ensure_connected
     @robust()
