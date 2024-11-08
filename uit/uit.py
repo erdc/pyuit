@@ -789,8 +789,8 @@ class Client:
                 if line:
                     name_part = line[col_start: col_end].strip()
                     if name_part:
-                        col_name.append(name_part.lower().replace(' ', '_'))
-            columns.append('_'.join(col_name))
+                        col_name.append(name_part)
+            columns.append(' '.join(col_name))
             col_start = col_end
         return columns
 

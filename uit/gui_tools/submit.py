@@ -50,7 +50,7 @@ class PbsScriptInputs(param.Parameterized):
         queues_stats = self.uit_client.get_raw_queue_stats()
 
         self.subproject_usage = self.uit_client.show_usage(as_df=True)
-        subprojects = self.subproject_usage.subproject.to_list()
+        subprojects = self.subproject_usage['Subproject'].to_list()
         self.param.hpc_subproject.objects = subprojects
         self.hpc_subproject = self.get_default(self.hpc_subproject, subprojects)
         self.workdir = self.uit_client.WORKDIR.as_posix()
@@ -145,10 +145,10 @@ class PbsScriptInputs(param.Parameterized):
                         show_index=False,
                         disabled=True,
                         formatters={
-                            'hours_allocated': NumberFormatter(format='0,0'),
-                            'hours_used': NumberFormatter(format='0,0'),
-                            'hours_remaining': NumberFormatter(format='0,0'),
-                            'background_hours_used': NumberFormatter(format='0,0'),
+                            'Hours Allocated': NumberFormatter(format='0,0'),
+                            'Hours Used': NumberFormatter(format='0,0'),
+                            'Hours Remaining': NumberFormatter(format='0,0'),
+                            'Background Hours Used': NumberFormatter(format='0,0'),
                         },
                     ),
                     title='Subproject Usage Summary',
