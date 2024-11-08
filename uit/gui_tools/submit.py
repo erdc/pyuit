@@ -138,11 +138,14 @@ class PbsScriptInputs(param.Parameterized):
         return pn.Column(
             pn.Column(
                 pn.Card(
-                    pn.widgets.Tabulator.from_param(self.param.subproject_usage, width=self.SHOW_USAGE_TABLE_MAX_WIDTH),
+                    pn.widgets.Tabulator.from_param(
+                        self.param.subproject_usage,
+                        width=self.SHOW_USAGE_TABLE_MAX_WIDTH,
+                    ),
                     title='Subproject Usage Summary',
-                    sizing_mode='stretch_width',
                     collapsed=True,
                     margin=(10, 0),
+                    width=self.SHOW_USAGE_TABLE_MAX_WIDTH + 20,
                 )
             ),
             pn.Column(
