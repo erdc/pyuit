@@ -33,7 +33,7 @@ class PbsScriptInputs(param.Parameterized):
     notify_start = param.Boolean(default=True, label='when job begins', precedence=9.1)
     notify_end = param.Boolean(default=True, label='when job ends', precedence=9.2)
 
-    SHOW_USAGE_TABLE_MAX_WIDTH = 1030
+    SHOW_USAGE_TABLE_MAX_WIDTH = 960
     DEFAULT_PROCESSES_PER_JOB = 500
     wall_time_maxes = None
     node_maxes = None
@@ -141,6 +141,8 @@ class PbsScriptInputs(param.Parameterized):
                     pn.widgets.Tabulator.from_param(
                         self.param.subproject_usage,
                         width=self.SHOW_USAGE_TABLE_MAX_WIDTH,
+                        show_index=False,
+                        disabled=True,
                     ),
                     title='Subproject Usage Summary',
                     collapsed=True,
