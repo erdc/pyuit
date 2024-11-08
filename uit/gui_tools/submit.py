@@ -3,6 +3,7 @@ import logging
 from functools import partial
 from itertools import zip_longest
 
+from bokeh.models import NumberFormatter
 import param
 import panel as pn
 
@@ -143,6 +144,12 @@ class PbsScriptInputs(param.Parameterized):
                         width=self.SHOW_USAGE_TABLE_MAX_WIDTH,
                         show_index=False,
                         disabled=True,
+                        formatters={
+                            'hours_allocated': NumberFormatter(format='0,0'),
+                            'hours_used': NumberFormatter(format='0,0'),
+                            'hours_remaining': NumberFormatter(format='0,0'),
+                            'background_hours_used': NumberFormatter(format='0,0'),
+                        },
                     ),
                     title='Subproject Usage Summary',
                     collapsed=True,
