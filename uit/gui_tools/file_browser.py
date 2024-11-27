@@ -338,7 +338,9 @@ class FileBrowser(param.Parameterized):
     @param.depends('_disabled')
     def panel(self):
         self.file_listing_widget = pn.widgets.MultiSelect.from_param(
-            self.param.file_listing, height=200, width_policy='max'
+            self.param.file_listing, height=200, width_policy='max',
+            stylesheets=[".bk-input option:hover { "
+                         "background-color: var(--design-surface-color, var(--primary-bg-subtle)); }"],
         )
         widgets = pn.Param(
             self, parameters=self.controls + ['path_text'], widgets=self.control_styles, show_name=False,
