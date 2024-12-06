@@ -57,7 +57,7 @@ class PbsScriptInputs(HpcBase):
         self.subproject_usage = await self.await_if_async(
             self.uit_client.show_usage(as_df=True)
         )
-        subprojects = self.subproject_usage.subproject.to_list()
+        subprojects = self.subproject_usage["Subproject"].to_list()
         self.param.hpc_subproject.objects = subprojects
         self.hpc_subproject = self.get_default(self.hpc_subproject, subprojects)
         self.workdir = self.uit_client.WORKDIR.as_posix()
@@ -577,7 +577,6 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         return pn.Param(self.param.job_name)
 
     def panel(self):
-
         return pn.Column(
             "# Submit Job",
             pn.widgets.Button.from_param(

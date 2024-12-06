@@ -220,7 +220,13 @@ class FileBrowser(Viewer):
         self.param.trigger("_init")
         self.disabled = disabled
         self.file_listing_widget = pn.widgets.MultiSelect.from_param(
-            self.param.file_listing, height=200, width_policy="max"
+            self.param.file_listing,
+            height=200,
+            width_policy="max",
+            stylesheets=[
+                ".bk-input option:hover { "
+                "background-color: var(--design-surface-color, var(--primary-bg-subtle)); }"
+            ],
         )
         show_hidden_widget = pn.widgets.Checkbox.from_param(self.param.show_hidden)
         widgets = pn.Param(
@@ -371,36 +377,7 @@ class FileBrowser(Viewer):
             f"The panel {self.__class__.__name__}.method is now deprecated. The object itself is now viewable.",
             DeprecationWarning,
         )
-        self.file_listing_widget = pn.widgets.MultiSelect.from_param(
-            self.param.file_listing,
-            height=200,
-            width_policy="max",
-            stylesheets=[
-                ".bk-input option:hover { "
-                "background-color: var(--design-surface-color, var(--primary-bg-subtle)); }"
-            ],
-        )
         return self._layout
-        widgets = pn.Param(
-            self,
-            parameters=self.controls + ["path_text"],
-            widgets=self.control_styles,
-            show_name=False,
-        )[:]
-        args = {"listing": self.file_listing_widget}
-        code = get_js_loading_code("listing")
-        self.file_listing_widget.jscallback(args=args, value=code)
-        for wg in widgets[:-1]:
-            wg.js_on_click(args=args, code=code)
-        widgets[-1].jscallback(args=args, value=code)
-
-        return pn.Column(
-            pn.Row(*widgets, sizing_mode="stretch_width", margin=0),
-            self.param.show_hidden,
-            self.file_listing_widget,
-            sizing_mode="stretch_width",
-            margin=0,
-        )
 
 
 class HpcPath(Path, PurePosixPath):

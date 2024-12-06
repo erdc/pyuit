@@ -1067,10 +1067,12 @@ class Client(param.Parameterized):
 
         debug_header += f"    username={self.username}"
 
-        if local_vars["r"].status_code != 200:
-            debug_header += (
-                f"    {FG_RED}http_status={local_vars['r'].status_code}{ALL_OFF}"
-            )
+        try:
+            http_status = local_vars["r"].status
+        except AttributeError:
+            http_status = local_vars["r"].status_code
+        if http_status != 200:
+            debug_header += f"    {FG_RED}{http_status=}{ALL_OFF}"
 
         # stdout and stderr will only show up for call() and only if they contain text
         nice_stdout = ""
