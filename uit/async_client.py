@@ -74,6 +74,7 @@ class AsyncClient(Client):
             scope,
             token,
             port,
+            delay_token=True,
         )
         self.env = AsyncHpcEnv(self)
         self._session = None
@@ -123,7 +124,7 @@ class AsyncClient(Client):
         """
         # get access token from file
         # populate userinfo and header info
-        retry_on_failure = self.prepare_connect(
+        login_node, retry_on_failure = self.prepare_connect(
             system, login_node, exclude_login_nodes, retry_on_failure
         )
         try:
@@ -156,7 +157,7 @@ class AsyncClient(Client):
             else:
                 raise MaxRetriesError(msg)
         else:
-            msg = "Connected successfully to {} on {}".format(login_node, system)
+            msg = f"Connected successfully to {login_node} on {system}"
             logger.info(msg)
             return msg
 

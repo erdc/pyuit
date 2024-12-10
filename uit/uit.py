@@ -70,6 +70,7 @@ class Client(param.Parameterized):
         scope="UIT",
         token=None,
         port=5000,
+        delay_token=False,
     ):
         super().__init__(token=token)
         if ca_file is None:
@@ -129,7 +130,7 @@ class Client(param.Parameterized):
                     "client_secret"
                 )
 
-        if (
+        if not delay_token and (
             self.client_id is None or self.client_secret is None
         ) and self.token is None:
             raise ValueError(
