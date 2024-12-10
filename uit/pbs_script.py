@@ -8,12 +8,14 @@ from importlib.resources import files
 
 from .config import DEFAULT_CONFIG
 
-node_types_file = os.environ.get('UIT_NODE_TYPES_FILE', DEFAULT_CONFIG.get('node_types_file'))
+node_types_file = os.environ.get(
+    "UIT_NODE_TYPES_FILE", DEFAULT_CONFIG.get("node_types_file")
+)
 try:
     node_types_file = Path(node_types_file)
     assert node_types_file.is_file()
-except:
-    node_types_file = files('uit') / 'node_types.csv'
+except Exception:
+    node_types_file = files("uit") / "node_types.csv"
 
 
 # parse node type info
@@ -23,24 +25,32 @@ with node_types_file.open() as csv_file:
     node_types = {}
     for row in reader:
         d = dict(zip(headers, row))
-        node_types[d.pop('system')] = d
+        node_types[d.pop("system")] = d
 
 NODE_TYPES = node_types
 
 NODE_ARGS = dict(
-    compute='compute',
-    gpu='ngpus',
-    bigmem='bigmem',
-    knl='nmics',
+    compute="compute",
+    gpu="ngpus",
+    bigmem="bigmem",
+    knl="nmics",
 )
 
 
 def factors(n):
     n = int(n)
-    return sorted(set([j for k in [[i, n // i] for i in range(1, int(n ** 0.5) + 1) if not n % i] for j in k]))
+    return sorted(
+        set(
+            [
+                j
+                for k in [[i, n // i] for i in range(1, int(n**0.5) + 1) if not n % i]
+                for j in k
+            ]
+        )
+    )
 
 
-PbsDirective = collections.namedtuple('PbsDirective', ['directive', 'options'])
+PbsDirective = collections.namedtuple("PbsDirective", ["directive", "options"])
 
 
 class PbsScript(object):
@@ -60,8 +70,20 @@ class PbsScript(object):
         array_indices (tuple): Indices for a job array in the following format: (start, end, [step])
             e.g. (0, 9) or (0, 9, 3) (default=None).
     """
-    def __init__(self, name, project_id, num_nodes, processes_per_node, max_time,
-                 queue='debug', node_type='compute', system='carpenter', array_indices=None, execution_block=None):
+
+    def __init__(
+        self,
+        name,
+        project_id,
+        num_nodes,
+        processes_per_node,
+        max_time,
+        queue="debug",
+        node_type="compute",
+        system="carpenter",
+        array_indices=None,
+        execution_block=None,
+    ):
 
         if not name:
             raise ValueError('Parameter "name" is required.')
@@ -91,11 +113,11 @@ class PbsScript(object):
         self._module_use = []
         self._environment_variables = collections.OrderedDict()
         self._execution_block = None
-        self.execution_block = execution_block or ''  # User defined execution block
+        self.execution_block = execution_block or ""  # User defined execution block
         self.configure_job_dir = False
 
     def __repr__(self):
-        return f'<{self.__class__.__name__} name={self.name}>'
+        return f"<{self.__class__.__name__} name={self.name}>"
 
     def __str__(self):
         return self.render()
@@ -120,12 +142,12 @@ class PbsScript(object):
             raise ValueError(
                 f'The value "{self.processes_per_node}" is not valid. '
                 f'Please specify a valid "processes_per_node" for the given node type [{self.node_type}] '
-                f'and System [{self.system}].\nMust be one of: {processes_per_node}'
+                f"and System [{self.system}].\nMust be one of: {processes_per_node}"
             )
 
     @staticmethod
     def _create_block_header_string(header):
-        header += ' '
+        header += " "
         return f'## {header.ljust(50, "-")}'
 
     @staticmethod
@@ -134,10 +156,10 @@ class PbsScript(object):
             return time_str
 
         try:
-            parts = [int(p) for p in time_str.split(':')]
+            parts = [int(p) for p in time_str.split(":")]
             hours, minutes, seconds = [0, 0, *parts][-3:]
             return datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
-        except:  # noqa: E722
+        except Exception:  # noqa: E722
             return None
 
     @staticmethod
@@ -145,7 +167,7 @@ class PbsScript(object):
         hours = date_time_obj.days * 24 + date_time_obj.seconds // 3600
         minutes = date_time_obj.seconds % 3600 // 60
         seconds = date_time_obj.seconds % 3600 % 60
-        return f'{hours}:{minutes:02}:{seconds:02}'
+        return f"{hours}:{minutes:02}:{seconds:02}"
 
     @property
     def max_time(self):
@@ -157,7 +179,9 @@ class PbsScript(object):
         if max_time:
             self._max_time = max_time
         else:
-            raise ValueError('max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"')
+            raise ValueError(
+                'max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"'
+            )
 
     @property
     def walltime(self):
@@ -182,23 +206,23 @@ class PbsScript(object):
         """
         self._validate_processes_per_node()
         ncpus = NODE_TYPES[self.system][self.node_type]
-        no_nodes_process_options = f'select={self.num_nodes}:ncpus={ncpus}'
-        if self.node_type != 'transfer':
-            no_nodes_process_options += f':mpiprocs={self.processes_per_node}'
-        if self.node_type != 'compute' and self.node_type in NODE_ARGS:
-            no_nodes_process_options += f':{NODE_ARGS[self.node_type]}=1'
+        no_nodes_process_options = f"select={self.num_nodes}:ncpus={ncpus}"
+        if self.node_type != "transfer":
+            no_nodes_process_options += f":mpiprocs={self.processes_per_node}"
+        if self.node_type != "compute" and self.node_type in NODE_ARGS:
+            no_nodes_process_options += f":{NODE_ARGS[self.node_type]}=1"
 
-        return PbsDirective('-l', no_nodes_process_options)
+        return PbsDirective("-l", no_nodes_process_options)
 
     @property
     def job_array_directives(self):
         if self._array_indices:
-            options = f'{self._array_indices[0]}-{self._array_indices[1]}'
+            options = f"{self._array_indices[0]}-{self._array_indices[1]}"
             try:
-                options += f':{self._array_indices[2]}'
+                options += f":{self._array_indices[2]}"
             except IndexError:
                 pass
-            return PbsDirective('-J', options), PbsDirective('-r', 'y')
+            return PbsDirective("-J", options), PbsDirective("-r", "y")
 
     @property
     def number_of_sub_jobs(self):
@@ -296,13 +320,13 @@ class PbsScript(object):
         Returns:
             str: String of all required directives.
         """
-        header = self._create_block_header_string('Required PBS Directives')
+        header = self._create_block_header_string("Required PBS Directives")
         directives = [
-            PbsDirective('-N', self.name),
-            PbsDirective('-A', self.project_id),
-            PbsDirective('-q', self.queue),
+            PbsDirective("-N", self.name),
+            PbsDirective("-A", self.project_id),
+            PbsDirective("-q", self.queue),
             self.get_num_nodes_process_directive,
-            PbsDirective('-l', f'walltime={self.walltime}'),
+            PbsDirective("-l", f"walltime={self.walltime}"),
         ]
         if self._array_indices is not None:
             directives.extend(self.job_array_directives)
@@ -315,7 +339,7 @@ class PbsScript(object):
         Returns:
              str: All optional directives.
         """
-        header = self._create_block_header_string('Optional Directives')
+        header = self._create_block_header_string("Optional Directives")
         return self._render_directive_list(header, self.optional_directives)
 
     @staticmethod
@@ -324,7 +348,7 @@ class PbsScript(object):
         for directive in directives:
             lines.append(f"#PBS {directive.directive} {directive.options}")
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     def render_modules_block(self):
         """Render each module call on a separate line.
@@ -332,28 +356,35 @@ class PbsScript(object):
         Returns:
             str: All module calls.
         """
-        opt_list = [self._create_block_header_string('Modules'),
-                    "# Avoid 'module: command not found' error when default shell is /bin/csh",
-                    "source ${MODULESHOME}/init/bash"]
+        opt_list = [
+            self._create_block_header_string("Modules"),
+            "# Avoid 'module: command not found' error when default shell is /bin/csh",
+            "source ${MODULESHOME}/init/bash",
+        ]
         for path in self._module_use:
-            opt_list.append(f'module use --append {path}')
+            opt_list.append(f"module use --append {path}")
         for key, value in self._modules.items():
-            if value != 'load' and value != 'unload':
+            if value != "load" and value != "unload":
                 str_module = "module swap " + key + " " + value
             else:
                 str_module = "module " + value + " " + key
             opt_list.append(str_module)
 
-        return '\n'.join(map(str, opt_list))
+        return "\n".join(map(str, opt_list))
 
     def render_environment_block(self):
-        opt_list = [self._create_block_header_string('Environment')]
-        opt_list.extend([f'export {key}="{value}"' for key, value in self.environment_variables.items()])
-        return '\n'.join(opt_list)
+        opt_list = [self._create_block_header_string("Environment")]
+        opt_list.extend(
+            [
+                f'export {key}="{value}"'
+                for key, value in self.environment_variables.items()
+            ]
+        )
+        return "\n".join(opt_list)
 
     def render_job_dir_configuration(self):
         if self.configure_job_dir:
-            return '''
+            return """
             JOBID=`echo ${PBS_JOBID} | cut -d '.' -f 1 | cut -d '[' -f 1`
             JOBDIR=$PBS_O_WORKDIR/$PBS_JOBNAME.$JOBID
             if [ ! -d ${JOBDIR} ]; then
@@ -361,14 +392,14 @@ class PbsScript(object):
             fi
             # cd $JOBDIR
 
-            '''
-        return ''
+            """
+        return ""
 
     def render_execution_block(self):
-        header = self._create_block_header_string('Execution Block')
+        header = self._create_block_header_string("Execution Block")
         job_dir_config = self.render_job_dir_configuration()
         execution_block = self._execution_block or self.execution_block
-        return header + '\n' + job_dir_config + execution_block
+        return header + "\n" + job_dir_config + execution_block
 
     def render(self):
         """Render the PBS Script.
@@ -382,8 +413,16 @@ class PbsScript(object):
         render_modules_block = self.render_modules_block()
         render_environment_block = self.render_environment_block()
         render_execution_block = self.render_execution_block()
-        render_string = '\n\n'.join([shebang, render_required_directives, render_optional_directives,
-                                     render_modules_block, render_environment_block, render_execution_block])
+        render_string = "\n\n".join(
+            [
+                shebang,
+                render_required_directives,
+                render_optional_directives,
+                render_modules_block,
+                render_environment_block,
+                render_execution_block,
+            ]
+        )
         return render_string
 
     def write(self, path):
@@ -395,5 +434,5 @@ class PbsScript(object):
         render_string = self.render()
         # Open the file
         full_path = os.path.join(path)
-        with io.open(full_path, 'w', newline='\n') as outfile:
+        with io.open(full_path, "w", newline="\n") as outfile:
             outfile.write(render_string)

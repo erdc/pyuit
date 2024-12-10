@@ -1,4 +1,4 @@
-EXECUTION_BLOCK_TEMPLATE = '''
+EXECUTION_BLOCK_TEMPLATE = """
 ## Execution Block ----------------------------------------
 echo -e "-------------------------"
 echo -e "Starting Execute Block..."
@@ -34,4 +34,4 @@ fi
 echo -e "-------------------------"
 echo -e "Finished Execute Block..."
 echo -e "-------------------------"
-'''
+"""
