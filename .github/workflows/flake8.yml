@@ -16,5 +16,6 @@ jobs:
       - name: flake8 Lint
         uses: py-actions/flake8@v2
         with:
+          args: "--verbose"
           ignore: "E203"
           max-line-length: "88"
