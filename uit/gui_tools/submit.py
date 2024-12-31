@@ -211,9 +211,9 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
     env_values = param.List()
     env_browsers = param.List()
     env_delete_buttons = param.List()
-    file_browser = param.ClassSelector(HpcFileBrowser)
+    file_browser = param.ClassSelector(class_=HpcFileBrowser)
     file_browser_col = param.ClassSelector(
-        pn.Column, default=pn.Column(None, sizing_mode="stretch_width")
+        class_=pn.Column, default=pn.Column(None, sizing_mode="stretch_width")
     )
     apply_file_browser = param.Action(label="Apply")
     close_file_browser = param.Action(
@@ -397,12 +397,12 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     validated = param.Boolean()
     job_name = param.String(label="Job Name (Required, cannot contain spaces or tabs)")
     error_messages = param.ClassSelector(
-        pn.Column, default=pn.Column(sizing_mode="stretch_width")
+        class_=pn.Column, default=pn.Column(sizing_mode="stretch_width")
     )
-    _job = param.ClassSelector(PbsJob, default=None)
+    _job = param.ClassSelector(class_=PbsJob, default=None)
     ready = param.Boolean(default=False, precedence=-1)
     next_stage = param.Selector()
-    pipeline_obj = param.ClassSelector(pn.pipeline.Pipeline)
+    pipeline_obj = param.ClassSelector(class_=pn.pipeline.Pipeline)
 
     # TODO should this be here?  (see line 324)
     user_workspace = None
