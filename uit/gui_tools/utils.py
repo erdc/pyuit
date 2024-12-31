@@ -30,7 +30,7 @@ async def await_if_async(result):
 
 
 class HpcBase(param.Parameterized):
-    uit_client = param.ClassSelector(Client)
+    uit_client = param.ClassSelector(class_=Client)
 
     @property
     def await_if_async(self):
@@ -39,7 +39,7 @@ class HpcBase(param.Parameterized):
 
 class HpcConfigurable(HpcBase):
     configuration_file = param.String()
-    environment_variables = param.ClassSelector(OrderedDict, default=OrderedDict())
+    environment_variables = param.ClassSelector(class_=OrderedDict, default=OrderedDict())
     modules_to_load = param.ListSelector(default=[])
     modules_to_unload = param.ListSelector(default=[])
 
@@ -118,8 +118,8 @@ class HpcConfigurable(HpcBase):
 
 
 class HpcWorkspaces(HpcConfigurable):
-    working_dir = param.ClassSelector(PurePosixPath)
-    _user_workspace = param.ClassSelector(Path)
+    working_dir = param.ClassSelector(class_=PurePosixPath)
+    _user_workspace = param.ClassSelector(class_=Path)
 
     @property
     def remote_workspace_suffix(self):
@@ -235,7 +235,7 @@ class PbsJobTabbedViewer(HpcWorkspaces):
 
 class TabView(param.Parameterized):
     title = param.String()
-    parent = param.ClassSelector(PbsJobTabbedViewer)
+    parent = param.ClassSelector(class_=PbsJobTabbedViewer)
 
     def __str__(self):
         return f"<{self.__class__.__name__}: {self.title} parent={self.parent}"
@@ -372,7 +372,7 @@ class LogsTab(TabView):
 
 class FileViewerTab(TabView):
     title = param.String(default="Files")
-    file_viewer = param.ClassSelector(FileViewer)
+    file_viewer = param.ClassSelector(class_=FileViewer)
 
     def __init__(self, **params):
         super().__init__(**params)

@@ -59,7 +59,7 @@ class FileManagerHPC(FileManager):
 
     """
 
-    uit_client = param.ClassSelector(Client, precedence=-1)
+    uit_client = param.ClassSelector(class_=Client, precedence=-1)
 
     @param.depends("uit_client", watch=True)
     def _initialize_directory(self):
@@ -97,7 +97,7 @@ class FileManagerHPC(FileManager):
 
 
 class FileTransfer(param.Parameterized):
-    uit_client = param.ClassSelector(Client, precedence=-1)
+    uit_client = param.ClassSelector(class_=Client, precedence=-1)
 
     from_location = param.Selector(default="local", objects=["local"], precedence=0.21)
     from_directory = param.String(precedence=0.22)
@@ -193,7 +193,7 @@ class FileTransfer(param.Parameterized):
 class FileBrowser(Viewer):
     """ """
 
-    path = param.ClassSelector(Path, precedence=-1)
+    path = param.ClassSelector(class_=Path, precedence=-1)
     path_text = param.String(label="", precedence=0.3)
     home = param.Action(lambda self: self.go_home(), label="🏠", precedence=0.1)
     up = param.Action(lambda self: self.move_up(), label="⬆️", precedence=0.2)
@@ -613,11 +613,11 @@ class AsyncHpcPath(HpcPath):
 
 
 class HpcFileBrowser(FileBrowser):
-    path = param.ClassSelector(HpcPath)
+    path = param.ClassSelector(class_=HpcPath)
     workdir = param.Action(
         lambda self: self.go_to_workdir(), label="⚙️", precedence=0.15
     )
-    uit_client = param.ClassSelector(Client)
+    uit_client = param.ClassSelector(class_=Client)
 
     def __init__(self, uit_client, **params):
         params["uit_client"] = uit_client
@@ -648,7 +648,7 @@ class HpcFileBrowser(FileBrowser):
 
 
 class AsyncHpcFileBrowser(HpcFileBrowser):
-    uit_client = param.ClassSelector(AsyncClient)
+    uit_client = param.ClassSelector(class_=AsyncClient)
 
     def __init__(self, uit_client, **params):
         super().__init__(uit_client, **params)
@@ -720,7 +720,7 @@ class FileSelector(Viewer):
     file_path = param.String(default="")
     show_browser = param.Boolean(default=False)
     browse_toggle = param.Action(lambda self: self.toggle(), label="Browse")
-    file_browser = param.ClassSelector(FileBrowser)
+    file_browser = param.ClassSelector(class_=FileBrowser)
     title = param.String(default="File Path")
     help_text = param.String()
     disabled = param.Boolean(precedence=-1)
@@ -826,10 +826,10 @@ class FileViewer(Viewer):
         precedence=-4,
         doc="Maximum line length. Lines logger than specified length will be broken up.",
     )
-    file_select = param.ClassSelector(FileSelector)
+    file_select = param.ClassSelector(class_=FileSelector)
     file_path = param.String()
     file_contents = param.String()
-    uit_client = param.ClassSelector(Client)
+    uit_client = param.ClassSelector(class_=Client)
     grep_pattern = param.String(label="Search", precedence=-1)
     grep_context = param.Integer(label="Context Lines", default=4, precedence=-1)
     grep_ignore_case = param.Boolean(label="Ignore Case", precedence=-1)
@@ -970,7 +970,7 @@ class FileViewer(Viewer):
 
 
 class AsyncFileViewer(FileViewer):
-    uit_client = param.ClassSelector(AsyncClient)
+    uit_client = param.ClassSelector(class_=AsyncClient)
     file_browser_class = AsyncHpcFileBrowser
 
     @param.depends("update_btn", watch=True)
