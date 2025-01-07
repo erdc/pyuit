@@ -14,6 +14,7 @@ class DpRouteError(UITError):
     errors, while in others it is best to just notify the users. Thus, we created this specific exception to identify
     this case.
     """
+
     def __init__(self, message):
         super().__init__(message)
 
@@ -27,5 +28,6 @@ class MaxRetriesError(UITError):
     errors, while in others it is best to just notify the users. Thus, we created this specific exception to identify
     this case.
     """
+
     def __init__(self, message):
         super().__init__(message)
