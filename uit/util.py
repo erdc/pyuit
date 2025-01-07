@@ -43,7 +43,7 @@ def robust(retries=1):
                     ) and "Connection aborted" in str(e):
                         # Requests very rarely end early with this "aborted" error.
                         error_text = "Connection aborted"
-                    elif isinstance(aiohttp.client_exceptions.ServerDisconnectedError) and "Server disconnected" in str(e):
+                    elif isinstance(e, aiohttp.client_exceptions.ServerDisconnectedError) and "Server disconnected" in str(e):
                         # Requests very rarely end early with this "aborted" error.
                         error_text = "Connection aborted"
                     else:
