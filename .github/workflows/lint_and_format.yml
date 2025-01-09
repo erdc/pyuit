@@ -27,6 +27,7 @@ jobs:
   format:
     needs: lint
     runs-on: ubuntu-latest
+    name: Format
     steps:
       - uses: actions/checkout@v4
       - uses: psf/black@stable
