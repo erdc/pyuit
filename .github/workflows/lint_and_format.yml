@@ -1,6 +1,12 @@
 name: Linting and Formatting
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "*"
 
 jobs:
   lint:
@@ -19,10 +25,10 @@ jobs:
           ignore: "E203"
           max-line-length: "120"
   format:
-    needs: lint
+    # needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: psf/black@stable
         with:
-          options: "--check"
+          options: "--check --line-length 120"
