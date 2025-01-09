@@ -22,7 +22,7 @@ jobs:
           ignore: "E203"
           max-line-length: "120"
   format:
-    # needs: lint
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
