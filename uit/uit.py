@@ -11,6 +11,7 @@ import uuid
 from functools import wraps
 from itertools import chain
 from pathlib import PurePosixPath, Path
+from enum import StrEnum, auto
 from urllib.parse import urljoin, urlencode  # noqa: F401
 
 import param
@@ -43,6 +44,37 @@ ALL_OFF = "\033[0m"
 _auth_code = None
 _server = None
 
+class BatchSystem(StrEnum):
+    PBS = auto()
+    SLURM = auto()
+
+SYSTEMS = {
+    'carpenter': BatchSystem.PBS,
+    'nautilus': BatchSystem.SLURM
+}
+
+COMMANDS = {
+    BatchSystem.PBS: {
+        'status': {
+            'command': 'qstat',
+            'full': ' -f',
+            'username': ' -u',
+            'job_id': ' -x',
+        },
+        'submit': 'qsub', # might want to do these the same way as status to maintain extensibility and cohesion
+        'delete': 'qdel',
+    },
+    BatchSystem.SLURM: {
+        'status': 'squeue',
+        'squeue': {
+            'full': ' -l',
+            'username': ' -u',
+            'job_id': ' -j',
+        },
+        'submit': 'sbatch',
+        'delete': 'scancel',
+    }
+}
 
 class Client(param.Parameterized):
     """Provides a python abstraction for interacting with the UIT API.
@@ -100,6 +132,9 @@ class Client(param.Parameterized):
         self.session_id = session_id
         self.scope = scope
         self.port = port
+
+        self.commands = None
+        self.options = None
 
         if self.token is not None:
             self.param.trigger("token")
@@ -176,7 +211,7 @@ class Client(param.Parameterized):
     def headers(self):
         if self._headers is None:
             self._headers = {"x-uit-auth-token": self.token} if self.token else None
-        return self._headers
+        return self._headers   
 
     @param.depends("token", watch=True)
     def get_token_dependent_info(self):
@@ -307,6 +342,7 @@ class Client(param.Parameterized):
         self._username = self._userinfo["SYSTEMS"][self._system.upper()]["USERNAME"]
         self._uit_url = self._uit_urls[login_node]
         self.connected = True
+        self.commands = COMMANDS[SYSTEMS[self.system]]
 
         return login_node, retry_on_failure
 
@@ -735,21 +771,25 @@ class Client(param.Parameterized):
     ):
         username = username if username is not None else self.username
 
-        cmd = "qstat"
+        # cmd will either be "qstat" or "squeue"
+        cmd = self.commands['status']['command']
 
+        
         if full:
-            cmd += " -f"
+            cmd += self.commands['status']['full']
         elif username:
-            cmd += f" -u {username}"
+            cmd += self.commands['status']['username']
+            cmd += f' {self.username}'
 
         if job_id:
             if isinstance(job_id, (tuple, list)):
                 job_id = " ".join([j.split(".")[0] for j in job_id])
-            cmd += f" -x {job_id}"
-            result = self.call(cmd)
-            return self._process_status_result(
-                result, parse=parse, full=full, as_df=as_df
-            )
+            cmd += self.commands['status']['job_id']
+            cmd += job_id
+            result = self.call(cmd) 
+            return self._process_status_result( 
+                result, parse=parse, full=full, as_df=as_df 
+            ) 
         else:
             # If no jobs are specified then
             result = self.call(cmd)
@@ -759,7 +799,7 @@ class Client(param.Parameterized):
             if not with_historic:
                 return result1
             else:
-                cmd += " -x"
+                cmd += self.commands['status']['job_id']
                 result = self.call(cmd)
                 result2 = self._process_status_result(
                     result, parse=parse, full=full, as_df=as_df
@@ -817,7 +857,7 @@ class Client(param.Parameterized):
 
         # Submit the script using call() with qsub command
         try:
-            job_id = self.call(f"qsub {remote_name}", working_dir=working_dir)
+            job_id = self.call(f"{self.commands['submit']} {remote_name}", working_dir=working_dir)
         except RuntimeError as e:
             raise RuntimeError(
                 "An exception occurred while submitting job script: {}".format(str(e))
