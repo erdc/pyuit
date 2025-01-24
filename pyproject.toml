@@ -49,7 +49,7 @@ tests = ['pytest', 'flake8']
 uit = "uit.cli:cli"
 
 [project.urls]
-source = "https://github.com/erdc/uit"
+source = "https://github.com/erdc/pyuit"
 
 [tool.setuptools.packages.find]
 include = ["uit*"]
