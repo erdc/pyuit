@@ -108,9 +108,7 @@ class PbsJob:
             str: Suffix
         """
         if not self._remote_workspace:
-            self._remote_workspace = PurePosixPath(
-                self.label, f"{self.name}.{self.remote_workspace_id}"
-            )
+            self._remote_workspace = PurePosixPath(self.label, f"{self.name}.{self.remote_workspace_id}")
         return self._remote_workspace
 
     @property
@@ -156,9 +154,7 @@ class PbsJob:
         try:
             await self.client.call(f"mkdir -p {working_dir}")
         except RuntimeError as e:
-            raise RuntimeError(
-                'Error setting up job directory on "{}": {}'.format(self.system, str(e))
-            )
+            raise RuntimeError('Error setting up job directory on "{}": {}'.format(self.system, str(e)))
 
         self._transfer_files()
         self._render_execution_block()
@@ -174,9 +170,7 @@ class PbsJob:
 
         if self.post_processing_script:
             assert self.client.system == self.post_processing_script.system
-            self.post_processing_script.set_directive(
-                "-W", f"depend=afterany:{self.job_id}"
-            )
+            self.post_processing_script.set_directive("-W", f"depend=afterany:{self.job_id}")
             self._post_processing_job_id = await self.client.submit(
                 self.post_processing_script,
                 working_dir=working_dir,
@@ -207,9 +201,7 @@ class PbsJob:
 
     async def terminate(self):
         if self.job_id:
-            return await self._execute(
-                "qdel", additional_options=self.post_processing_job_id
-            )
+            return await self._execute("qdel", additional_options=self.post_processing_job_id)
         else:
             # Avoid running "qdel None" which causes an error. There is nothing to terminate in PBS, so return True.
             # This is often the result of a job that created files on the HPC but failed to create the PBS job.
@@ -227,9 +219,7 @@ class PbsJob:
             await self.client.call(command=f"{cmd} {self.job_id} {additional_options}")
             return True
         except Exception as e:
-            if cmd == "qdel" and (
-                "qdel: Job has finished" in str(e) or "qdel: Unknown Job Id" in str(e)
-            ):
+            if cmd == "qdel" and ("qdel: Job has finished" in str(e) or "qdel: Unknown Job Id" in str(e)):
                 # qdel exits with rc=35 and 'qdel: Job has finished' if it is run on a job that has already finished
                 # qdel exits with rc=153 and 'qdel: Unknown Job Id' if the job is too old
                 # This basically tests if the HPC is working well enough to send 'rm -rf' commands next
@@ -244,14 +234,10 @@ class PbsJob:
         for transfer_file in self.transfer_input_files:
             transfer_file = Path(transfer_file)
             remote_path = self.working_dir / transfer_file.name
-            ret = await self.client.put_file(
-                local_path=transfer_file, remote_path=remote_path
-            )
+            ret = await self.client.put_file(local_path=transfer_file, remote_path=remote_path)
 
             if ret.get("success") == "false":
-                raise RuntimeError(
-                    "Failed to transfer input files: {}".format(ret["error"])
-                )
+                raise RuntimeError("Failed to transfer input files: {}".format(ret["error"]))
 
     def _render_execution_block(self):
         execution_block = EXECUTION_BLOCK_TEMPLATE.format(
@@ -265,9 +251,7 @@ class PbsJob:
         return "\n".join([f"cp ${{HOME}}/{f} ." for f in self.home_input_files])
 
     def _render_archive_input_files(self):
-        return "\n".join(
-            [f"archive get - C ${{ARCHIVE_HOME}} {f}" for f in self.archive_input_files]
-        )
+        return "\n".join([f"archive get - C ${{ARCHIVE_HOME}} {f}" for f in self.archive_input_files])
 
     def _schedule_cleanup(self):
         pass
@@ -332,24 +316,25 @@ class PbsJob:
         """
         return self.working_dir / self._get_log_file_name(log_type)
 
-    async def get_cached_file_contents(
-        self, remote_path, local_path=None, bytes=None, start_from=0
-    ):
+    async def get_cached_file_contents(self, remote_path, local_path=None, bytes=None, start_from=0):
         """
-        Gets the file contents from a locally cached file. If file is not cached locally it will first copy the file from the HPC system to the local workspace.
+        Gets the file contents from a locally cached file.
+
+        If file is not cached locally it will first copy the file from the HPC system to the local workspace.
         Args:
-            remote_path (str, PurePosixPath): location of remote file to get contents of. It is resolved using `self.resolve_path`.
-            local_path (str, Path): location to cache `remote_path`. Default is `None`. If not provided then it will be derived from `remote_path`.
-            bytes (int): number of bytes to read from file. If `None` then the whole file will be read. Defaults to `None`.
-            start_from (int): number of bytes to skip before reading file. Default is `0`. If negative it will read from the end of the end of the file.
+            remote_path (str, PurePosixPath): location of remote file to get contents of.
+                It is resolved using `self.resolve_path`.
+            local_path (str, Path): location to cache `remote_path`. Default is `None`.
+                If not provided then it will be derived from `remote_path`.
+            bytes (int): number of bytes to read from file. If `None` then the whole file will be read.
+                Defaults to `None`.
+            start_from (int): number of bytes to skip before reading file. Default is `0`.
+                If negative it will read from the end of the end of the file.
 
         Returns: The contents of the file.
-
         """
         remote_path = self.resolve_path(remote_path)
-        local_path = local_path or self.workspace / remote_path.relative_to(
-            self.working_dir
-        )
+        local_path = local_path or self.workspace / remote_path.relative_to(self.working_dir)
         if not local_path.exists():
             local_path.parent.mkdir(parents=True, exist_ok=True)
             await self.client.get_file(remote_path, local_path)
@@ -373,7 +358,9 @@ class PbsJob:
 
     async def _get_cached_log(self, log_type, bytes=None, start_from=0):
         """
-        Gets the contents of a log file. Checks local workspace first, and if not present copies the file from the HPC system to the local workspace.
+        Gets the contents of a log file.
+
+        Checks local workspace first, and if not present copies the file from the HPC system to the local workspace.
         Args:
             log_type (str): the type of log: "o" for stdout or "e" for stderr
 
@@ -382,9 +369,7 @@ class PbsJob:
         """
         local_path = self._get_local_log_file_path(log_type)
         remote_path = self._get_remote_log_file_path(log_type)
-        return await self.get_cached_file_contents(
-            remote_path, local_path, bytes=bytes, start_from=start_from
-        )
+        return await self.get_cached_file_contents(remote_path, local_path, bytes=bytes, start_from=start_from)
 
     async def _get_log(self, log_type, filename=None, bytes=None, start_from=0):
         """
@@ -398,20 +383,14 @@ class PbsJob:
         """
         try:
             if self.status in ["F", "X"]:
-                log_contents = await self._get_cached_log(
-                    log_type, bytes=bytes, start_from=start_from
-                )
+                log_contents = await self._get_cached_log(log_type, bytes=bytes, start_from=start_from)
             else:
                 log_contents = await self.client.call(f"qpeek {self.job_id}")
                 if log_contents == "Unknown Job ID\n":
-                    log_contents = self._get_cached_log(
-                        log_type, bytes=bytes, start_from=start_from
-                    )
+                    log_contents = self._get_cached_log(log_type, bytes=bytes, start_from=start_from)
                 else:
                     index = {"o": 0, "e": 1}[log_type]
-                    log_parts = log_contents.split(
-                        f'{self.job_id.split(".")[0]} STDERR'
-                    )[index].split("\n", 1)
+                    log_parts = log_contents.split(f'{self.job_id.split(".")[0]} STDERR')[index].split("\n", 1)
                     try:
                         log_contents = log_parts[1]
                     except IndexError:
@@ -476,17 +455,13 @@ class PbsJob:
     async def update_statuses(cls, jobs, as_df=False):
         client = jobs[0].client
         job_ids = [j.job_id for j in jobs if j.job_id]
-        job_ids.extend(
-            [j.post_processing_job_id for j in jobs if j.post_processing_job_id]
-        )
+        job_ids.extend([j.post_processing_job_id for j in jobs if j.post_processing_job_id])
         if not job_ids:
             # jobs that are created from resutls might not have IDs
             return
         statuses = await client.status(job_ids, as_df=as_df)
         status_dicts = statuses.to_dict(orient="records") if as_df else statuses
-        status_dicts = {
-            cls._clean_job_id(status["job_id"]): status for status in status_dicts
-        }
+        status_dicts = {cls._clean_job_id(status["job_id"]): status for status in status_dicts}
         updated_status_dicts = {}
         for job in jobs:
             clean_job_id = cls._clean_job_id(job.job_id)
@@ -496,9 +471,7 @@ class PbsJob:
             if status["status"] in ("F",) and job.post_processing_job_id:
                 pp_status = status_dicts[cls._clean_job_id(job.post_processing_job_id)]
                 job._status = pp_status["status"]
-                if (
-                    job._status == "Q"
-                ):  # don't set the status back to "Submitted" for the post-processing job
+                if job._status == "Q":  # don't set the status back to "Submitted" for the post-processing job
                     job._status = "R"
 
             if (
@@ -514,11 +487,7 @@ class PbsJob:
 
             updated_status_dicts[clean_job_id] = job._qstat
 
-        statuses = (
-            pd.DataFrame.from_dict(updated_status_dicts).T
-            if as_df
-            else updated_status_dicts
-        )
+        statuses = pd.DataFrame.from_dict(updated_status_dicts).T if as_df else updated_status_dicts
         return statuses
 
     @classmethod
@@ -564,9 +533,7 @@ class PbsArrayJob(PbsJob):
             return self.working_dir / self.run_dir_name
 
         def submit(self, **kwargs):
-            raise AttributeError(
-                "ArraySubJobs cannot be submitted. Submit must be called on the parent."
-            )
+            raise AttributeError("ArraySubJobs cannot be submitted. Submit must be called on the parent.")
 
         def _get_log_file_name(self, log_type):
             file_path = super()._get_log_file_name(log_type)
@@ -596,9 +563,7 @@ class PbsArrayJob(PbsJob):
         return self.status
 
     def _get_log(self, log_type, filename=None):
-        raise AttributeError(
-            "Cannot get the log on a PbsArrayJob. You must access logs on the sub-jobs."
-        )
+        raise AttributeError("Cannot get the log on a PbsArrayJob. You must access logs on the sub-jobs.")
 
     # @property
     # def job_array_ids(self):
@@ -610,10 +575,7 @@ class PbsArrayJob(PbsJob):
     @property
     def sub_jobs(self):
         if self._sub_jobs is None:
-            self._sub_jobs = [
-                self.PbsArraySubJob(self, job_index)
-                for job_index in self.script.job_array_indices
-            ]
+            self._sub_jobs = [self.PbsArraySubJob(self, job_index) for job_index in self.script.job_array_indices]
         return self._sub_jobs
 
 
@@ -621,9 +583,7 @@ async def get_active_jobs(uit_client):
     jobs = list()
     statuses = await uit_client.status(with_historic=True)
     if statuses:
-        statuses = await uit_client.status(
-            job_id=[j["job_id"] for j in statuses], full=True
-        )
+        statuses = await uit_client.status(job_id=[j["job_id"] for j in statuses], full=True)
 
         for job_id, status in statuses.items():
             j = get_job_from_full_status(job_id, status, uit_client)
@@ -644,9 +604,7 @@ def get_job_from_full_status(job_id, status, uit_client):
         name=status["Job_Name"],
         project_id=status["Account_Name"],
         num_nodes=status["Resource_List.nodect"],
-        processes_per_node=(
-            int(status["Resource_List.ncpus"]) / int(status["Resource_List.nodect"])
-        ),
+        processes_per_node=(int(status["Resource_List.ncpus"]) / int(status["Resource_List.nodect"])),
         max_time=status["Resource_List.walltime"],
         queue=status["queue"].split("_")[0],
         node_type=node_type,
@@ -654,13 +612,9 @@ def get_job_from_full_status(job_id, status, uit_client):
     )
     if status.get("array"):
         Job = PbsArrayJob
-        script._array_indices = tuple(
-            int(i) for i in status["array_indices_submitted"].split("-")
-        )
+        script._array_indices = tuple(int(i) for i in status["array_indices_submitted"].split("-"))
     try:
-        working_dir = PurePosixPath(
-            status["Output_Path"].split(":")[1]
-        ).parent.relative_to(uit_client.WORKDIR)
+        working_dir = PurePosixPath(status["Output_Path"].split(":")[1]).parent.relative_to(uit_client.WORKDIR)
     except Exception:  # noqa: E722
         return
     label = working_dir.parent.as_posix()
@@ -673,9 +627,7 @@ def get_job_from_full_status(job_id, status, uit_client):
 
 
 async def get_job_from_id(job_id, uit_client, with_historic=True):
-    status = await uit_client.status(
-        job_id=job_id, with_historic=with_historic, full=True
-    )
+    status = await uit_client.status(job_id=job_id, with_historic=with_historic, full=True)
     for job_id, full_status in status.items():
         return get_job_from_full_status(job_id, full_status, uit_client)
 

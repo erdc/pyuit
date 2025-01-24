@@ -8,9 +8,7 @@ from importlib.resources import files
 
 from .config import DEFAULT_CONFIG
 
-node_types_file = os.environ.get(
-    "UIT_NODE_TYPES_FILE", DEFAULT_CONFIG.get("node_types_file")
-)
+node_types_file = os.environ.get("UIT_NODE_TYPES_FILE", DEFAULT_CONFIG.get("node_types_file"))
 try:
     node_types_file = Path(node_types_file)
     assert node_types_file.is_file()
@@ -39,15 +37,7 @@ NODE_ARGS = dict(
 
 def factors(n):
     n = int(n)
-    return sorted(
-        set(
-            [
-                j
-                for k in [[i, n // i] for i in range(1, int(n**0.5) + 1) if not n % i]
-                for j in k
-            ]
-        )
-    )
+    return sorted(set([j for k in [[i, n // i] for i in range(1, int(n**0.5) + 1) if not n % i] for j in k]))
 
 
 PbsDirective = collections.namedtuple("PbsDirective", ["directive", "options"])
@@ -179,9 +169,7 @@ class PbsScript(object):
         if max_time:
             self._max_time = max_time
         else:
-            raise ValueError(
-                'max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"'
-            )
+            raise ValueError('max_time must be a datetime.timedelta or a string in the form "HH:MM:SS"')
 
     @property
     def walltime(self):
@@ -374,12 +362,7 @@ class PbsScript(object):
 
     def render_environment_block(self):
         opt_list = [self._create_block_header_string("Environment")]
-        opt_list.extend(
-            [
-                f'export {key}="{value}"'
-                for key, value in self.environment_variables.items()
-            ]
-        )
+        opt_list.extend([f'export {key}="{value}"' for key, value in self.environment_variables.items()])
         return "\n".join(opt_list)
 
     def render_job_dir_configuration(self):

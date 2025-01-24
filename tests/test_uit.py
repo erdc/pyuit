@@ -12,8 +12,9 @@ class TestUIT(unittest.TestCase):
 
     def setUp(self):
         from uit import Client
-        with mock.patch('uit.Client.get_userinfo') as _:
-            self.client = Client(token='test_token')
+
+        with mock.patch("uit.Client.get_userinfo") as _:
+            self.client = Client(token="test_token")
             self.client.connected = True
 
     def tearDown(self):
@@ -23,10 +24,12 @@ class TestUIT(unittest.TestCase):
         from uit import uit as uit_test
         from importlib import reload
         import builtins
+
         real_import = builtins.__import__
         try:
+
             def mock_import(name, *args):
-                if name == 'pandas':
+                if name == "pandas":
                     raise ModuleNotFoundError
                 else:
                     return real_import(name, *args)
@@ -37,53 +40,48 @@ class TestUIT(unittest.TestCase):
             builtins.__import__ = real_import
         self.assertEqual(uit_test.has_pandas, False)
 
-    @mock.patch('uit.config.open')
-    @mock.patch('uit.config.yaml.safe_load')
+    @mock.patch("uit.config.open")
+    @mock.patch("uit.config.yaml.safe_load")
     def test_init_no_token(self, mock_yaml, _):
-        mock_yaml.return_value = {
-            'client_id': 'client_id',
-            'client_secret': 'client_secret'
-        }
-        Client(config_file='test')
+        mock_yaml.return_value = {"client_id": "client_id", "client_secret": "client_secret"}
+        Client(config_file="test")
 
-    @mock.patch('uit.config.open')
-    @mock.patch('uit.config.yaml.safe_load')
+    @mock.patch("uit.config.open")
+    @mock.patch("uit.config.yaml.safe_load")
     def test_init_no_credentials(self, mock_yaml, _):
         mock_yaml.return_value = {}
         self.assertRaises(ValueError, Client)
 
     def test_ensure_connected(self):
         self.client.connected = False
-        self.assertRaises(
-            RuntimeError, self.client.call, 'cmd'
-        )
+        self.assertRaises(RuntimeError, self.client.call, "cmd")
 
-    @mock.patch('uit.Client')
+    @mock.patch("uit.Client")
     def test_HOME(self, _):
-        self.client.env.HOME = 'HOME env'
+        self.client.env.HOME = "HOME env"
         res = self.client.HOME
-        self.assertEqual(PurePosixPath('HOME env'), res)
+        self.assertEqual(PurePosixPath("HOME env"), res)
 
-    @mock.patch('uit.Client')
+    @mock.patch("uit.Client")
     def test_WORKDIR(self, _):
-        self.client.env.WORKDIR = 'WORKDIR'
+        self.client.env.WORKDIR = "WORKDIR"
         res = self.client.WORKDIR
-        self.assertEqual(PurePosixPath('WORKDIR'), res)
+        self.assertEqual(PurePosixPath("WORKDIR"), res)
 
-    @mock.patch('uit.Client')
+    @mock.patch("uit.Client")
     def test_WORKDIR2(self, _):
-        self.client.env.WORKDIR2 = 'WORKDIR2'
+        self.client.env.WORKDIR2 = "WORKDIR2"
         res = self.client.WORKDIR2
-        self.assertEqual(PurePosixPath('WORKDIR2'), res)
+        self.assertEqual(PurePosixPath("WORKDIR2"), res)
 
-    @mock.patch('uit.Client')
+    @mock.patch("uit.Client")
     def test_CENTER(self, _):
-        self.client.env.CENTER = 'CENTER'
+        self.client.env.CENTER = "CENTER"
         res = self.client.CENTER
-        self.assertEqual(PurePosixPath('CENTER'), res)
+        self.assertEqual(PurePosixPath("CENTER"), res)
 
     def test_token(self):
-        self.assertEqual('test_token', self.client.token)
+        self.assertEqual("test_token", self.client.token)
 
     def test_login_node(self):
         self.assertEqual(None, self.client.login_node)
@@ -112,41 +110,43 @@ class TestUIT(unittest.TestCase):
     def test_username(self):
         self.assertEqual(None, self.client.username)
 
-    @mock.patch('uit.Client.call')
-    @mock.patch('uit.Client.put_file')
+    @mock.patch("uit.Client.call")
+    @mock.patch("uit.Client.put_file")
     def test_submit(self, _, mock_call):
-        mock_call.return_value = 'J001'
+        mock_call.return_value = "J001"
 
-        ret = self.client.submit(pbs_script='test_script.sh', working_dir='\\test\\workdir')
+        ret = self.client.submit(pbs_script="test_script.sh", working_dir="\\test\\workdir")
 
-        self.assertEqual('J001', ret)
+        self.assertEqual("J001", ret)
 
-    @mock.patch('uit.Client.call')
-    @mock.patch('uit.Client.put_file')
+    @mock.patch("uit.Client.call")
+    @mock.patch("uit.Client.put_file")
     def test_submit_runtime_error(self, mock_put_file, mock_call):
-        mock_put_file.return_value = {'success': 'false', 'error': 'test_error'}
-        mock_call.return_value = 'J001'
+        mock_put_file.return_value = {"success": "false", "error": "test_error"}
+        mock_call.return_value = "J001"
 
-        self.assertRaises(RuntimeError, self.client.submit, pbs_script='test_script.sh', working_dir='\\test\\workdir')
+        self.assertRaises(RuntimeError, self.client.submit, pbs_script="test_script.sh", working_dir="\\test\\workdir")
 
-    @mock.patch('uit.Client.call')
-    @mock.patch('uit.Client.put_file')
+    @mock.patch("uit.Client.call")
+    @mock.patch("uit.Client.put_file")
     def test_submit_call_error(self, _, mock_call):
         mock_call.side_effect = RuntimeError
 
-        self.assertRaises(RuntimeError, self.client.submit, pbs_script='test_script.sh', working_dir='\\test\\workdir')
+        self.assertRaises(RuntimeError, self.client.submit, pbs_script="test_script.sh", working_dir="\\test\\workdir")
 
-    @mock.patch('requests.post')
+    @mock.patch("requests.post")
     def test_robust_dp_route_error(self, mock_post):
         """Test the @robust decorator for handling repeated DP Route errors"""
-        error_text = ("DP Route error: Failed to start tunnel connection: Start Tunnel error: ChildProcessError: "
-                      "Command failed: mk_uit_ssh_tunnel.sh")
+        error_text = (
+            "DP Route error: Failed to start tunnel connection: Start Tunnel error: ChildProcessError: "
+            "Command failed: mk_uit_ssh_tunnel.sh"
+        )
         mock_post.side_effect = RuntimeError(error_text)
-        self.assertRaises(MaxRetriesError, self.client.call, command='pwd', working_dir='.')
+        self.assertRaises(MaxRetriesError, self.client.call, command="pwd", working_dir=".")
 
-    @mock.patch('requests.post')
+    @mock.patch("requests.post")
     def test_robust_connection_error(self, mock_post):
         """Test the @robust decorator for handling repeated Connection aborted errors"""
-        error_text = ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+        error_text = ("Connection aborted.", RemoteDisconnected("Remote end closed connection without response"))
         mock_post.side_effect = requests.exceptions.ConnectionError(error_text)
-        self.assertRaises(MaxRetriesError, self.client.call, command='pwd', working_dir='.')
+        self.assertRaises(MaxRetriesError, self.client.call, command="pwd", working_dir=".")
