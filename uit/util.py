@@ -33,17 +33,21 @@ def robust(retries=1):
             while attempts <= retries:
                 try:
                     return func(*args, **kwargs)
-                except (RuntimeError, requests.exceptions.ConnectionError, aiohttp.client_exceptions.ServerDisconnectedError) as e:
+                except (
+                    RuntimeError,
+                    requests.exceptions.ConnectionError,
+                    aiohttp.client_exceptions.ServerDisconnectedError,
+                ) as e:
                     if isinstance(e, RuntimeError) and "DP Route error" in str(e):
                         # "DP Route error" indicates failure of SSH Tunnel client on UIT Plus server.
                         # Successive calls should work.
                         error_text = "DP Route error"
-                    elif isinstance(
-                        e, requests.exceptions.ConnectionError
-                    ) and "Connection aborted" in str(e):
+                    elif isinstance(e, requests.exceptions.ConnectionError) and "Connection aborted" in str(e):
                         # Requests very rarely end early with this "aborted" error.
                         error_text = "Connection aborted"
-                    elif isinstance(e, aiohttp.client_exceptions.ServerDisconnectedError) and "Server disconnected" in str(e):
+                    elif isinstance(
+                        e, aiohttp.client_exceptions.ServerDisconnectedError
+                    ) and "Server disconnected" in str(e):
                         # Requests very rarely end early with this "aborted" error.
                         error_text = "Connection aborted"
                     else:
@@ -97,9 +101,7 @@ class HpcEnv:
 
     def get_environmental_variable(self, env_var_name, update=False):
         if not self.client.connected:
-            raise RuntimeError(
-                "Must connect to system before accessing environmental variables."
-            )
+            raise RuntimeError("Must connect to system before accessing environmental variables.")
 
         if update or self._env.get(env_var_name) is None:
             self._env[env_var_name] = (
@@ -125,9 +127,7 @@ class AsyncHpcEnv(HpcEnv):
 
     async def get_environmental_variable(self, env_var_name, update=False):
         if not self.client.connected:
-            raise RuntimeError(
-                "Must connect to system before accessing environmental variables."
-            )
+            raise RuntimeError("Must connect to system before accessing environmental variables.")
 
         if update or self._env.get(env_var_name) is None:
             result = await self.client.call(

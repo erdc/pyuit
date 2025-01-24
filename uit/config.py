@@ -6,9 +6,7 @@ import dodcerts
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CONFIG_FILE = os.environ.get(
-    "UIT_CONFIG_FILE", os.path.join(os.path.expanduser("~"), ".uit")
-)
+DEFAULT_CONFIG_FILE = os.environ.get("UIT_CONFIG_FILE", os.path.join(os.path.expanduser("~"), ".uit"))
 
 
 def parse_config(config_file):
@@ -23,6 +21,4 @@ def parse_config(config_file):
 
 # Parse Default Config
 DEFAULT_CONFIG = parse_config(DEFAULT_CONFIG_FILE) or {}
-DEFAULT_CA_FILE = os.environ.get(
-    "UIT_CA_FILE", DEFAULT_CONFIG.get("ca_file", dodcerts.where())
-)
+DEFAULT_CA_FILE = os.environ.get("UIT_CA_FILE", DEFAULT_CONFIG.get("ca_file", dodcerts.where()))

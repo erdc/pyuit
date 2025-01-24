@@ -70,13 +70,9 @@ class HpcAuthenticate(HpcBase):
 class HpcConnect(HpcBase):
     system = param.Selector()
     login_node = param.Selector(default=None, objects=[None], label="Login Node")
-    exclude_nodes = param.ListSelector(
-        default=list(), objects=[], label="Exclude Nodes"
-    )
+    exclude_nodes = param.ListSelector(default=list(), objects=[], label="Exclude Nodes")
     connected = param.Boolean(default=False, allow_None=True)
-    connect_btn = param.Action(
-        lambda self: self.param.trigger("connect_btn"), label="Connect"
-    )
+    connect_btn = param.Action(lambda self: self.param.trigger("connect_btn"), label="Connect")
     disconnect_btn = param.Action(lambda self: self.disconnect(), label="Disconnect")
     connection_status = param.String(default="Not Connected", label="Status")
     ready = param.Boolean(default=False, precedence=-1)
@@ -113,9 +109,7 @@ class HpcConnect(HpcBase):
     @param.depends("login_node", watch=True)
     def update_exclude_nodes_visibility(self):
         self.advanced_pn.clear()
-        self.advanced_pn.append(
-            pn.widgets.Select.from_param(self.param.login_node, width=300)
-        )
+        self.advanced_pn.append(pn.widgets.Select.from_param(self.param.login_node, width=300))
         if self.login_node is None:
             self.advanced_pn.extend(
                 [
@@ -140,9 +134,7 @@ class HpcConnect(HpcBase):
                 exclude_login_nodes=self.exclude_nodes,
                 retry_on_failure=retry,
             )
-            self.connection_status = await self.await_if_async(
-                self.uit_client.connect(**kwargs)
-            )
+            self.connection_status = await self.await_if_async(self.uit_client.connect(**kwargs))
         except (UITError, MaxRetriesError) as e:
             logger.exception(e)
             self.exclude_nodes.append(self.uit_client.login_node)
@@ -167,9 +159,7 @@ class HpcConnect(HpcBase):
     @param.depends("connected")
     def view(self):
         header = "# Connect to HPC System"
-        connect_btn = pn.widgets.Button.from_param(
-            self.param.connect_btn, button_type="success", width=100
-        )
+        connect_btn = pn.widgets.Button.from_param(self.param.connect_btn, button_type="success", width=100)
         connect_btn.js_on_click(
             args={
                 "btn": connect_btn,
@@ -180,23 +170,15 @@ class HpcConnect(HpcBase):
         if self.connected is None:
             content = None
         elif self.connected is False:
-            content = pn.Column(
-                pn.layout.Tabs(self.system_pn, self.advanced_pn), connect_btn
-            )
+            content = pn.Column(pn.layout.Tabs(self.system_pn, self.advanced_pn), connect_btn)
         else:
             self.param.connect_btn.label = "Re-Connect"
-            connect_btn = pn.widgets.Button.from_param(
-                self.param.connect_btn, button_type="success", width=100
-            )
-            disconnect_btn = pn.widgets.Button.from_param(
-                self.param.disconnect_btn, button_type="danger", width=100
-            )
+            connect_btn = pn.widgets.Button.from_param(self.param.connect_btn, button_type="success", width=100)
+            disconnect_btn = pn.widgets.Button.from_param(self.param.disconnect_btn, button_type="danger", width=100)
             return pn.Column(
                 header,
                 pn.Row(connect_btn, disconnect_btn),
-                pn.panel(
-                    self, parameters=["connection_status"], show_name=False, width=400
-                ),
+                pn.panel(self, parameters=["connection_status"], show_name=False, width=400),
             )
 
         return pn.Column(header, content, width=500)

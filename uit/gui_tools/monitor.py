@@ -17,9 +17,7 @@ class HpcJobMonitor(PbsJobTabbedViewer):
 
     @param.output(finished_job_ids=list)
     def finished_jobs(self):
-        return self.status_tab.statuses[self.statuses["status"] == "F"][
-            "job_id"
-        ].tolist()
+        return self.status_tab.statuses[self.statuses["status"] == "F"]["job_id"].tolist()
 
     def header_panel(self):
         row = super().header_panel()
