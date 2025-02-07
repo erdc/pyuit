@@ -17,24 +17,23 @@ logger = logging.getLogger(__name__)
 
 
 class PbsScriptInputs(HpcBase):
-    hpc_subproject = param.Selector(default=None, label="HPC Subproject", precedence=3)
-    subproject_usage = param.DataFrame(precedence=3.1)
-    workdir = param.String(default="", precedence=4)
+    hpc_subproject = param.Selector(default=None, label="HPC Subproject", precedence=3, doc='Allocation to charge for this job')
+    subproject_usage = param.DataFrame(precedence=3.1,doc='Information about this allocation')
+    workdir = param.String(default="", precedence=4,doc='Base directory for full experiment')
     node_type = param.Selector(default="", objects=[], label="Node Type", precedence=5)
-    nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1)
+    nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1,doc="Number of nodes to use per sub-job")
     processes_per_node = param.Selector(
-        default=1, objects=[], label="Processes per Node", precedence=5.2
-    )
-    wall_time = param.String(default="01:00:00", label="Wall Time", precedence=6)
+        default=1, objects=[], label="Processes per Node", precedence=5.2, doc="Number of processors to use per node")
+    wall_time = param.String(default="01:00:00", label="Wall Time", precedence=6, doc="Requested walltime for each sub-job")
     wall_time_alert = pn.pane.Alert(visible=False)
     node_alert = pn.pane.Alert(visible=False)
-    queue = param.Selector(default=QUEUES[0], objects=QUEUES, precedence=7)
+    queue = param.Selector(default=QUEUES[0], objects=QUEUES, precedence=7,doc='HPC queue to use for running jobs.')
     max_wall_time = param.String(
         default="Not Found", label="Max Wall Time", precedence=7.1
     )
     max_nodes = param.String(default="Not Found", label="Max Processes", precedence=7.2)
     submit_script_filename = param.String(default="run.pbs", precedence=8)
-    notification_email = param.String(label="Notification E-mail(s)", precedence=9)
+    notification_email = param.String(label="Notification E-mail(s)", precedence=9,doc="Set up email notification(s) about job.")
     notify_start = param.Boolean(default=True, label="when job begins", precedence=9.1)
     notify_end = param.Boolean(default=True, label="when job ends", precedence=9.2)
 
@@ -506,6 +505,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 script=self.pbs_script,
                 client=self.uit_client,
                 workspace=self.user_workspace,
+                working_dir=self.workdir,
             )
         return self._job
 
