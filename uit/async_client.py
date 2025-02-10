@@ -280,7 +280,17 @@ class AsyncClient(Client):
             else:
                 return "ERROR! Gateway Timeout"
 
-        resp = await r.json()
+        try:
+            resp = await r.json()
+        except aiohttp.client_exceptions.ContentTypeError as e:
+            # UIT should always return JSON, but other services may return an HTML error
+            logger.error(
+                "JSON Parse Error '%s' - Status code: %s  Content: %s",
+                str(e),
+                r.status,
+                await r.text(),
+            )
+            raise UITError("Upload error") from e
 
         if full_response:
             return resp
@@ -328,7 +338,16 @@ class AsyncClient(Client):
                 raise UITError("Request Timeout")
         logger.debug(await self._debug_uit(locals()))
 
-        return await r.json()
+        try:
+            return await r.json()
+        except aiohttp.client_exceptions.ContentTypeError as e:
+            logger.error(
+                "JSON Parse Error '%s' - Status code: %s  Content: %s",
+                str(e),
+                r.status,
+                await r.text(),
+            )
+            raise UITError("Upload error") from e
 
     @_ensure_connected
     @robust()
