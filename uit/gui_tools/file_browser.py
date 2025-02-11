@@ -686,7 +686,7 @@ class AsyncHpcFileBrowser(HpcFileBrowser):
 def create_file_browser(uit_client, **kwargs):
     if isinstance(uit_client, AsyncClient):
         return AsyncHpcFileBrowser(uit_client, **kwargs)
-    if isinstance(self.uit_client, Client):
+    if isinstance(uit_client, Client):
         return HpcFileBrowser(uit_client, **kwargs)
 
 
