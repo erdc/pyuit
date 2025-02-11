@@ -124,9 +124,7 @@ class AsyncClient(Client):
         """
         # get access token from file
         # populate userinfo and header info
-        login_node, retry_on_failure = self.prepare_connect(
-            system, login_node, exclude_login_nodes, retry_on_failure
-        )
+        login_node, retry_on_failure = self.prepare_connect(system, login_node, exclude_login_nodes, retry_on_failure)
         try:
             # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
             # await self.call(':', working_dir='.', timeout=35)
@@ -143,9 +141,7 @@ class AsyncClient(Client):
                 raise UITError(msg)
             elif retry_on_failure is True and num_retries > 0:
                 # Try a different login node
-                logger.debug(
-                    f"Retrying connection {num_retries} more time(s) to this HPC {system}"
-                )
+                logger.debug(f"Retrying connection {num_retries} more time(s) to this HPC {system}")
                 num_retries -= 1
                 exclude_login_nodes = list(exclude_login_nodes) + [login_node]
                 return await self.connect(
@@ -181,8 +177,7 @@ class AsyncClient(Client):
         # check for auth_code
         if self._auth_code is None:
             raise RuntimeError(
-                "You must first authenticate to the UIT server and get a auth code. "
-                "Then set the auth_code"
+                "You must first authenticate to the UIT server and get a auth code. Then set the auth_code"
             )
 
         # set up the data dictionary
@@ -208,22 +203,17 @@ class AsyncClient(Client):
     async def get_userinfo(self):
         """Get User Info from the UIT server."""
         # request user info from UIT site
-        response = await self.session.get(
-            urljoin(UIT_API_URL, "userinfo"), headers=self.headers
-        )
+        response = await self.session.get(urljoin(UIT_API_URL, "userinfo"), headers=self.headers)
         data = await response.json()
         if not data["success"]:
             raise UITError("Not Authenticated")
         self._userinfo = data.get("userinfo")
         self._user = self._userinfo.get("USERNAME")
         logger.info(f"get_userinfo user='{self._user}'")
-        self._systems = sorted(
-            [sys.lower() for sys in self._userinfo["SYSTEMS"].keys()]
-        )
+        self._systems = sorted([sys.lower() for sys in self._userinfo["SYSTEMS"].keys()])
         self._login_nodes = {
             system: [
-                node["HOSTNAME"].split(".")[0]
-                for node in self._userinfo["SYSTEMS"][system.upper()]["LOGIN_NODES"]
+                node["HOSTNAME"].split(".")[0] for node in self._userinfo["SYSTEMS"][system.upper()]["LOGIN_NODES"]
             ]
             for system in self._systems
         }
@@ -235,9 +225,7 @@ class AsyncClient(Client):
             ]
             for system in self._systems
         ]
-        self._uit_urls = {
-            k: v for _list in self._uit_urls for d in _list for k, v in d.items()
-        }  # noqa: E741
+        self._uit_urls = {k: v for _list in self._uit_urls for d in _list for k, v in d.items()}  # noqa: E741
 
     @_ensure_connected
     @robust()
@@ -384,9 +372,7 @@ class AsyncClient(Client):
             async for chunk in r.content.iter_chunked(4096):
                 if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
-            local_file_size = (
-                f.tell()
-            )  # tell() returns the file seek pointer which is at the end of the file
+            local_file_size = f.tell()  # tell() returns the file seek pointer which is at the end of the file
         logger.debug(await self._debug_uit(locals()))
 
         return local_path
@@ -487,23 +473,17 @@ class AsyncClient(Client):
                 job_id = " ".join([j.split(".")[0] for j in job_id])
             cmd += f" -x {job_id}"
             result = await self.call(cmd)
-            return self._process_status_result(
-                result, parse=parse, full=full, as_df=as_df
-            )
+            return self._process_status_result(result, parse=parse, full=full, as_df=as_df)
         else:
             # If no jobs are specified then
             result = await self.call(cmd)
-            result1 = self._process_status_result(
-                result, parse=parse, full=full, as_df=as_df
-            )
+            result1 = self._process_status_result(result, parse=parse, full=full, as_df=as_df)
             if not with_historic:
                 return result1
             else:
                 cmd += " -x"
                 result = await self.call(cmd)
-                result2 = self._process_status_result(
-                    result, parse=parse, full=full, as_df=as_df
-                )
+                result2 = self._process_status_result(result, parse=parse, full=full, as_df=as_df)
 
                 if not parse:
                     return result1, result2
@@ -514,9 +494,7 @@ class AsyncClient(Client):
                     return result1
 
     @_ensure_connected
-    async def submit(
-        self, pbs_script, working_dir=None, remote_name="run.pbs", local_temp_dir=None
-    ):
+    async def submit(self, pbs_script, working_dir=None, remote_name="run.pbs", local_temp_dir=None):
         """Submit a PBS Script.
 
         Args:
@@ -549,19 +527,13 @@ class AsyncClient(Client):
         ret = await self.put_file(pbs_script_path, working_dir / remote_name)
 
         if "success" in ret and ret["success"] == "false":
-            raise RuntimeError(
-                "An exception occurred while submitting job script: {}".format(
-                    ret["error"]
-                )
-            )
+            raise RuntimeError("An exception occurred while submitting job script: {}".format(ret["error"]))
 
         # Submit the script using call() with qsub command
         try:
             job_id = await self.call(f"qsub {remote_name}", working_dir=working_dir)
         except RuntimeError as e:
-            raise RuntimeError(
-                "An exception occurred while submitting job script: {}".format(str(e))
-            )
+            raise RuntimeError("An exception occurred while submitting job script: {}".format(str(e)))
 
         # Clean up (remove temp files)
         os.remove(pbs_script_path)
@@ -580,9 +552,7 @@ class AsyncClient(Client):
 
     @_ensure_connected
     async def get_available_modules(self, flatten=False):
-        return self._process_get_available_modules_output(
-            await self.call("module avail"), flatten
-        )
+        return self._process_get_available_modules_output(await self.call("module avail"), flatten)
 
     @_ensure_connected
     async def get_loaded_modules(self):

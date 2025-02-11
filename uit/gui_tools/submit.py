@@ -22,16 +22,12 @@ class PbsScriptInputs(HpcBase):
     workdir = param.String(default="", precedence=4)
     node_type = param.Selector(default="", objects=[], label="Node Type", precedence=5)
     nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1)
-    processes_per_node = param.Selector(
-        default=1, objects=[], label="Processes per Node", precedence=5.2
-    )
+    processes_per_node = param.Selector(default=1, objects=[], label="Processes per Node", precedence=5.2)
     wall_time = param.String(default="01:00:00", label="Wall Time", precedence=6)
     wall_time_alert = pn.pane.Alert(visible=False)
     node_alert = pn.pane.Alert(visible=False)
     queue = param.Selector(default=QUEUES[0], objects=QUEUES, precedence=7)
-    max_wall_time = param.String(
-        default="Not Found", label="Max Wall Time", precedence=7.1
-    )
+    max_wall_time = param.String(default="Not Found", label="Max Wall Time", precedence=7.1)
     max_nodes = param.String(default="Not Found", label="Max Processes", precedence=7.2)
     submit_script_filename = param.String(default="run.pbs", precedence=8)
     notification_email = param.String(label="Notification E-mail(s)", precedence=9)
@@ -54,18 +50,14 @@ class PbsScriptInputs(HpcBase):
 
         queues_stats = await self.await_if_async(self.uit_client.get_raw_queue_stats())
 
-        self.subproject_usage = await self.await_if_async(
-            self.uit_client.show_usage(as_df=True)
-        )
+        self.subproject_usage = await self.await_if_async(self.uit_client.show_usage(as_df=True))
         subprojects = self.subproject_usage["Subproject"].to_list()
         self.param.hpc_subproject.objects = subprojects
         self.hpc_subproject = self.get_default(self.hpc_subproject, subprojects)
         self.workdir = self.uit_client.WORKDIR.as_posix()
         self.param.node_type.objects = list(NODE_TYPES[self.uit_client.system].keys())
         self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
-        self.param.queue.objects = await self.await_if_async(
-            self.uit_client.get_queues()
-        )
+        self.param.queue.objects = await self.await_if_async(self.uit_client.get_queues())
         self.queue = self.get_default(self.queue, self.param.queue.objects)
         self.node_maxes = await self.await_if_async(
             self.uit_client.get_node_maxes(self.param.queue.objects, queues_stats)
@@ -108,9 +100,7 @@ class PbsScriptInputs(HpcBase):
             )
         elif re.fullmatch(wall_time_pattern, self.max_wall_time) is None:
             self.set_wall_time_alert(False)
-        elif int(self.wall_time.replace(":", "")) > int(
-            self.max_wall_time.replace(":", "")
-        ):
+        elif int(self.wall_time.replace(":", "")) > int(self.max_wall_time.replace(":", "")):
             self.set_wall_time_alert(
                 True,
                 alert_type="warning",
@@ -141,9 +131,7 @@ class PbsScriptInputs(HpcBase):
 
     @param.depends("node_type", watch=True)
     def update_processes_per_node(self):
-        self.param.processes_per_node.objects = factors(
-            NODE_TYPES[self.uit_client.system][self.node_type]
-        )
+        self.param.processes_per_node.objects = factors(NODE_TYPES[self.uit_client.system][self.node_type])
         self.processes_per_node = self.param.processes_per_node.objects[-1]
 
     def add_email_directives(self, pbs_script):
@@ -195,9 +183,7 @@ class PbsScriptInputs(HpcBase):
                 ),
             ),
             pn.layout.WidgetBox(
-                pn.widgets.TextInput.from_param(
-                    self.param.notification_email, placeholder="john.doe@example.com"
-                ),
+                pn.widgets.TextInput.from_param(self.param.notification_email, placeholder="john.doe@example.com"),
                 pn.pane.HTML('<label class"bk">Send e-mail notifications:</label>'),
                 pn.widgets.Checkbox.from_param(self.param.notify_start, width=150),
                 pn.widgets.Checkbox.from_param(self.param.notify_end, width=150),
@@ -212,13 +198,9 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
     env_browsers = param.List()
     env_delete_buttons = param.List()
     file_browser = param.ClassSelector(class_=HpcFileBrowser)
-    file_browser_col = param.ClassSelector(
-        class_=pn.Column, default=pn.Column(None, sizing_mode="stretch_width")
-    )
+    file_browser_col = param.ClassSelector(class_=pn.Column, default=pn.Column(None, sizing_mode="stretch_width"))
     apply_file_browser = param.Action(label="Apply")
-    close_file_browser = param.Action(
-        lambda self: self.show_file_browser(False), label="Close"
-    )
+    close_file_browser = param.Action(lambda self: self.show_file_browser(False), label="Close")
     append_path = param.Boolean(label="Append to Path")
 
     @param.depends("uit_client", watch=True)
@@ -259,9 +241,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         key = self.env_names[i].value
         if widget_type == "key":
             if i > -1:
-                self.environment_variables[event.new] = self.environment_variables[
-                    event.old
-                ]
+                self.environment_variables[event.new] = self.environment_variables[event.old]
                 del self.environment_variables[event.old]
             else:
                 self.environment_variables[event.new] = None
@@ -278,16 +258,12 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         return widget
 
     def env_file_browser_widget(self, tag, **kwargs):
-        widget = pn.widgets.Button(
-            name="📂", css_classes=[tag], width=40, align="end", **kwargs
-        )
+        widget = pn.widgets.Button(name="📂", css_classes=[tag], width=40, align="end", **kwargs)
         widget.on_click(self.toggle_file_browser)
         return widget
 
     def env_delete_btn(self, tag):
-        btn = pn.widgets.Button(
-            name="X", css_classes=[tag], width=35, align="end", button_type="danger"
-        )
+        btn = pn.widgets.Button(name="X", css_classes=[tag], width=35, align="end", button_type="danger")
         btn.on_click(self.update_environ)
         btn.js_on_click(args={"btn": btn}, code=get_js_loading_code("btn"))
         return btn
@@ -323,9 +299,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
             self.env_browsers.append(browser_widget)
             self.env_delete_buttons.append(delete_btn)
 
-        new_key_wg = self.env_var_widget(
-            val=None, tag="env_key_-1", placeholder="NEW_ENV_VAR"
-        )
+        new_key_wg = self.env_var_widget(val=None, tag="env_key_-1", placeholder="NEW_ENV_VAR")
         new_val_wg = self.env_var_widget(val=None, tag="env_val_-1", disabled=True)
         new_key_wg.jscallback(
             args={"val": new_val_wg},
@@ -358,13 +332,9 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
             self.environment_variables_view,
             pn.Card(
                 "<h3>Modules to Load</h3>",
-                pn.widgets.CrossSelector.from_param(
-                    self.param.modules_to_load, width=700
-                ),
+                pn.widgets.CrossSelector.from_param(self.param.modules_to_load, width=700),
                 "<h3>Modules to Unload</h3>",
-                pn.widgets.CrossSelector.from_param(
-                    self.param.modules_to_unload, width=700
-                ),
+                pn.widgets.CrossSelector.from_param(self.param.modules_to_unload, width=700),
                 title="Modules",
                 sizing_mode="stretch_width",
                 collapsed=True,
@@ -387,18 +357,12 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
         constant=True,
         precedence=10,
     )
-    cancel_btn = param.Action(
-        lambda self: self.param.trigger("cancel_btn"), label="Cancel", precedence=10
-    )
-    previous_btn = param.Action(
-        lambda self: self._previous(), label="Previous", precedence=10
-    )
+    cancel_btn = param.Action(lambda self: self.param.trigger("cancel_btn"), label="Cancel", precedence=10)
+    previous_btn = param.Action(lambda self: self._previous(), label="Previous", precedence=10)
     disable_validation = param.Boolean(label="Override Validation")
     validated = param.Boolean()
     job_name = param.String(label="Job Name (Required, cannot contain spaces or tabs)")
-    error_messages = param.ClassSelector(
-        class_=pn.Column, default=pn.Column(sizing_mode="stretch_width")
-    )
+    error_messages = param.ClassSelector(class_=pn.Column, default=pn.Column(sizing_mode="stretch_width"))
     _job = param.ClassSelector(class_=PbsJob, default=None)
     ready = param.Boolean(default=False, precedence=-1)
     next_stage = param.Selector()
@@ -423,9 +387,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     async def submit(self):
         if self.job:
             if not self.job.job_id:
-                self.job.script = (
-                    self.pbs_script
-                )  # update script to ensure it reflects any UI updates
+                self.job.script = self.pbs_script  # update script to ensure it reflects any UI updates
                 await self.await_if_async(self.job.submit())
             return [self.job]
 
@@ -531,9 +493,9 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 )
             )
         errors_exist = len(self.error_messages) > 0
-        self.param.submit_btn.constant = self.param.validate_btn.constant = (
-            self.param.disable_validation.constant
-        ) = errors_exist
+        self.param.submit_btn.constant = self.param.validate_btn.constant = self.param.disable_validation.constant = (
+            errors_exist
+        )
         self.param.trigger("disable_validation")  # get buttons to reload
 
     @param.depends("disable_validation", "validated")
@@ -545,17 +507,11 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
             button = "validate_btn"
             button_type = "primary"
 
-        action_btn = pn.widgets.Button.from_param(
-            self.param[button], button_type=button_type, width=200
-        )
-        cancel_btn = pn.widgets.Button.from_param(
-            self.param.cancel_btn, button_type="danger", width=200
-        )
+        action_btn = pn.widgets.Button.from_param(self.param[button], button_type=button_type, width=200)
+        cancel_btn = pn.widgets.Button.from_param(self.param.cancel_btn, button_type="danger", width=200)
 
         code = f"{get_js_loading_code('btn')} other_btn.disabled=true;"  # noqa
-        action_btn.js_on_click(
-            args={"btn": action_btn, "other_btn": cancel_btn}, code=code
-        )
+        action_btn.js_on_click(args={"btn": action_btn, "other_btn": cancel_btn}, code=code)
         cancel_btn.js_on_click(
             args={"other_btn": action_btn, "btn": cancel_btn},
             code=code,
@@ -579,9 +535,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def panel(self):
         return pn.Column(
             "# Submit Job",
-            pn.widgets.Button.from_param(
-                self.param.previous_btn, button_type="primary", width=100
-            ),
+            pn.widgets.Button.from_param(self.param.previous_btn, button_type="primary", width=100),
             pn.layout.Tabs(
                 self.submit_view(),
                 self.pbs_options_view(),

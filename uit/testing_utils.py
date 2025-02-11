@@ -38,8 +38,7 @@ class MockClient(Client):
         self._systems = [sys.lower() for sys in self._userinfo["SYSTEMS"].keys()]
         self._login_nodes = {
             system: [
-                node["HOSTNAME"].split(".")[0]
-                for node in self._userinfo["SYSTEMS"][system.upper()]["LOGIN_NODES"]
+                node["HOSTNAME"].split(".")[0] for node in self._userinfo["SYSTEMS"][system.upper()]["LOGIN_NODES"]
             ]
             for system in self._systems
         }
@@ -51,9 +50,7 @@ class MockClient(Client):
             ]
             for system in self._systems
         ]
-        self._uit_urls = {
-            k: v for _list in self._uit_urls for d in _list for k, v in d.items()
-        }  # noqa: E741
+        self._uit_urls = {k: v for _list in self._uit_urls for d in _list for k, v in d.items()}  # noqa: E741
 
     def connect(self, system, **kwargs):
         self._system = system
@@ -79,9 +76,7 @@ class MockClient(Client):
     def call(self, command, *args, full_response=False, working_dir=None, **kwargs):
         cmd_args = command.split()
         try:
-            completed_process = run(
-                command, capture_output=True, cwd=working_dir, shell=True
-            )
+            completed_process = run(command, capture_output=True, cwd=working_dir, shell=True)
             stdout = completed_process.stdout.decode("utf-8")
             stderr = completed_process.stderr.decode("utf-8")
             if full_response:
@@ -109,9 +104,7 @@ class MockClient(Client):
         p = Path(path)
         try:
             dirs = [{"name": x.name, "path": str(x)} for x in p.iterdir() if x.is_dir()]
-            files = [
-                {"name": x.name, "path": str(x)} for x in p.iterdir() if x.is_file()
-            ]
+            files = [{"name": x.name, "path": str(x)} for x in p.iterdir() if x.is_file()]
             return {"dirs": dirs, "files": files}
         except NotADirectoryError:
             return {"success": "false", "error": "File supplied is not a directory."}
