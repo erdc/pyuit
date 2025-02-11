@@ -198,13 +198,19 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
     env_browsers = param.List()
     env_delete_buttons = param.List()
     file_browser = param.ClassSelector(class_=HpcFileBrowser)
-    file_browser_col = param.ClassSelector(class_=pn.Column, default=pn.Column(None, sizing_mode="stretch_width"))
+    file_browser_wb = param.ClassSelector(class_=pn.layout.WidgetBox)
     apply_file_browser = param.Action(label="Apply")
     close_file_browser = param.Action(lambda self: self.show_file_browser(False), label="Close")
     append_path = param.Boolean(label="Append to Path")
 
     def __init__(self, **params):
         super().__init__(**params)
+        self.environment_variables_card = pn.Card(
+            title="Environment Variables",
+            sizing_mode="stretch_width",
+            margin=(10, 0),
+        )
+        self.update_environment_variables_col()
         self.file_browser_wb = pn.WidgetBox(
             self.file_browser,
             pn.Row(
@@ -231,7 +237,7 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
             self.file_browser_wb[0] = self.file_browser
 
     def show_file_browser(self, show):
-        self.file_browser_col[0] = self.file_browser_wb if show else None
+        self.environment_variables_card[-1] = self.file_browser_wb if show else None
         if not show:
             for btn in self.env_browsers:
                 btn.loading = False
@@ -282,8 +288,8 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         else:
             self.env_values[index].value = self.file_browser.value[0]
 
-    @param.depends("environment_variables")
-    def environment_variables_view(self):
+    @param.depends("environment_variables", watch=True)
+    def update_environment_variables_col(self):
         self.environment_variables.pop("", None)  # Clear blank key if there is one
         self.env_names = list()
         self.env_values = list()
@@ -312,25 +318,20 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
         self.env_names[0].name = "Name"
         self.env_values[0].name = "Value"
 
-        return pn.Card(
-            *[
-                pn.Row(k, v, b, d, sizing_mode="stretch_width")
-                for k, v, b, d in zip_longest(
-                    self.env_names,
-                    self.env_values,
-                    self.env_browsers,
-                    self.env_delete_buttons,
-                )
-            ],
-            self.file_browser_col,
-            title="Environment Variables",
-            sizing_mode="stretch_width",
-            margin=(10, 0),
-        )
+        self.environment_variables_card[:] = [
+            pn.Row(k, v, b, d, sizing_mode="stretch_width")
+            for k, v, b, d in zip_longest(
+                self.env_names,
+                self.env_values,
+                self.env_browsers,
+                self.env_delete_buttons,
+            )
+        ]
+        self.environment_variables_card.append(None)
 
     def advanced_options_view(self):
         return pn.Column(
-            self.environment_variables_view,
+            self.environment_variables_card,
             pn.Card(
                 "<h3>Modules to Load</h3>",
                 pn.widgets.CrossSelector.from_param(self.param.modules_to_load, width=700),
