@@ -683,6 +683,13 @@ class AsyncHpcFileBrowser(HpcFileBrowser):
         self.do_callback()
 
 
+def create_file_browser(uit_client, **kwargs):
+    if isinstance(uit_client, AsyncClient):
+        return AsyncHpcFileBrowser(uit_client, **kwargs)
+    if isinstance(self.uit_client, Client):
+        return HpcFileBrowser(uit_client, **kwargs)
+
+
 class FileSelector(Viewer):
     file_path = param.String(default="")
     show_browser = param.Boolean(default=False)

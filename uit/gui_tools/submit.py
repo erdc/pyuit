@@ -7,7 +7,7 @@ from bokeh.models import NumberFormatter
 import param
 import panel as pn
 
-from .file_browser import HpcFileBrowser, get_js_loading_code
+from .file_browser import HpcFileBrowser, create_file_browser, get_js_loading_code
 from .utils import HpcBase, HpcConfigurable
 from ..uit import QUEUES
 from ..pbs_script import NODE_TYPES, factors, PbsScript
@@ -203,34 +203,35 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
     close_file_browser = param.Action(lambda self: self.show_file_browser(False), label="Close")
     append_path = param.Boolean(label="Append to Path")
 
-    @param.depends("uit_client", watch=True)
-    def configure_file_browser(self):
-        self.file_browser = None  # HpcFileBrowser(self.uit_client) #TODO
-
-    def show_file_browser(self, show):
-        self.file_browser_col[0] = (
-            pn.WidgetBox(
-                self.file_browser.panel,
-                pn.Row(
-                    pn.widgets.Checkbox.from_param(self.param.append_path, width=100),
-                    pn.widgets.Button.from_param(
-                        self.param.apply_file_browser,
-                        button_type="success",
-                        width=100,
-                    ),
-                    pn.widgets.Button.from_param(
-                        self.param.close_file_browser,
-                        button_type="primary",
-                        width=100,
-                    ),
-                    align="end",
+    def __init__(self, **params):
+        super().__init__(**params)
+        self.file_browser_wb = pn.WidgetBox(
+            self.file_browser,
+            pn.Row(
+                pn.widgets.Checkbox.from_param(self.param.append_path, width=100),
+                pn.widgets.Button.from_param(
+                    self.param.apply_file_browser,
+                    button_type="success",
+                    width=100,
                 ),
-                sizing_mode="stretch_width",
-            )
-            if show
-            else None
+                pn.widgets.Button.from_param(
+                    self.param.close_file_browser,
+                    button_type="primary",
+                    width=100,
+                ),
+                align="end",
+            ),
+            sizing_mode="stretch_width",
         )
 
+    @param.depends("uit_client", watch=True)
+    def configure_file_browser(self):
+        self.file_browser = create_file_browser(self.uit_client)
+        if self.file_browser_wb:
+            self.file_browser_wb[0] = self.file_browser
+
+    def show_file_browser(self, show):
+        self.file_browser_col[0] = self.file_browser_wb if show else None
         if not show:
             for btn in self.env_browsers:
                 btn.loading = False
