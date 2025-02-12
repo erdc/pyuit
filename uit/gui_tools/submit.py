@@ -4,33 +4,36 @@ from functools import partial
 from itertools import zip_longest
 
 from bokeh.models import NumberFormatter
+from bokeh.models.widgets.tables import SelectEditor
 import param
 import panel as pn
 
-from .file_browser import HpcFileBrowser, create_file_browser, get_js_loading_code
+from .file_browser import HpcFileBrowser, create_file_browser, get_js_loading_code,FileSelector
 from .utils import HpcBase, HpcConfigurable
 from ..uit import QUEUES
 from ..pbs_script import NODE_TYPES, factors, PbsScript
 from ..job import PbsJob
 
+
+
 logger = logging.getLogger(__name__)
 
 
 class PbsScriptInputs(HpcBase):
-    hpc_subproject = param.Selector(default=None, label="HPC Subproject", precedence=3)
-    subproject_usage = param.DataFrame(precedence=3.1)
-    workdir = param.String(default="", precedence=4)
-    node_type = param.Selector(default="", objects=[], label="Node Type", precedence=5)
-    nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1)
-    processes_per_node = param.Selector(default=1, objects=[], label="Processes per Node", precedence=5.2)
-    wall_time = param.String(default="01:00:00", label="Wall Time", precedence=6)
+    hpc_subproject = param.Selector(default=None, label="HPC Subproject", precedence=3, doc='Allocation to charge for this job')
+    subproject_usage = param.DataFrame(precedence=3.1,doc='Information about this allocation')
+    #workdir = param.String(default="", precedence=4,doc='Base directory for full experiment')
+    node_type = param.Selector(default="", objects=[], label="Node Type", precedence=5, doc='Type of node on which job will be run.')
+    nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1,doc='Nodes to request per each sub-job.')
+    processes_per_node = param.Selector(default=1, objects=[], label="Processes per Node", precedence=5.2,doc='Processors per node to use.')
+    wall_time = param.String(default="01:00:00", label="Wall Time", precedence=6, doc='Walltime to request for each sub-job.')
     wall_time_alert = pn.pane.Alert(visible=False)
     node_alert = pn.pane.Alert(visible=False)
-    queue = param.Selector(default=QUEUES[0], objects=QUEUES, precedence=7)
+    queue = param.Selector(default=QUEUES[0], objects=QUEUES, precedence=7, doc='Scheduling queue to use for this job.')
     max_wall_time = param.String(default="Not Found", label="Max Wall Time", precedence=7.1)
     max_nodes = param.String(default="Not Found", label="Max Processes", precedence=7.2)
     submit_script_filename = param.String(default="run.pbs", precedence=8)
-    notification_email = param.String(label="Notification E-mail(s)", precedence=9)
+    notification_email = param.String(label="Notification E-mail(s)", precedence=9,doc='Set up email notification(s) for job start and/or finish.')
     notify_start = param.Boolean(default=True, label="when job begins", precedence=9.1)
     notify_end = param.Boolean(default=True, label="when job ends", precedence=9.2)
 
@@ -38,6 +41,20 @@ class PbsScriptInputs(HpcBase):
     DEFAULT_PROCESSES_PER_JOB = 500
     wall_time_maxes = None
     node_maxes = None
+
+
+    def __init__(self, **params):
+        super().__init__(**params)
+        self.workdir = FileSelector(
+            title = 'Working Directory',
+            help_text='Base directory for full experiment',
+            show_browser=False
+        )
+
+
+    @param.depends ('uit_client',watch=True)
+    def set_file_browser(self):
+        self.workdir.file_browser = create_file_browser(self.uit_client, patterns=[])
 
     @staticmethod
     def get_default(value, objects):
@@ -54,7 +71,7 @@ class PbsScriptInputs(HpcBase):
         subprojects = self.subproject_usage["Subproject"].to_list()
         self.param.hpc_subproject.objects = subprojects
         self.hpc_subproject = self.get_default(self.hpc_subproject, subprojects)
-        self.workdir = self.uit_client.WORKDIR.as_posix()
+        self.workdir.file_path = self.uit_client.WORKDIR.as_posix()
         self.param.node_type.objects = list(NODE_TYPES[self.uit_client.system].keys())
         self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
         self.param.queue.objects = await self.await_if_async(self.uit_client.get_queues())
@@ -169,7 +186,7 @@ class PbsScriptInputs(HpcBase):
             ),
             pn.Column(
                 self.param.hpc_subproject,
-                self.param.workdir,
+                self.workdir,
                 self.param.node_type,
                 pn.widgets.Spinner.from_param(self.param.nodes),
                 self.param.processes_per_node,
@@ -470,6 +487,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 script=self.pbs_script,
                 client=self.uit_client,
                 workspace=self.user_workspace,
+                working_dir=self.workdir.file_path,
             )
         return self._job
 

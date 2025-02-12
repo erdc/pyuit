@@ -705,7 +705,7 @@ class FileSelector(Viewer):
         self.file_browser = self.file_browser or FileBrowser(delayed_init=True)
         self.update_file(True)
         self.disabled = disabled
-        # self.param.file_path.label = self.title
+        self.param.file_path.label = self.title
         self._layout = pn.Column(
             self.input_row,
             pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
