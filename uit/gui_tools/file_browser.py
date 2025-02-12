@@ -183,10 +183,12 @@ class FileBrowser(Viewer):
 
     path = param.ClassSelector(class_=Path, precedence=-1)
     path_text = param.String(label="", precedence=0.3)
-    home = param.Action(lambda self: self.go_home(), label="🏠", precedence=0.1)
-    up = param.Action(lambda self: self.move_up(), label="⬆️", precedence=0.2)
+    home = param.Action(lambda self: self.go_home(), label="🏠", doc="Home", precedence=0.1)
+    up = param.Action(lambda self: self.move_up(), label="⬆️", doc="Move Up", precedence=0.2)
     # refresh_controll triggers rather than calling validate directly to allow an async override of the validate method
-    refresh_control = param.Action(lambda self: self.param.trigger("refresh_control"), label="🔄", precedence=0.25)
+    refresh_control = param.Action(
+        lambda self: self.param.trigger("refresh_control"), label="🔄", doc="Refresh", precedence=0.25
+    )
     callback = param.Action(lambda x: None, precedence=-1)
     file_listing = param.ListSelector(default=[], label="Single click to select a file or directory:", precedence=0.5)
     patterns = param.List(precedence=-1, default=["*"])
@@ -591,7 +593,7 @@ class AsyncHpcPath(HpcPath):
 
 class HpcFileBrowser(FileBrowser):
     path = param.ClassSelector(class_=HpcPath)
-    workdir = param.Action(lambda self: self.go_to_workdir(), label="⚙️", precedence=0.15)
+    workdir = param.Action(lambda self: self.go_to_workdir(), label="⚙️", doc="Workdir", precedence=0.15)
     uit_client = param.ClassSelector(class_=Client)
 
     def __init__(self, uit_client, **params):
@@ -693,7 +695,7 @@ def create_file_browser(uit_client, **kwargs):
 class FileSelector(Viewer):
     file_path = param.String(default="")
     show_browser = param.Boolean(default=False)
-    browse_toggle = param.Action(lambda self: self.toggle(), label="Browse")
+    browse_toggle = param.Action(lambda self: self.toggle(), label="📂", doc="Open file browser.")
     file_browser = param.ClassSelector(class_=FileBrowser)
     title = param.String(default="File Path")
     help_text = param.String()
@@ -706,12 +708,20 @@ class FileSelector(Viewer):
         self.update_file(True)
         self.disabled = disabled
         self.param.file_path.label = self.title
+        self.param.file_path.doc = self.help_text
         self._layout = pn.Column(
             self.input_row,
-            pn.pane.HTML(f'<span style="font-style: italic;">{self.help_text}</span>'),
             self.file_browser_container,
             sizing_mode="stretch_width",
         )
+
+    @param.depends("title", watch=True)
+    def update_title(self):
+        self.param.file_path.label = self.title
+
+    @param.depends("help_text", watch=True)
+    def update_help_text(self):
+        self.param.file_path.doc = self.help_text
 
     @param.depends("disabled", watch=True)
     def update_disabled(self):
@@ -742,16 +752,16 @@ class FileSelector(Viewer):
     @param.depends("show_browser", watch=True)
     def show_hide_browser(self):
         self.file_browser_container.visible = self.show_browser
-        self.param.browse_toggle.label = "Browse"
+        self.param.browse_toggle.label = "📂"
+        self.param.browse_toggle.doc = "Open file browser"
         if self.show_browser:
             self.initialize_file_browser()
-            self.param.browse_toggle.label = "Hide"
+            self.param.browse_toggle.label = "❌"
+            self.param.browse_toggle.doc = "Close file browser"
 
     def input_row(self):
         file_path = pn.widgets.TextInput.from_param(self.param.file_path, sizing_mode="stretch_width")
-        browse_toggle = pn.widgets.Button.from_param(
-            self.param.browse_toggle, button_type="primary", width=100, align="end"
-        )
+        browse_toggle = pn.widgets.Button.from_param(self.param.browse_toggle, width=40, align="end")
 
         browse_toggle.js_on_click(
             args={"btn": browse_toggle},
