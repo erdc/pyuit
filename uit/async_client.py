@@ -283,14 +283,13 @@ class AsyncClient(Client):
         try:
             resp = await r.json()
         except aiohttp.client_exceptions.ContentTypeError as e:
-            # UIT should always return JSON, but other services may return an HTML error
             logger.error(
                 "JSON Parse Error '%s' - Status code: %s  Content: %s",
                 str(e),
                 r.status,
                 await r.text(),
             )
-            raise UITError("Upload error") from e
+            raise
 
         if full_response:
             return resp
@@ -341,6 +340,7 @@ class AsyncClient(Client):
         try:
             return await r.json()
         except aiohttp.client_exceptions.ContentTypeError as e:
+            # UIT should always return JSON, but other services may return an HTML error
             logger.error(
                 "JSON Parse Error '%s' - Status code: %s  Content: %s",
                 str(e),
