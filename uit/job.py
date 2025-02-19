@@ -51,6 +51,13 @@ class PbsJob:
         self._remote_workspace_id = None
         self._remote_workspace = None
 
+        print('In PBSJob.  Client is:')
+        print(self.client)
+        print('My working directory is:')
+        print(self._working_dir)
+        print('My ID is')
+        print(self._job_id)
+
     def __repr__(self):
         return f"<{self.__class__.__name__} name={self.name} id={self.job_id}>"
 
@@ -78,8 +85,10 @@ class PbsJob:
 
     @property
     def working_dir(self):
-        if self._working_dir is None:
+        if self._working_dir == self.client.WORKDIR:
             self._working_dir = self.client.WORKDIR / self.remote_workspace_suffix
+        elif self._working_dir.name != self.remote_workspace_suffix.name:
+            self._working_dir = self._working_dir / self.remote_workspace_suffix.name
         return self._working_dir
 
     @property
