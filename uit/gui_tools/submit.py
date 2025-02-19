@@ -485,6 +485,8 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @property
     def job(self):
+        print('setting up job.  working directory is:')
+        print(self.workdir.file_path)
         if self._job is None:
             self._job = PbsJob(
                 script=self.pbs_script,
