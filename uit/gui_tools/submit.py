@@ -52,7 +52,7 @@ class PbsScriptInputs(HpcBase):
     def __init__(self, **params):
         super().__init__(**params)
         self.workdir = FileSelector(
-            title="Working Directory", help_text="Base directory for full experiment", show_browser=False
+            title="Base Directory", help_text="Base directory for full experiment", show_browser=False
         )
 
     @param.depends("uit_client", watch=True)
@@ -485,14 +485,13 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @property
     def job(self):
-        print('setting up job.  working directory is:')
-        print(self.workdir.file_path)
+
         if self._job is None:
             self._job = PbsJob(
                 script=self.pbs_script,
                 client=self.uit_client,
                 workspace=self.user_workspace,
-                working_dir=self.workdir.file_path,
+                base_dir=self.workdir.file_path,
             )
         return self._job
 

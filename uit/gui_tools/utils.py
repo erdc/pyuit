@@ -102,15 +102,13 @@ class HpcConfigurable(HpcBase):
 
 
 class HpcWorkspaces(HpcConfigurable):
-    working_dir = param.ClassSelector(class_=PurePosixPath)
+    base_dir = param.ClassSelector(class_=PurePosixPath)
+    remote_workspace_suffix = param.ClassSelector(class_=PurePosixPath)
     _user_workspace = param.ClassSelector(class_=Path)
 
     @property
-    def remote_workspace_suffix(self):
-        try:
-            return self.working_dir.relative_to(self.uit_client.WORKDIR)
-        except ValueError:
-            return self.working_dir.relative_to("/p")
+    def working_dir(self):
+        return self.base_dir / self.remote_workspace_suffix
 
     @property
     def workspace(self):
@@ -188,7 +186,8 @@ class PbsJobTabbedViewer(HpcWorkspaces):
 
     def update_working_dir(self):
         if self.selected_job is not None:
-            self.working_dir = self.selected_job.working_dir
+            self.base_dir = self.selected_job.base_dir
+            self.remote_workspace_suffix = self.selected_job.remote_workspace_suffix
 
     @param.depends("selected_sub_job", watch=True)
     def update_active_job(self):

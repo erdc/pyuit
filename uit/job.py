@@ -26,7 +26,7 @@ class PbsJob:
         transfer_input_files=None,
         home_input_files=None,
         archive_input_files=None,
-        working_dir=None,
+        base_dir=None,
         description=None,
         metadata=None,
         post_processing_script=None,
@@ -43,20 +43,14 @@ class PbsJob:
         self.metadata = metadata or dict()
         self.label = label
         self.cleanup = False
-        self._working_dir = working_dir
+        self._base_dir = PurePosixPath(base_dir) if base_dir is not None else None
+        self._working_dir = None
         self._job_id = None
         self._status = None
         self._qstat = None
         self._post_processing_job_id = None
         self._remote_workspace_id = None
         self._remote_workspace = None
-
-        print('In PBSJob.  Client is:')
-        print(self.client)
-        print('My working directory is:')
-        print(self._working_dir)
-        print('My ID is')
-        print(self._job_id)
 
     def __repr__(self):
         return f"<{self.__class__.__name__} name={self.name} id={self.job_id}>"
@@ -84,11 +78,15 @@ class PbsJob:
         return self.script.name
 
     @property
+    def base_dir(self):
+        if self._base_dir is None:
+            self._base_dir = self.client.WORKDIR
+        return self._base_dir
+
+    @property
     def working_dir(self):
-        if self._working_dir == self.client.WORKDIR:
-            self._working_dir = self.client.WORKDIR / self.remote_workspace_suffix
-        elif self._working_dir.name != self.remote_workspace_suffix.name:
-            self._working_dir = self._working_dir / self.remote_workspace_suffix.name
+        if self._working_dir is None:
+            self._working_dir = self.base_dir / self.remote_workspace_suffix
         return self._working_dir
 
     @property
@@ -515,7 +513,7 @@ class PbsArrayJob(PbsJob):
                 parent.client,
                 parent.label,
                 parent.workspace,
-                working_dir=parent.working_dir,
+                base_dir=parent.base_dir,
             )
             self.parent = parent
             self._remote_workspace_id = self.parent._remote_workspace_id
