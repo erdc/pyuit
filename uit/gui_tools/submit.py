@@ -19,27 +19,52 @@ logger = logging.getLogger(__name__)
 
 class PbsScriptInputs(HpcBase):
     hpc_subproject = param.Selector(
-        default=None, label="HPC Subproject", precedence=3, doc="Allocation to charge for this job"
+        default=None,
+        label="HPC Subproject",
+        precedence=3,
+        doc="The resource allocation code that will be used when submitting this job.",
     )
-    subproject_usage = param.DataFrame(precedence=3.1, doc="Information about this allocation")
+    subproject_usage = param.DataFrame(precedence=3.1, doc="Usage details about your available subproject allocations.")
     node_type = param.Selector(
-        default="", objects=[], label="Node Type", precedence=5, doc="Type of node on which job will be run."
+        default="", objects=[], label="Node Type", precedence=5, doc="Type of node on which this job will be run."
     )
-    nodes = param.Integer(default=1, bounds=(1, 1000), precedence=5.1, doc="Nodes to request per each sub-job.")
+    nodes = param.Integer(
+        default=1,
+        bounds=(1, 1000),
+        precedence=5.1,
+        doc=(
+            "Number of nodes to request for the job.\n\n"
+            "**Note:** for array jobs, the number of nodes requested are available to each sub job."
+        ),
+    )
     processes_per_node = param.Selector(
-        default=1, objects=[], label="Processes per Node", precedence=5.2, doc="Processors per node to use."
+        default=1,
+        objects=[],
+        label="Processes per Node",
+        precedence=5.2,
+        doc="Number of processes per node to request for the job.",
     )
     wall_time = param.String(
-        default="01:00:00", label="Wall Time", precedence=6, doc="Walltime to request for each sub-job."
+        default="01:00:00",
+        label="Wall Time (HH:MM:SS)",
+        precedence=6,
+        doc=(
+            "Maximum allowable time for the job to run.\n\n"
+            "**Note:** for array jobs, the entire amount of wall time requested is available to each sub job."
+        ),
     )
     wall_time_alert = pn.pane.Alert(visible=False)
     node_alert = pn.pane.Alert(visible=False)
-    queue = param.Selector(default=QUEUES[0], objects=QUEUES, precedence=7, doc="Scheduling queue to use for this job.")
+    queue = param.Selector(
+        default=QUEUES[0], objects=QUEUES, precedence=7, doc="Scheduling queue to which the job will be submitted."
+    )
     max_wall_time = param.String(default="Not Found", label="Max Wall Time", precedence=7.1)
     max_nodes = param.String(default="Not Found", label="Max Processes", precedence=7.2)
     submit_script_filename = param.String(default="run.pbs", precedence=8)
     notification_email = param.String(
-        label="Notification E-mail(s)", precedence=9, doc="Set up email notification(s) for job start and/or finish."
+        label="Notification E-mail(s)",
+        precedence=9,
+        doc="E-mail address to receive notification(s) when the job starts and/or ends.",
     )
     notify_start = param.Boolean(default=True, label="when job begins", precedence=9.1)
     notify_end = param.Boolean(default=True, label="when job ends", precedence=9.2)
@@ -52,7 +77,13 @@ class PbsScriptInputs(HpcBase):
     def __init__(self, **params):
         super().__init__(**params)
         self.workdir = FileSelector(
-            title="Base Directory", help_text="Base directory for full experiment", show_browser=False
+            title="Base Directory",
+            show_browser=False,
+            help_text=(
+                "Base directory that the job's working directory path will be created in.\n\n"
+                "**Note:** by default the job's working directory is: "
+                f"`<BASE_DIRECTORY>/{PbsJob.DEFAULT_JOB_LABEL}/<JOB_NAME>.<TIMESTAMP>/`"
+            ),
         )
 
     @param.depends("uit_client", watch=True)

@@ -16,12 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 class PbsJob:
+    DEFAULT_JOB_LABEL = "pyuit"
 
     def __init__(
         self,
         script,
         client=None,
-        label="pyuit",
+        label=DEFAULT_JOB_LABEL,
         workspace=None,
         transfer_input_files=None,
         home_input_files=None,
