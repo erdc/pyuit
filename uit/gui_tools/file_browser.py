@@ -599,6 +599,7 @@ class HpcFileBrowser(FileBrowser):
     def __init__(self, uit_client, **params):
         params["uit_client"] = uit_client
         super().__init__(**params)
+        self.param.trigger("uit_client")  # for _initialize_path()
 
     @property
     def controls(self):
