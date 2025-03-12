@@ -12,6 +12,7 @@ from functools import wraps
 from itertools import chain
 from pathlib import PurePosixPath, Path
 from enum import StrEnum, auto
+from io import StringIO
 from urllib.parse import urljoin, urlencode  # noqa: F401
 
 import param
@@ -61,15 +62,14 @@ COMMANDS = {
             'username': ' -u',
             'job_id': ' -x',
         },
-        'submit': 'qsub', # might want to do these the same way as status to maintain extensibility and cohesion
+        'submit': 'qsub', 
         'delete': 'qdel',
     },
     BatchSystem.SLURM: {
-        'status': 'squeue',
-        'squeue': {
-            'full': ' -l',
+        'status': {
+            'command': 'squeue -l',
             'username': ' -u',
-            'job_id': ' -j',
+            'job_id': ' -j ',
         },
         'submit': 'sbatch',
         'delete': 'scancel',
@@ -133,8 +133,8 @@ class Client(param.Parameterized):
         self.scope = scope
         self.port = port
 
+        self.batch_system = None
         self.commands = None
-        self.options = None
 
         if self.token is not None:
             self.param.trigger("token")
@@ -342,7 +342,8 @@ class Client(param.Parameterized):
         self._username = self._userinfo["SYSTEMS"][self._system.upper()]["USERNAME"]
         self._uit_url = self._uit_urls[login_node]
         self.connected = True
-        self.commands = COMMANDS[SYSTEMS[self.system]]
+        self.batch_system = SYSTEMS[self.system]
+        self.commands = COMMANDS[self.batch_system]
 
         return login_node, retry_on_failure
 
@@ -756,7 +757,7 @@ class Client(param.Parameterized):
         if not parse:
             return result
 
-        return self._parse_hpc_output(result, as_df)
+        return self._parse_hpc_output(result, as_df, batch_system=self.batch_system)
 
     @_ensure_connected
     @robust()
@@ -774,12 +775,16 @@ class Client(param.Parameterized):
         # cmd will either be "qstat" or "squeue"
         cmd = self.commands['status']['command']
 
-        
-        if full:
-            cmd += self.commands['status']['full']
-        elif username:
-            cmd += self.commands['status']['username']
-            cmd += f' {self.username}'
+        if self.batch_system == BatchSystem.SLURM:
+            if username: 
+                cmd += self.commands['status']['username'] 
+                cmd += f' {username}'
+        else: # Assume PBS
+            if full:
+                cmd += self.commands['status']['full']
+            elif username:
+                cmd += self.commands['status']['username'] 
+                cmd += f' {username}'
 
         if job_id:
             if isinstance(job_id, (tuple, list)):
@@ -804,8 +809,9 @@ class Client(param.Parameterized):
                 result2 = self._process_status_result(
                     result, parse=parse, full=full, as_df=as_df
                 )
-
-                if not parse:
+                if self.batch_system == BatchSystem.SLURM:
+                    return pd.concat((result1, result2))
+                elif not parse:
                     return result1, result2
                 elif as_df:
                     return pd.concat((result1, result2))
@@ -871,11 +877,14 @@ class Client(param.Parameterized):
     @_ensure_connected
     def get_queues(self, update_cache=False):
         if self._queues is None or update_cache:
-            self._queues = self._process_get_queues_output(self.call("qstat -Q"))
+            if self.batch_system == BatchSystem.SLURM:
+                self._queues = self._process_get_queues_output(self.call("sacctmgr show qos format=Name%20"))
+            else:
+                self._queues = self._process_get_queues_output(self.call("qstat -Q"))
         return self._queues
 
     def _process_get_queues_output(self, output):
-        standard_queues = [] if self.system == "jim" else QUEUES
+        standard_queues = QUEUES
         other_queues = set([i.split()[0] for i in output.splitlines()][2:]) - set(
             standard_queues
         )
@@ -884,10 +893,43 @@ class Client(param.Parameterized):
 
     @_ensure_connected
     def get_raw_queue_stats(self):
-        return json.loads(self.call("qstat -Q -f -F json"))["Queue"]
+        if self.batch_system == BatchSystem.SLURM:
+            output = "id name max_walltime max_jobs max_nodes"
+            for queue in json.loads(self.call('sacctmgr show qos --json'))["QOS"]:
+                max_walltime = str(queue['limits']['max']['wall_clock']['per']['job']['number'])
+                max_jobs = str(queue['limits']['max']['jobs']['active_jobs']['per']['user']['number'])
+                max_nodes = -1
+                for max_tres in queue['limits']['max']['tres']['per']['job']:
+                    if max_tres['type'] == "node":
+                        max_nodes = max_tres['count']
+                output += f"\n{queue['id']}  {queue['name']}  {max_walltime}  {max_jobs}  {max_nodes}"
+            return self._parse_slurm_output(output)
+            
+        else:
+            return json.loads(self.call("qstat -Q -f -F json"))["Queue"]
 
     @_ensure_connected
     def get_node_maxes(self, queues, queues_stats):
+        if self.batch_system == BatchSystem.SLURM:
+            return self._slurm_node_maxes(queues, queues_stats)
+
+        else:
+            return self._pbs_node_maxes(queues, queues_stats)
+
+    def _slurm_node_maxes(self, queues, queues_stats):
+        ncpus_maxes = dict()
+
+        for q in queues:
+            max_nodes = str(queues_stats.loc[queues_stats['name'] == f'{q.lower()}', 'max_nodes'].iloc[0])
+            ncpus_maxes[q] = (
+                max_nodes
+                if max_nodes != "-1"
+                else "Not Found"
+            )
+        
+        return ncpus_maxes
+
+    def _pbs_node_maxes(self, queues, queues_stats):
         q_sts = {q: queues_stats[q] for q in queues if q in queues_stats.keys()}
 
         ncpus_maxes = dict()
@@ -902,6 +944,23 @@ class Client(param.Parameterized):
 
     @_ensure_connected
     def get_wall_time_maxes(self, queues, queues_stats):
+        if self.batch_system == BatchSystem.SLURM:
+            return self._slurm_wall_time_maxes(queues, queues_stats)
+        else:
+            return self._pbs_wall_time_maxes(queues, queues_stats)
+
+    def _slurm_wall_time_maxes(self, queues, queues_stats):
+        wall_time_maxes = dict()
+
+        for q in queues:
+            max_walltimes = str(queues_stats.loc[queues_stats['name'] == f'{q.lower()}', 'max_walltime'].iloc[0])
+            wall_time_maxes[q] = (
+                max_walltimes
+            )
+        
+        return wall_time_maxes
+
+    def _pbs_wall_time_maxes(self, queues, queues_stats):
         q_sts = {q: queues_stats[q] for q in queues if q in queues_stats.keys()}
 
         wall_time_maxes = dict()
@@ -945,30 +1004,39 @@ class Client(param.Parameterized):
         if not parse:
             return result
 
-        if full:
-            result = self._parse_full_status(result)
-            if as_df:
-                return self._as_df(result).T
-            else:
-                return result
+        if self.batch_system == BatchSystem.SLURM:
+            # Trimming the top of result so that read_tables works properly
+            result = result.split('\n', 1)[1]
+            return self._parse_slurm_output(
+                result=result
+            )
+        else:
+            if full:
+                result = self._parse_full_status(result)
+                if as_df:
+                    return self._as_df(result).T
+                else:
+                    return result
 
-        columns = (
-            "job_id",
-            "username",
-            "queue",
-            "jobname",
-            "session_id",
-            "nds",
-            "tsk",
-            "requested_memory",
-            "requested_time",
-            "status",
-            "elapsed_time",
-        )
+            columns = (
+                "job_id",
+                "username",
+                "queue",
+                "jobname",
+                "session_id",
+                "nds",
+                "tsk",
+                "requested_memory",
+                "requested_time",
+                "status",
+                "elapsed_time",
+            )
 
-        return self._parse_hpc_output(
-            result, as_df, columns=columns, delimiter_char="-"
-        )
+            return self._parse_hpc_output(result, as_df, columns=columns, delimiter_char="-")
+
+    @staticmethod
+    def _parse_slurm_output(result):
+        return pd.read_table(StringIO(result), delim_whitespace=True)
 
     @staticmethod
     def _parse_full_status(status_str):
@@ -1037,6 +1105,7 @@ class Client(param.Parameterized):
         delimiter_char="=",
         num_header_lines=3,
     ):
+
         if output:
             delimiter = delimiter or cls._parse_hpc_delimiter(
                 output, delimiter_char=delimiter_char
