@@ -47,7 +47,7 @@ _server = None
 
 
 class BatchSystem(StrEnum):
-    
+
     PBS = auto()
     SLURM = auto()
 
