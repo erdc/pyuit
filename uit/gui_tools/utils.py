@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def make_bk_label(label):
-    return pn.pane.HTML(
-        f'<div class="bk bk-input-group"><label class="bk">{label}</label></div>'
-    )
+    return pn.pane.HTML(f'<div class="bk bk-input-group"><label class="bk">{label}</label></div>')
 
 
 async def await_if_async(result):
@@ -54,32 +52,20 @@ class HpcConfigurable(HpcBase):
             return
 
         self.load_config_file(reset=reset)
-        self.param.modules_to_unload.objects = sorted(
-            await self.await_if_async(self.uit_client.get_loaded_modules())
-        )
+        self.param.modules_to_unload.objects = sorted(await self.await_if_async(self.uit_client.get_loaded_modules()))
         self.param.modules_to_load.objects = await self._get_modules_available_to_load()
-        self.modules_to_load = self._validate_modules(
-            self.param.modules_to_load.objects, self.modules_to_load
-        )
-        self.modules_to_unload = self._validate_modules(
-            self.param.modules_to_unload.objects, self.modules_to_unload
-        )
+        self.modules_to_load = self._validate_modules(self.param.modules_to_load.objects, self.modules_to_load)
+        self.modules_to_unload = self._validate_modules(self.param.modules_to_unload.objects, self.modules_to_unload)
 
     async def _get_modules_available_to_load(self):
-        modules = set(
-            await self.await_if_async(
-                self.uit_client.get_available_modules(flatten=True)
-            )
-        ) - set(self.param.modules_to_unload.objects)
+        modules = set(await self.await_if_async(self.uit_client.get_available_modules(flatten=True))) - set(
+            self.param.modules_to_unload.objects
+        )
         return sorted(modules)
 
     def _validate_modules(self, possible, candidates):
-        df = pd.DataFrame(
-            [v.split("/", 1) for v in possible], columns=["Name", "Version"]
-        )
-        df["Default"] = df["Version"].apply(
-            lambda v: True if v is None else v.endswith("(default)")
-        )
+        df = pd.DataFrame([v.split("/", 1) for v in possible], columns=["Name", "Version"])
+        df["Default"] = df["Version"].apply(lambda v: True if v is None else v.endswith("(default)"))
         dfg = df.groupby("Name")
 
         modules = list()
@@ -108,9 +94,7 @@ class HpcConfigurable(HpcBase):
                 self.modules_to_load = self.modules_to_load or modules.get("load")
                 self.modules_to_unload = self.modules_to_unload or modules.get("unload")
             if reset:
-                self.environment_variables = OrderedDict(
-                    config.get("environment_variables")
-                )
+                self.environment_variables = OrderedDict(config.get("environment_variables"))
             else:
                 self.environment_variables = self.environment_variables or OrderedDict(
                     config.get("environment_variables")
@@ -118,15 +102,13 @@ class HpcConfigurable(HpcBase):
 
 
 class HpcWorkspaces(HpcConfigurable):
-    working_dir = param.ClassSelector(class_=PurePosixPath)
+    base_dir = param.ClassSelector(class_=PurePosixPath)
+    remote_workspace_suffix = param.ClassSelector(class_=PurePosixPath)
     _user_workspace = param.ClassSelector(class_=Path)
 
     @property
-    def remote_workspace_suffix(self):
-        try:
-            return self.working_dir.relative_to(self.uit_client.WORKDIR)
-        except ValueError:
-            return self.working_dir.relative_to("/p")
+    def working_dir(self):
+        return self.base_dir / self.remote_workspace_suffix
 
     @property
     def workspace(self):
@@ -153,9 +135,7 @@ class PbsJobTabbedViewer(HpcWorkspaces):
 
     def __init__(self, **params):
         super().__init__(**params)
-        self.status_tab = StatusTab(
-            parent=self, disable_update=self.disable_status_update
-        )
+        self.status_tab = StatusTab(parent=self, disable_update=self.disable_status_update)
         self.logs_tab = LogsTab(parent=self, custom_logs=self.custom_logs)
         self.files_tab = FileViewerTab(parent=self)
         self.tabs = self.default_tabs = [
@@ -206,7 +186,8 @@ class PbsJobTabbedViewer(HpcWorkspaces):
 
     def update_working_dir(self):
         if self.selected_job is not None:
-            self.working_dir = self.selected_job.working_dir
+            self.base_dir = self.selected_job.base_dir
+            self.remote_workspace_suffix = self.selected_job.remote_workspace_suffix
 
     @param.depends("selected_sub_job", watch=True)
     def update_active_job(self):
@@ -313,18 +294,12 @@ class LogsTab(TabView):
         job = self.active_job
         if job is not None and self.log is not None:
             if self.log == "stdout":
-                log_content = await self.await_if_async(
-                    job.get_stdout_log(bytes=100_000, start_from=-100_000)
-                )
+                log_content = await self.await_if_async(job.get_stdout_log(bytes=100_000, start_from=-100_000))
             elif self.log == "stderr":
-                log_content = await self.await_if_async(
-                    job.get_stderr_log(bytes=100_000, start_from=-100_000)
-                )
+                log_content = await self.await_if_async(job.get_stderr_log(bytes=100_000, start_from=-100_000))
             else:
                 try:
-                    log_content = await self.await_if_async(
-                        job.get_custom_log(self.log, num_lines=self.num_log_lines)
-                    )
+                    log_content = await self.await_if_async(job.get_custom_log(self.log, num_lines=self.num_log_lines))
                 except RuntimeError as e:
                     logger.exception(e)
             if self.log_content == log_content:
@@ -342,17 +317,13 @@ class LogsTab(TabView):
             min_height=500,
         )
 
-        refresh_btn = pn.widgets.Button.from_param(
-            self.param.refresh_btn, button_type="primary", width=100
-        )
+        refresh_btn = pn.widgets.Button.from_param(self.param.refresh_btn, button_type="primary", width=100)
         args = {"log": log_content, "btn": refresh_btn}
         code = f"{get_js_loading_code('btn')} {get_js_loading_code('log')}"
         refresh_btn.js_on_click(args=args, code=code)
 
         if self.is_array:
-            sub_job_selector = pn.widgets.Select.from_param(
-                self.parent.param.selected_sub_job, width=300
-            )
+            sub_job_selector = pn.widgets.Select.from_param(self.parent.param.selected_sub_job, width=300)
             sub_job_selector.jscallback(args=args, value=code)
         else:
             sub_job_selector = None
@@ -392,7 +363,6 @@ class FileViewerTab(TabView):
             self.file_viewer.uit_client = self.uit_client
             self.file_viewer.file_select.file_path = file_path
 
-
     @param.depends("parent.selected_job", watch=True)
     def update_file_path(self):
         if self.file_viewer:
@@ -405,13 +375,9 @@ class FileViewerTab(TabView):
 class StatusTab(TabView):
     title = param.String(default="Status")
     statuses = param.DataFrame(precedence=0.1)
-    update_status = param.Action(
-        lambda self: self.param.trigger("update_status"), precedence=0.2
-    )
+    update_status = param.Action(lambda self: self.param.trigger("update_status"), precedence=0.2)
     terminate_btn = param.Action(lambda self: None, label="Terminate", precedence=0.3)
-    yes_btn = param.Action(
-        lambda self: self.param.trigger("yes_btn"), label="Yes", precedence=0.4
-    )
+    yes_btn = param.Action(lambda self: self.param.trigger("yes_btn"), label="Yes", precedence=0.4)
     cancel_btn = param.Action(lambda self: None, label="Cancel", precedence=0.5)
     disable_update = param.Boolean()
 
@@ -486,18 +452,10 @@ class StatusTab(TabView):
         if self.disable_update:
             buttons = None
         else:
-            update_btn = pn.widgets.Button.from_param(
-                self.param.update_status, button_type="primary", width=100
-            )
-            terminate_btn = pn.widgets.Button.from_param(
-                self.param.terminate_btn, button_type="danger", width=100
-            )
-            yes_btn = pn.widgets.Button.from_param(
-                self.param.yes_btn, button_type="danger", width=100
-            )
-            cancel_btn = pn.widgets.Button.from_param(
-                self.param.cancel_btn, button_type="success", width=100
-            )
+            update_btn = pn.widgets.Button.from_param(self.param.update_status, button_type="primary", width=100)
+            terminate_btn = pn.widgets.Button.from_param(self.param.terminate_btn, button_type="danger", width=100)
+            yes_btn = pn.widgets.Button.from_param(self.param.yes_btn, button_type="danger", width=100)
+            cancel_btn = pn.widgets.Button.from_param(self.param.cancel_btn, button_type="success", width=100)
 
             yes_btn.visible = False
             cancel_btn.visible = False

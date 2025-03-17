@@ -16,6 +16,7 @@ from .utils import (
 )
 from .file_browser import (
     get_js_loading_code,
+    create_file_browser,
     FileBrowser,
     FileManager,
     FileManagerHPC,

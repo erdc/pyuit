@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools >= 64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyuit"
+version = "0.7.0"
+description =  "Python wrapper for DoD HPCMP UIT+ REST interface."
+
+authors = [
+    {name = "Scott Christensen", email="scott.d.christensen@erdc.dren.mil"},
+]
+
+requires-python = ">= 3.8"
+keywords = ["uit"]
+dependencies = [
+  "aiohttp",
+  "flask",
+  "PyYAML",
+  "requests",
+  "dodcerts",
+]
+readme = "README.md"
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+  "Topic :: Scientific/Engineering :: Visualization",
+]
+
+[project.optional-dependencies]
+guitools = ['panel', 'param', 'holoviews', 'pandas']
+examples = ['panel', 'param', 'holoviews', 'pandas', 'jupyterlab', 'nodejs']
+tests = ['pytest', 'flake8']
+
+[project.scripts]
+uit = "uit.cli:cli"
+
+[project.urls]
+source = "https://github.com/erdc/pyuit"
+
+[tool.setuptools.packages.find]
+include = ["uit*"]
+
+[tool.setuptools.package-data]
+uit = ["*.csv"]
+
+[tool.black]
+line-length = 120
