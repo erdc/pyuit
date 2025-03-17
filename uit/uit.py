@@ -45,12 +45,12 @@ ALL_OFF = "\033[0m"
 _auth_code = None
 _server = None
 
+
 class BatchSystem(StrEnum):
-
-    """Provides an interface to check what job system is being run."""
-
+    
     PBS = auto()
     SLURM = auto()
+
 
 SYSTEMS = {
     'carpenter': BatchSystem.PBS,
@@ -78,6 +78,7 @@ COMMANDS = {
         'delete': 'scancel',
     }
 }
+
 
 class Client(param.Parameterized):
 
