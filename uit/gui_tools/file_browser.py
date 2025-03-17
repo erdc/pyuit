@@ -286,10 +286,12 @@ class FileBrowser(Viewer):
     def go_home(self):
         self.path_text = Path.cwd().as_posix()
         self.file_listing = []
+        self.stop_loading()
 
     def move_up(self):
         self.path_text = self.path.parent.as_posix()
         self.file_listing = []
+        self.stop_loading()
 
     @param.depends("file_listing", watch=True)
     def move_down(self):
@@ -297,6 +299,7 @@ class FileBrowser(Viewer):
             filename = self.file_listing[0]
             fn = self.path / filename
             self.path_text = fn.as_posix()
+            self.stop_loading()
 
     @param.depends("path_text", "refresh_control", watch=True)
     def validate(self):
@@ -599,6 +602,7 @@ class HpcFileBrowser(FileBrowser):
     def __init__(self, uit_client, **params):
         params["uit_client"] = uit_client
         super().__init__(**params)
+        self.param.trigger("uit_client")  # for _initialize_path()
 
     @property
     def controls(self):
@@ -617,11 +621,13 @@ class HpcFileBrowser(FileBrowser):
     def go_home(self):
         self.path_text = self._new_path(self.uit_client.HOME).as_posix()
         self.file_listing = []
+        self.stop_loading()
 
     @HpcPath._ensure_connected
     def go_to_workdir(self):
         self.path_text = self._new_path(self.uit_client.WORKDIR).as_posix()
         self.file_listing = []
+        self.stop_loading()
 
 
 class AsyncHpcFileBrowser(HpcFileBrowser):
