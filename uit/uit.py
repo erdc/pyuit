@@ -46,6 +46,9 @@ _auth_code = None
 _server = None
 
 class BatchSystem(StrEnum):
+
+    """Provides an interface to check what job system is being run."""
+
     PBS = auto()
     SLURM = auto()
 
@@ -62,7 +65,7 @@ COMMANDS = {
             'username': ' -u',
             'job_id': ' -x',
         },
-        'submit': 'qsub', 
+        'submit': 'qsub',
         'delete': 'qdel',
     },
     BatchSystem.SLURM: {
@@ -77,6 +80,7 @@ COMMANDS = {
 }
 
 class Client(param.Parameterized):
+
     """Provides a python abstraction for interacting with the UIT API.
 
     Attributes:
@@ -205,7 +209,7 @@ class Client(param.Parameterized):
     def headers(self):
         if self._headers is None:
             self._headers = {"x-uit-auth-token": self.token} if self.token else None
-        return self._headers   
+        return self._headers
 
     @param.depends("token", watch=True)
     def get_token_dependent_info(self):
@@ -739,14 +743,14 @@ class Client(param.Parameterized):
         cmd = self.commands['status']['command']
 
         if self.batch_system == BatchSystem.SLURM:
-            if username: 
-                cmd += self.commands['status']['username'] 
+            if username:
+                cmd += self.commands['status']['username']
                 cmd += f' {username}'
-        else: # Assume PBS
+        else:
             if full:
                 cmd += self.commands['status']['full']
             elif username:
-                cmd += self.commands['status']['username'] 
+                cmd += self.commands['status']['username']
                 cmd += f' {username}'
 
         if job_id:
@@ -754,8 +758,8 @@ class Client(param.Parameterized):
                 job_id = " ".join([j.split(".")[0] for j in job_id])
             cmd += self.commands['status']['job_id']
             cmd += job_id
-            result = self.call(cmd) 
-            return self._process_status_result(result, parse=parse, full=full, as_df=as_df) 
+            result = self.call(cmd)
+            return self._process_status_result(result, parse=parse, full=full, as_df=as_df)
         else:
             # If no jobs are specified then
             result = self.call(cmd)
@@ -851,7 +855,7 @@ class Client(param.Parameterized):
                         max_nodes = max_tres['count']
                 output += f"\n{queue['id']}  {queue['name']}  {max_walltime}  {max_jobs}  {max_nodes}"
             return self._parse_slurm_output(output)
-            
+
         else:
             return json.loads(self.call("qstat -Q -f -F json"))["Queue"]
 
@@ -873,7 +877,7 @@ class Client(param.Parameterized):
                 if max_nodes != "-1"
                 else "Not Found"
             )
-        
+
         return ncpus_maxes
 
     def _pbs_node_maxes(self, queues, queues_stats):
@@ -904,7 +908,7 @@ class Client(param.Parameterized):
             wall_time_maxes[q] = (
                 max_walltimes
             )
-        
+
         return wall_time_maxes
 
     def _pbs_wall_time_maxes(self, queues, queues_stats):
