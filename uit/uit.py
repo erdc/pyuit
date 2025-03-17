@@ -52,36 +52,32 @@ class BatchSystem(StrEnum):
     SLURM = auto()
 
 
-SYSTEMS = {
-    'carpenter': BatchSystem.PBS,
-    'nautilus': BatchSystem.SLURM
-}
+SYSTEMS = {"carpenter": BatchSystem.PBS, "nautilus": BatchSystem.SLURM}
 
 COMMANDS = {
     BatchSystem.PBS: {
-        'status': {
-            'command': 'qstat',
-            'full': ' -f',
-            'username': ' -u',
-            'job_id': ' -x',
+        "status": {
+            "command": "qstat",
+            "full": " -f",
+            "username": " -u",
+            "job_id": " -x",
         },
-        'submit': 'qsub',
-        'delete': 'qdel',
+        "submit": "qsub",
+        "delete": "qdel",
     },
     BatchSystem.SLURM: {
-        'status': {
-            'command': 'squeue -l',
-            'username': ' -u',
-            'job_id': ' -j ',
+        "status": {
+            "command": "squeue -l",
+            "username": " -u",
+            "job_id": " -j ",
         },
-        'submit': 'sbatch',
-        'delete': 'scancel',
-    }
+        "submit": "sbatch",
+        "delete": "scancel",
+    },
 }
 
 
 class Client(param.Parameterized):
-
     """Provides a python abstraction for interacting with the UIT API.
 
     Attributes:
@@ -741,23 +737,23 @@ class Client(param.Parameterized):
         username = username if username is not None else self.username
 
         # cmd will either be "qstat" or "squeue"
-        cmd = self.commands['status']['command']
+        cmd = self.commands["status"]["command"]
 
         if self.batch_system == BatchSystem.SLURM:
             if username:
-                cmd += self.commands['status']['username']
-                cmd += f' {username}'
+                cmd += self.commands["status"]["username"]
+                cmd += f" {username}"
         else:
             if full:
-                cmd += self.commands['status']['full']
+                cmd += self.commands["status"]["full"]
             elif username:
-                cmd += self.commands['status']['username']
-                cmd += f' {username}'
+                cmd += self.commands["status"]["username"]
+                cmd += f" {username}"
 
         if job_id:
             if isinstance(job_id, (tuple, list)):
                 job_id = " ".join([j.split(".")[0] for j in job_id])
-            cmd += self.commands['status']['job_id']
+            cmd += self.commands["status"]["job_id"]
             cmd += job_id
             result = self.call(cmd)
             return self._process_status_result(result, parse=parse, full=full, as_df=as_df)
@@ -768,7 +764,7 @@ class Client(param.Parameterized):
             if not with_historic:
                 return result1
             else:
-                cmd += self.commands['status']['job_id']
+                cmd += self.commands["status"]["job_id"]
                 result = self.call(cmd)
                 result2 = self._process_status_result(result, parse=parse, full=full, as_df=as_df)
                 if self.batch_system == BatchSystem.SLURM:
@@ -847,13 +843,13 @@ class Client(param.Parameterized):
     def get_raw_queue_stats(self):
         if self.batch_system == BatchSystem.SLURM:
             output = "id name max_walltime max_jobs max_nodes"
-            for queue in json.loads(self.call('sacctmgr show qos --json'))["QOS"]:
-                max_walltime = str(queue['limits']['max']['wall_clock']['per']['job']['number'])
-                max_jobs = str(queue['limits']['max']['jobs']['active_jobs']['per']['user']['number'])
+            for queue in json.loads(self.call("sacctmgr show qos --json"))["QOS"]:
+                max_walltime = str(queue["limits"]["max"]["wall_clock"]["per"]["job"]["number"])
+                max_jobs = str(queue["limits"]["max"]["jobs"]["active_jobs"]["per"]["user"]["number"])
                 max_nodes = -1
-                for max_tres in queue['limits']['max']['tres']['per']['job']:
-                    if max_tres['type'] == "node":
-                        max_nodes = max_tres['count']
+                for max_tres in queue["limits"]["max"]["tres"]["per"]["job"]:
+                    if max_tres["type"] == "node":
+                        max_nodes = max_tres["count"]
                 output += f"\n{queue['id']}  {queue['name']}  {max_walltime}  {max_jobs}  {max_nodes}"
             return self._parse_slurm_output(output)
 
@@ -872,12 +868,8 @@ class Client(param.Parameterized):
         ncpus_maxes = dict()
 
         for q in queues:
-            max_nodes = str(queues_stats.loc[queues_stats['name'] == f'{q.lower()}', 'max_nodes'].iloc[0])
-            ncpus_maxes[q] = (
-                max_nodes
-                if max_nodes != "-1"
-                else "Not Found"
-            )
+            max_nodes = str(queues_stats.loc[queues_stats["name"] == f"{q.lower()}", "max_nodes"].iloc[0])
+            ncpus_maxes[q] = max_nodes if max_nodes != "-1" else "Not Found"
 
         return ncpus_maxes
 
@@ -905,10 +897,8 @@ class Client(param.Parameterized):
         wall_time_maxes = dict()
 
         for q in queues:
-            max_walltimes = str(queues_stats.loc[queues_stats['name'] == f'{q.lower()}', 'max_walltime'].iloc[0])
-            wall_time_maxes[q] = (
-                max_walltimes
-            )
+            max_walltimes = str(queues_stats.loc[queues_stats["name"] == f"{q.lower()}", "max_walltime"].iloc[0])
+            wall_time_maxes[q] = max_walltimes
 
         return wall_time_maxes
 
@@ -953,10 +943,8 @@ class Client(param.Parameterized):
 
         if self.batch_system == BatchSystem.SLURM:
             # Trimming the top of result so that read_tables works properly
-            result = result.split('\n', 1)[1]
-            return self._parse_slurm_output(
-                result=result
-            )
+            result = result.split("\n", 1)[1]
+            return self._parse_slurm_output(result=result)
         else:
             if full:
                 result = self._parse_full_status(result)
