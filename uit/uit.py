@@ -21,7 +21,7 @@ from flask import Flask, request, render_template_string
 from werkzeug.serving import make_server
 
 from .config import parse_config, DEFAULT_CA_FILE, DEFAULT_CONFIG
-from .pbs_script import PbsScript
+from .pbs_script import PbsScript, NODE_TYPES
 from .util import robust, HpcEnv
 from .exceptions import UITError, MaxRetriesError
 
@@ -45,17 +45,8 @@ ALL_OFF = "\033[0m"
 _auth_code = None
 _server = None
 
-
-class BatchSystem(StrEnum):
-
-    PBS = auto()
-    SLURM = auto()
-
-
-SYSTEMS = {"carpenter": BatchSystem.PBS, "nautilus": BatchSystem.SLURM}
-
 COMMANDS = {
-    BatchSystem.PBS: {
+    "pbs": {
         "status": {
             "command": "qstat",
             "full": " -f",
@@ -64,8 +55,9 @@ COMMANDS = {
         },
         "submit": "qsub",
         "delete": "qdel",
+        "list_queues": "qstat -Q",
     },
-    BatchSystem.SLURM: {
+    "slurm": {
         "status": {
             "command": "squeue -l",
             "username": " -u",
@@ -73,6 +65,7 @@ COMMANDS = {
         },
         "submit": "sbatch",
         "delete": "scancel",
+        "list_queues": "sacctmgr show qos format=Name%20",
     },
 }
 
@@ -134,7 +127,7 @@ class Client(param.Parameterized):
         self.scope = scope
         self.port = port
 
-        self.batch_system = None
+        self.scheduler = None
         self.commands = None
 
         if self.token is not None:
@@ -323,8 +316,8 @@ class Client(param.Parameterized):
         self._username = self._userinfo["SYSTEMS"][self._system.upper()]["USERNAME"]
         self._uit_url = self._uit_urls[login_node]
         self.connected = True
-        self.batch_system = SYSTEMS[self.system]
-        self.commands = COMMANDS[self.batch_system]
+        self.scheduler = NODE_TYPES[f"{self.system}"]["scheduler"]
+        self.commands = COMMANDS[self.scheduler]
 
         return login_node, retry_on_failure
 
@@ -721,7 +714,7 @@ class Client(param.Parameterized):
         if not parse:
             return result
 
-        return self._parse_hpc_output(result, as_df, batch_system=self.batch_system)
+        return self._parse_hpc_output(result, as_df, scheduler=self.scheduler)
 
     @_ensure_connected
     @robust()
@@ -739,7 +732,7 @@ class Client(param.Parameterized):
         # cmd will either be "qstat" or "squeue"
         cmd = self.commands["status"]["command"]
 
-        if self.batch_system == BatchSystem.SLURM:
+        if self.scheduler == "slurm":
             if username:
                 cmd += self.commands["status"]["username"]
                 cmd += f" {username}"
@@ -767,7 +760,7 @@ class Client(param.Parameterized):
                 cmd += self.commands["status"]["job_id"]
                 result = self.call(cmd)
                 result2 = self._process_status_result(result, parse=parse, full=full, as_df=as_df)
-                if self.batch_system == BatchSystem.SLURM:
+                if self.scheduler == "slurm":
                     return pd.concat((result1, result2))
                 elif not parse:
                     return result1, result2
@@ -827,10 +820,7 @@ class Client(param.Parameterized):
     @_ensure_connected
     def get_queues(self, update_cache=False):
         if self._queues is None or update_cache:
-            if self.batch_system == BatchSystem.SLURM:
-                self._queues = self._process_get_queues_output(self.call("sacctmgr show qos format=Name%20"))
-            else:
-                self._queues = self._process_get_queues_output(self.call("qstat -Q"))
+            self._queues = self._process_get_queues_output(self.call(self.commands["list_queues"]))
         return self._queues
 
     def _process_get_queues_output(self, output):
@@ -841,7 +831,7 @@ class Client(param.Parameterized):
 
     @_ensure_connected
     def get_raw_queue_stats(self):
-        if self.batch_system == BatchSystem.SLURM:
+        if self.scheduler == "slurm":
             output = "id name max_walltime max_jobs max_nodes"
             for queue in json.loads(self.call("sacctmgr show qos --json"))["QOS"]:
                 max_walltime = str(queue["limits"]["max"]["wall_clock"]["per"]["job"]["number"])
@@ -858,7 +848,7 @@ class Client(param.Parameterized):
 
     @_ensure_connected
     def get_node_maxes(self, queues, queues_stats):
-        if self.batch_system == BatchSystem.SLURM:
+        if self.scheduler == "slurm":
             return self._slurm_node_maxes(queues, queues_stats)
 
         else:
@@ -888,7 +878,7 @@ class Client(param.Parameterized):
 
     @_ensure_connected
     def get_wall_time_maxes(self, queues, queues_stats):
-        if self.batch_system == BatchSystem.SLURM:
+        if self.scheduler == "slurm":
             return self._slurm_wall_time_maxes(queues, queues_stats)
         else:
             return self._pbs_wall_time_maxes(queues, queues_stats)
@@ -941,8 +931,7 @@ class Client(param.Parameterized):
         if not parse:
             return result
 
-        if self.batch_system == BatchSystem.SLURM:
-            # Trimming the top of result so that read_tables works properly
+        if self.scheduler == "slurm":
             result = result.split("\n", 1)[1]
             return self._parse_slurm_output(result=result)
         else:
