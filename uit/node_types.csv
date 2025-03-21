@@ -3,3 +3,4 @@ nautilus,slurm,128,128,128,1,128,32
 narwhal,pbs,128,128,128,1
 warhawk,pbs,128,128,128,1,128
 carpenter,pbs,192,128,192,1
+raider,slurm,128,128,128,1,128,32
