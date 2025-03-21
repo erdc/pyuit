@@ -101,8 +101,8 @@ class AsyncClient(Client):
             delay_token=True,
         )
         self.env = AsyncHpcEnv(self)
-        self.scheduler = (None,)
-        self.commands = (None,)
+        self.scheduler = None
+        self.commands = None
         self._session = None
         if async_init:
             self.param.trigger("_async_init")
@@ -494,7 +494,7 @@ class AsyncClient(Client):
         if not parse:
             return result
 
-        return self._parse_hpc_output(result, as_df, scheduler=self.scheduler)
+        return self._parse_hpc_output(result, as_df)
 
     @_ensure_connected
     @robust()

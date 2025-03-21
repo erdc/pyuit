@@ -713,7 +713,7 @@ class Client(param.Parameterized):
         if not parse:
             return result
 
-        return self._parse_hpc_output(result, as_df, scheduler=self.scheduler)
+        return self._parse_hpc_output(result, as_df)
 
     @_ensure_connected
     @robust()
