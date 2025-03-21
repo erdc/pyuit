@@ -59,6 +59,7 @@ COMMANDS = {
     },
 }
 
+
 class AsyncClient(Client):
     """Provides a python abstraction for interacting with the UIT API.
 
@@ -100,8 +101,8 @@ class AsyncClient(Client):
             delay_token=True,
         )
         self.env = AsyncHpcEnv(self)
-        self.scheduler=None,
-        self.commands=None,
+        self.scheduler = (None,)
+        self.commands = (None,)
         self._session = None
         if async_init:
             self.param.trigger("_async_init")
@@ -537,9 +538,9 @@ class AsyncClient(Client):
                 cmd += self.commands["status"]["job_id"]
                 result = await self.call(cmd)
                 result2 = self._process_status_result(result, parse=parse, full=full, as_df=as_df)
-                
+
                 if self.scheduler == "slurm":
-                    return pd.concat((result1, result2))  
+                    return pd.concat((result1, result2))
                 elif not parse:
                     return result1, result2
                 elif as_df:

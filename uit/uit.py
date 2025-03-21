@@ -11,7 +11,6 @@ import uuid
 from functools import wraps
 from itertools import chain
 from pathlib import PurePosixPath, Path
-from enum import StrEnum, auto
 from io import StringIO
 from urllib.parse import urljoin, urlencode  # noqa: F401
 
@@ -316,7 +315,7 @@ class Client(param.Parameterized):
         self._username = self._userinfo["SYSTEMS"][self._system.upper()]["USERNAME"]
         self._uit_url = self._uit_urls[login_node]
         self.connected = True
-        self.scheduler = NODE_TYPES[f"{self.system}"]["scheduler"]
+        self.scheduler = NODE_TYPES[self.system]["scheduler"]
         self.commands = COMMANDS[self.scheduler]
 
         return login_node, retry_on_failure
