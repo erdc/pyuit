@@ -28,9 +28,11 @@ class PbsJob:
         home_input_files=None,
         archive_input_files=None,
         base_dir=None,
+        namespace_path=None,
         description=None,
         metadata=None,
         post_processing_script=None,
+        use_namespace=True,
     ):
         self.script = script
         self.post_processing_script = post_processing_script
@@ -52,6 +54,8 @@ class PbsJob:
         self._post_processing_job_id = None
         self._remote_workspace_id = None
         self._remote_workspace = None
+        self.use_namespace = use_namespace
+        self.namespace_path = namespace_path
 
     def __repr__(self):
         return f"<{self.__class__.__name__} name={self.name} id={self.job_id}>"
@@ -116,7 +120,10 @@ class PbsJob:
             str: Suffix
         """
         if not self._remote_workspace:
-            self._remote_workspace = PurePosixPath(self.label, f"{self.name}.{self.remote_workspace_id}")
+            if self.use_namespace:
+                self._remote_workspace = PurePosixPath(self.namespace_path, f"{self.name}.{self.remote_workspace_id}")
+            else:
+                self._remote_workspace = PurePosixPath(f"{self.name}.{self.remote_workspace_id}")
         return self._remote_workspace
 
     @property
