@@ -7,9 +7,10 @@ from bokeh.models import NumberFormatter
 import param
 import panel as pn
 
-from .file_browser import HpcFileBrowser, create_file_browser, get_js_loading_code, FileSelector
+from .file_browser import HpcFileBrowser, create_file_browser, get_js_loading_code
 from .utils import HpcBase, HpcConfigurable
 from ..uit import QUEUES
+from .file_browser import AsyncHpcPath
 from ..pbs_script import NODE_TYPES, factors, PbsScript
 from ..job import PbsJob
 
@@ -74,21 +75,51 @@ class PbsScriptInputs(HpcBase):
     wall_time_maxes = None
     node_maxes = None
 
+    base_dir = param.Selector(
+        label="Base Directory",
+        doc="Base directory that the job's working directory path will be created in.\n\n"
+        "**Note:** by default the job's working directory is: "
+        f"`<BASE_DIRECTORY>/{PbsJob.DEFAULT_JOB_LABEL}/<JOB_NAME>.<TIMESTAMP>/`",
+    )
+    use_namespace = param.Boolean(label="Use Namespace Path", default=True)
+    namespace_path = param.String(label="Namespace Path", doc="Path created within the Base Directory")
+    execution_dir = param.String(label="Execution Directory", doc="Full Directory path in which job(s) will be run.")
+
     def __init__(self, **params):
         super().__init__(**params)
-        self.workdir = FileSelector(
-            title="Base Directory",
-            show_browser=False,
-            help_text=(
-                "Base directory that the job's working directory path will be created in.\n\n"
-                "**Note:** by default the job's working directory is: "
-                f"`<BASE_DIRECTORY>/{PbsJob.DEFAULT_JOB_LABEL}/<JOB_NAME>.<TIMESTAMP>/`"
-            ),
+        options = pn.widgets.Button(icon="menu-2", align="center", margin=(15, 0, 0, 0))
+        options.on_click(self.toggle_exec_dir_widgets)
+        self.exec_dir_wg_box = pn.layout.WidgetBox(
+            self.param.base_dir, self.param.use_namespace, self.param.namespace_path, visible=False
         )
 
-    @param.depends("uit_client", watch=True)
-    def set_file_browser(self):
-        self.workdir.file_browser = create_file_browser(self.uit_client, patterns=[])
+        self.execution_dir_col = pn.Column(
+            pn.Row(pn.widgets.TextInput.from_param(self.param.execution_dir, disabled=True, width=500), options),
+            self.exec_dir_wg_box,
+        )
+
+    # @param.depends("uit_client", watch=True)
+    async def populate_base_dir_selector(self):
+        options = {}
+        if AsyncHpcPath(self.uit_client.WORKDIR, uit_client=self.uit_client).exists():
+            options["WORKDIR"] = self.uit_client.WORKDIR
+        workdir2 = await self.uit_client.env.get_environmental_variable("WORKDIR2")
+        if workdir2 and AsyncHpcPath(self.uit_client.WORKDIR2, uit_client=self.uit_client).exists():
+            options["WORKDIR2"] = self.uit_client.WORKDIR2
+        self.param.base_dir.objects = options
+        self.base_dir = options["WORKDIR"]
+
+    def default_namespace_path(self):
+        return f"{self.workflow_group}/{self.workflow_name}"
+
+    @param.depends("use_namespace", "base_dir", "namespace_path", watch=True)
+    def update_job_dir(self):
+        namespace = self.namespace_path + "/" if self.use_namespace else ""
+        self.exec_dir_wg_box[-1] = self.param.namespace_path if self.use_namespace else None
+        self.execution_dir = f"{self.base_dir}/{namespace}<JOB_NAME>.<TIMESTAMP>/"
+
+    def toggle_exec_dir_widgets(self, _):
+        self.exec_dir_wg_box.visible = not self.exec_dir_wg_box.visible
 
     @staticmethod
     def get_default(value, objects):
@@ -98,14 +129,13 @@ class PbsScriptInputs(HpcBase):
     async def update_hpc_connection_dependent_defaults(self):
         if not self.uit_client.connected:
             return
-
         queues_stats = await self.await_if_async(self.uit_client.get_raw_queue_stats())
 
         self.subproject_usage = await self.await_if_async(self.uit_client.show_usage(as_df=True))
         subprojects = self.subproject_usage["Subproject"].to_list()
         self.param.hpc_subproject.objects = subprojects
         self.hpc_subproject = self.get_default(self.hpc_subproject, subprojects)
-        self.workdir.file_path = self.uit_client.WORKDIR.as_posix()
+        await self.populate_base_dir_selector()
         self.param.node_type.objects = list(NODE_TYPES[self.uit_client.system].keys())
         self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
         self.param.queue.objects = await self.await_if_async(self.uit_client.get_queues())
@@ -119,6 +149,7 @@ class PbsScriptInputs(HpcBase):
         )
         self.max_wall_time = self.wall_time_maxes[self.queue]
         self.nodes = round(self.DEFAULT_PROCESSES_PER_JOB / self.processes_per_node)
+        self.namespace_path = self.default_namespace_path()
 
     @param.depends("queue", watch=True)
     def update_queue_depended_bounds(self):
@@ -196,6 +227,7 @@ class PbsScriptInputs(HpcBase):
         if self.notification_email:
             pbs_script.set_directive("-M", self.notification_email)
 
+    @pn.depends("namespace_path", watch=True)
     def pbs_options_view(self):
         return pn.Column(
             pn.Column(
@@ -220,8 +252,7 @@ class PbsScriptInputs(HpcBase):
             ),
             pn.Column(
                 self.param.hpc_subproject,
-                self.workdir,
-                self.param.node_type,
+                self.execution_dir_col,
                 pn.widgets.Spinner.from_param(self.param.nodes),
                 self.param.processes_per_node,
                 self.param.wall_time,
@@ -522,7 +553,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 script=self.pbs_script,
                 client=self.uit_client,
                 workspace=self.user_workspace,
-                base_dir=self.workdir.file_path,
+                base_dir=self.base_dir,
             )
         return self._job
 
