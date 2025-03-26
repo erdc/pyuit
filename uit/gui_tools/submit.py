@@ -98,7 +98,6 @@ class PbsScriptInputs(HpcBase):
             self.exec_dir_wg_box,
         )
 
-    # @param.depends("uit_client", watch=True)
     async def populate_base_dir_selector(self):
         options = {}
         if AsyncHpcPath(self.uit_client.WORKDIR, uit_client=self.uit_client).exists():
@@ -227,7 +226,6 @@ class PbsScriptInputs(HpcBase):
         if self.notification_email:
             pbs_script.set_directive("-M", self.notification_email)
 
-    @pn.depends("namespace_path", watch=True)
     def pbs_options_view(self):
         return pn.Column(
             pn.Column(
