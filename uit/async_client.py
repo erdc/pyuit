@@ -27,6 +27,7 @@ from .uit import (
     encode_pure_posix_path,
     FG_CYAN,
     ALL_OFF,
+    _auth_code,
 )
 from .util import robust, AsyncHpcEnv
 from .pbs_script import PbsScript
@@ -171,7 +172,6 @@ class AsyncClient(Client):
 
         url = urljoin(UIT_API_URL, "token")
 
-        global _auth_code
         self._auth_code = auth_code or _auth_code
 
         # check for auth_code
@@ -402,8 +402,10 @@ class AsyncClient(Client):
         # get remote dir stats
         try:
             remote_dir_stats = await self.call(f"find {remote_dir.as_posix()} -type f -printf '%Ts  %s %P\n'")
-            remote_files = {stats[-1]: {'mtime': float(stats[0]), 'size': int(stats[1])} for stats in
-                            [line.split() for line in remote_dir_stats.splitlines()]}
+            remote_files = {
+                stats[-1]: {"mtime": float(stats[0]), "size": int(stats[1])}
+                for stats in [line.split() for line in remote_dir_stats.splitlines()]
+            }
         except Exception as e:
             logger.debug(e)
             remote_files = {}
@@ -414,7 +416,7 @@ class AsyncClient(Client):
         local_dir = Path(local_dir)
         if get_dir:
             local_dir.mkdir(parents=True, exist_ok=True)
-        local_files = {p.relative_to(local_dir).as_posix(): p.stat() for p in local_dir.glob('**/*') if p.is_file()}
+        local_files = {p.relative_to(local_dir).as_posix(): p.stat() for p in local_dir.glob("**/*") if p.is_file()}
 
         # compare
         not_local = {}
@@ -424,8 +426,11 @@ class AsyncClient(Client):
             local_stats = local_files.get(name)
 
             # compare file size and mtime
-            if not (local_stats and local_stats.st_size == remote_stats['size'] and local_stats.st_mtime ==
-                    remote_stats['mtime']):
+            if not (
+                local_stats
+                and local_stats.st_size == remote_stats["size"]  # noqa W503
+                and local_stats.st_mtime == remote_stats["mtime"]  # noqa W503
+            ):
                 not_local[name] = remote_stats
             else:
                 not_remote.pop(name)
@@ -459,7 +464,7 @@ class AsyncClient(Client):
 
         async def get_file_with_stats(remote_file_path, local_file_path):
             await self.get_file(remote_file_path, local_file_path)
-            mtime = remote_files[file_name]['mtime']
+            mtime = remote_files[file_name]["mtime"]
             os.utime(local_file_path, (mtime, mtime))
 
         # transfer files that didn't match those on the hpc
