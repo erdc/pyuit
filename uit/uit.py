@@ -833,12 +833,13 @@ class Client(param.Parameterized):
         if self.scheduler == "slurm":
             output = "id name max_walltime max_jobs max_nodes"
             for queue in json.loads(self.call("sacctmgr show qos --json"))["QOS"]:
-                max_walltime = str(queue["limits"]["max"]["wall_clock"]["per"]["job"]["number"])
+                minutes = queue["limits"]["max"]["wall_clock"]["per"]["job"]["number"]
+                max_walltime = PbsScript.parse_minutes(minutes)
                 max_jobs = str(queue["limits"]["max"]["jobs"]["active_jobs"]["per"]["user"]["number"])
                 max_nodes = -1
                 for max_tres in queue["limits"]["max"]["tres"]["per"]["job"]:
                     if max_tres["type"] == "node":
-                        max_nodes = max_tres["count"]
+                        max_nodes = max_tres["count"] * int(NODE_TYPES[self.system]['compute'])
                 output += f"\n{queue['id']}  {queue['name']}  {max_walltime}  {max_jobs}  {max_nodes}"
             return self._parse_slurm_output(output)
 

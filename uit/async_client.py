@@ -253,9 +253,6 @@ class AsyncClient(Client):
         ]
         self._uit_urls = {k: v for _list in self._uit_urls for d in _list for k, v in d.items()}  # noqa: E741
 
-        self.scheduler = NODE_TYPES[self.system]["scheduler"]
-        self.commands = COMMANDS[self.scheduler]
-
     @_ensure_connected
     @robust()
     async def call(
@@ -587,7 +584,7 @@ class AsyncClient(Client):
 
         # Submit the script using call() with qsub command
         try:
-            job_id = await self.call(f"qsub {remote_name}", working_dir=working_dir)
+            job_id = await self.call(f"{self.commands['submit']} {remote_name}", working_dir=working_dir)
         except RuntimeError as e:
             raise RuntimeError("An exception occurred while submitting job script: {}".format(str(e)))
 
