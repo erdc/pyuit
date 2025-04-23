@@ -29,11 +29,35 @@ from .uit import (
     ALL_OFF,
 )
 from .util import robust, AsyncHpcEnv
-from .pbs_script import PbsScript
+from .pbs_script import PbsScript, NODE_TYPES
 from .exceptions import UITError, MaxRetriesError
 
 logger = logging.getLogger(__name__)
 _ensure_connected = Client._ensure_connected
+
+COMMANDS = {
+    "pbs": {
+        "status": {
+            "command": "qstat",
+            "full": " -f",
+            "username": " -u",
+            "job_id": " -x",
+        },
+        "submit": "qsub",
+        "delete": "qdel",
+        "list_queues": "qstat -Q",
+    },
+    "slurm": {
+        "status": {
+            "command": "squeue -l",
+            "username": " -u",
+            "job_id": " -j ",
+        },
+        "submit": "sbatch",
+        "delete": "scancel",
+        "list_queues": "sacctmgr show qos format=Name%20",
+    },
+}
 
 
 class AsyncClient(Client):
@@ -77,6 +101,8 @@ class AsyncClient(Client):
             delay_token=True,
         )
         self.env = AsyncHpcEnv(self)
+        self.scheduler = None
+        self.commands = None
         self._session = None
         if async_init:
             self.param.trigger("_async_init")
@@ -480,17 +506,23 @@ class AsyncClient(Client):
     ):
         username = username if username is not None else self.username
 
-        cmd = "qstat"
+        cmd = self.commands["status"]["command"]
 
-        if full:
-            cmd += " -f"
-        elif username:
-            cmd += f" -u {username}"
+        if self.scheduler == "slurm":
+            if username:
+                cmd += self.commands["status"]["username"]
+                cmd += f" {username}"
+        else:
+            if full:
+                cmd += self.commands["status"]["full"]
+            elif username:
+                cmd += f" {username}"
 
         if job_id:
             if isinstance(job_id, (tuple, list)):
                 job_id = " ".join([j.split(".")[0] for j in job_id])
-            cmd += f" -x {job_id}"
+            cmd += self.commands["status"]["job_id"]
+            cmd += job_id
             result = await self.call(cmd)
             return self._process_status_result(result, parse=parse, full=full, as_df=as_df)
         else:
@@ -500,11 +532,13 @@ class AsyncClient(Client):
             if not with_historic:
                 return result1
             else:
-                cmd += " -x"
+                cmd += self.commands["status"]["job_id"]
                 result = await self.call(cmd)
                 result2 = self._process_status_result(result, parse=parse, full=full, as_df=as_df)
 
-                if not parse:
+                if self.scheduler == "slurm":
+                    return pd.concat((result1, result2))
+                elif not parse:
                     return result1, result2
                 elif as_df:
                     return pd.concat((result1, result2))
@@ -550,7 +584,7 @@ class AsyncClient(Client):
 
         # Submit the script using call() with qsub command
         try:
-            job_id = await self.call(f"qsub {remote_name}", working_dir=working_dir)
+            job_id = await self.call(f"{self.commands['submit']} {remote_name}", working_dir=working_dir)
         except RuntimeError as e:
             raise RuntimeError("An exception occurred while submitting job script: {}".format(str(e)))
 
@@ -562,12 +596,25 @@ class AsyncClient(Client):
     @_ensure_connected
     async def get_queues(self, update_cache=False):
         if self._queues is None or update_cache:
-            self._queues = self._process_get_queues_output(await self.call("qstat -Q"))
+            self._queues = self._process_get_queues_output(await self.call(self.commands["list_queues"]))
         return self._queues
 
     @_ensure_connected
     async def get_raw_queue_stats(self):
-        return json.loads(await self.call("qstat -Q -f -F json"))["Queue"]
+        if self.scheduler == "slurm":
+            output = "id name max_walltime max_jobs max_nodes"
+            for queue in json.loads(await self.call("sacctmgr show qos --json"))["QOS"]:
+                max_walltime = str(queue["limits"]["max"]["wall_clock"]["per"]["job"]["number"])
+                max_jobs = str(queue["limits"]["max"]["jobs"]["active_jobs"]["per"]["user"]["number"])
+                max_nodes = -1
+                for max_tres in queue["limits"]["max"]["tres"]["per"]["job"]:
+                    if max_tres["type"] == "node":
+                        max_nodes = max_tres["count"]
+                output += f"\n{queue['id']}  {queue['name']}  {max_walltime}  {max_jobs}  {max_nodes}"
+            return self._parse_slurm_output(output)
+
+        else:
+            return json.loads(await self.call("qstat -Q -f -F json"))["Queue"]
 
     @_ensure_connected
     async def get_available_modules(self, flatten=False):

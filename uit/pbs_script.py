@@ -153,11 +153,15 @@ class PbsScript(object):
             return None
 
     @staticmethod
-    def format_time(date_time_obj):
-        hours = date_time_obj.days * 24 + date_time_obj.seconds // 3600
-        minutes = date_time_obj.seconds % 3600 // 60
-        seconds = date_time_obj.seconds % 3600 % 60
+    def format_time(time_delta_obj):
+        hours = time_delta_obj.days * 24 + time_delta_obj.seconds // 3600
+        minutes = time_delta_obj.seconds % 3600 // 60
+        seconds = time_delta_obj.seconds % 3600 % 60
         return f"{hours}:{minutes:02}:{seconds:02}"
+    
+    @staticmethod
+    def parse_minutes(minutes):
+        return PbsScript.format_time(datetime.timedelta(minutes=minutes))
 
     @property
     def max_time(self):
