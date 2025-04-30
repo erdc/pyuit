@@ -455,7 +455,7 @@ class AsyncClient(Client):
                 local_file_path = local_dir / file_name
                 local_file_path.parent.mkdir(parents=True, exist_ok=True)
                 logger.info(f"Transferring {remote_file_path} from the HPC to {local_file_path}")
-                tg.create_task(put_file_with_stats(remote_file_path, local_file_path))
+                tg.create_task(put_file_with_stats(local_file_path, remote_file_path))
 
     @_ensure_connected
     @robust()
