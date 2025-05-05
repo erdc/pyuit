@@ -429,8 +429,8 @@ class AsyncClient(Client):
             # compare file size and mtime
             if not (
                 local_stats
-                and local_stats.st_size == remote_stats["size"]  # noqa W503
-                and local_stats.st_mtime == remote_stats["mtime"]  # noqa W503
+                and local_stats.st_size == remote_stats["size"]
+                and local_stats.st_mtime == remote_stats["mtime"]
             ):
                 not_local[name] = remote_stats
             else:
