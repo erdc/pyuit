@@ -8,7 +8,7 @@ import tempfile
 import time
 import uuid
 from pathlib import PurePosixPath, Path
-from urllib.parse import urljoin, urlencode  # noqa: F401
+from urllib.parse import urljoin
 
 import param
 import aiohttp
@@ -401,9 +401,11 @@ class AsyncClient(Client):
         remote_dir = PurePosixPath(remote_dir)
         # get remote dir stats
         try:
-            remote_dir_stats = await self.call(f"find {remote_dir.as_posix()} -type f -printf '%Ts  %s %P\n'")
+            remote_dir_stats = await self.call(f"find {remote_dir.as_posix()} -type f -printf '%Ts %s %P\n'")
+            # Remote mtime is always an integer, so this ignores decimals for local and remote mtime
+            # That avoids re-transferring files with microsecond timestamp differences
             remote_files = {
-                stats[-1]: {"mtime": float(stats[0]), "size": int(stats[1])}
+                stats[-1]: {"mtime": int(stats[0]), "size": int(stats[1])}
                 for stats in [line.split() for line in remote_dir_stats.splitlines()]
             }
         except Exception as e:
@@ -413,7 +415,6 @@ class AsyncClient(Client):
                 return {}, {}, {}, {}
 
         # get local dir stats
-        local_dir = Path(local_dir)
         if get_dir:
             local_dir.mkdir(parents=True, exist_ok=True)
         local_files = {p.relative_to(local_dir).as_posix(): p.stat() for p in local_dir.glob("**/*") if p.is_file()}
@@ -441,39 +442,45 @@ class AsyncClient(Client):
     @robust()
     async def put_dir(self, local_dir, remote_dir):
         _, local_files, not_remote, __ = await self._get_dir_stats(local_dir, remote_dir)
-        # TODO ensure that remote dir exists
 
-        async def put_file_with_stats(local_file_path, remote_file_path):
+        async def put_file_with_stats(file_name):
+            remote_file_path = PurePosixPath(remote_dir) / file_name
+            local_file_path = Path(local_dir) / file_name
             await self.put_file(local_file_path, remote_file_path)
-            # mtime = local_files[file_name]['mtime']
-            # await self.call()  # TODO some command to update the mtime on the remote file
+            mtime = int(local_files[file_name].st_mtime)
+            await self.call(f"touch -d @{mtime} {remote_file_path}")
+
+        remote_dirs_to_create = set()
+        for file_name in not_remote:
+            remote_dirs_to_create.add(Path(file_name).parent)
+
+        if remote_dirs_to_create:
+            logger.info(f"Creating {len(remote_dirs_to_create)} directories before file uploads")
+            for this_remote_dir in remote_dirs_to_create:
+                await self.call(f"mkdir -p {PurePosixPath(remote_dir) / this_remote_dir}")
 
         # transfer files that didn't match those on the hpc
-        async with asyncio.TaskGroup() as tg:
-            for file_name in not_remote:
-                remote_file_path = PurePosixPath(remote_dir) / file_name
-                local_file_path = local_dir / file_name
-                local_file_path.parent.mkdir(parents=True, exist_ok=True)
-                logger.info(f"Transferring {remote_file_path} from the HPC to {local_file_path}")
-                tg.create_task(put_file_with_stats(local_file_path, remote_file_path))
+        logger.info(f"Uploading {len(not_remote)} files")
+        for file_name in not_remote:
+            await put_file_with_stats(file_name)
 
     @_ensure_connected
     @robust()
     async def get_dir(self, remote_dir, local_dir):
         remote_files, _, __, not_local = await self._get_dir_stats(local_dir, remote_dir, get_dir=True)
 
-        async def get_file_with_stats(remote_file_path, local_file_path):
+        async def get_file_with_stats(file_name):
+            remote_file_path = PurePosixPath(remote_dir) / file_name
+            local_file_path = Path(local_dir) / file_name
+            local_file_path.parent.mkdir(parents=True, exist_ok=True)
             await self.get_file(remote_file_path, local_file_path)
             mtime = remote_files[file_name]["mtime"]
             os.utime(local_file_path, (mtime, mtime))
 
         # transfer files that didn't match those on the hpc
+        logger.info(f"Downloading {len(not_local)} files")
         for file_name in not_local:
-            remote_file_path = PurePosixPath(remote_dir) / file_name
-            local_file_path = local_dir / file_name
-            local_file_path.parent.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Transferring {remote_file_path} from the HPC to {local_file_path}")
-            await get_file_with_stats(remote_file_path, local_file_path)
+            await get_file_with_stats(file_name)
 
     @_ensure_connected
     @robust()
