@@ -369,7 +369,6 @@ class Client(param.Parameterized):
 
         url = urljoin(UIT_API_URL, "token")
 
-        global _auth_code
         self._auth_code = auth_code or _auth_code
 
         # check for auth_code
