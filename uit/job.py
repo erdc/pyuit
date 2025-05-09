@@ -682,7 +682,7 @@ async def get_job_from_pbs_script(job_id, pbs_script, uit_client):
         script._array_indices = tuple(int(i) for i in re.split("[-:]", directives["J"]))
         if not job_id.endswith("[]"):
             job_id += "[]"
-    j = Job(script=script, client=uit_client, working_dir=working_dir)
+    j = Job(script=script, client=uit_client, base_dir=working_dir, use_namespace=False)
     j._remote_workspace_id = working_dir.name
     try:
         j._remote_workspace_id = ".".join(working_dir.name.split(".")[-3:])
