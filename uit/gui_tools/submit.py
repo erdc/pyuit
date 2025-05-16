@@ -427,19 +427,21 @@ class PbsScriptAdvancedInputs(HpcConfigurable):
 
 
 class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
-    submit_btn = param.Action(
-        lambda self: self.param.trigger("submit_btn"),
-        label="Submit",
-        constant=True,
-        precedence=10,
-    )
-    validate_btn = param.Action(
-        lambda self: self.param.trigger("validate_btn"),
-        label="Validate",
-        constant=True,
-        precedence=10,
-    )
-    cancel_btn = param.Action(lambda self: self.param.trigger("cancel_btn"), label="Cancel", precedence=10)
+    submit_btn = pn.widgets.Button(
+            name="Submit",
+            button_type = "success",
+            width=200,
+            )
+    cancel_btn = pn.widgets.Button(
+            name="Cancel",
+            button_type = "danger",
+            width=200,
+            )
+    validate_btn = pn.widgets.Button(
+            name="Validate",
+            button_type = "primary",
+            width=200,
+            )
     previous_btn = param.Action(lambda self: self._previous(), label="Previous", precedence=10)
     disable_validation = param.Boolean(label="Override Validation")
     validated = param.Boolean()
@@ -453,6 +455,39 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     # TODO should this be here?  (see line 324)
     user_workspace = None
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.validate_btn.on_click(self._validate)
+
+        async def run_submit(event):
+            self.disable_all_buttons()
+            self.error_messages.clear()
+
+            self.submit_btn.disabled = True
+            await self.await_if_async(self.pre_submit())
+            might_be_ready = await self.submit()
+            submit_worked = await self.did_submit_work()
+            if submit_worked:
+                self.ready = bool(might_be_ready)
+                pn.state.location.pathname = self.redirect_url()
+                pn.state.location.reload = True
+
+            else:
+                self.error_messages.append(
+                    pn.pane.Alert(
+                        "* Job failed to be created on HPC",
+                        alert_type="danger",
+                    )
+                )
+                self.ready = False
+            self.submit_btn.disabled = False
+            self.enable_all_buttons()
+
+        self.submit_btn.on_click(run_submit)
+
+    def redirect_url(self):
+        return "/"
+
     def _previous(self):
         prev_stage = self.pipeline_obj._stages[self.pipeline_obj._prev_stage][0]
         prev_stage.reset()
@@ -465,6 +500,9 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     async def pre_submit(self):
         pass
 
+    async def did_submit_work(self) -> bool:
+        return True
+
     @param.output(jobs=list)
     async def submit(self):
         if self.job:
@@ -473,36 +511,28 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                 await self.await_if_async(self.job.submit())
             return [self.job]
 
-    @param.depends("submit_btn", watch=True)
-    async def _submit(self):
-        if not self.param.submit_btn.constant:
-            self.param.submit_btn.constant = True
-            await self.await_if_async(self.pre_submit())
-            result = await self.submit()
-            self.ready = bool(result)
-            return result
-
     def validate(self):
         return True
 
-    @param.depends("validate_btn", watch=True)
-    async def _validate(self):
-        if not self.param.validate_btn.constant:
-            self.param.validate_btn.constant = True
-            await self.await_if_async(self.pre_validate())
-            is_valid = await self.await_if_async(self.validate())
-            self.validated = is_valid
-            if is_valid:
-                param.depends(
-                    self.param.job_name,
-                    self.param.environment_variables,
-                    self.param.modules_to_load,
-                    self.param.modules_to_unload,
-                    watch=True,
-                )(self.un_validate)
-            else:
-                self.param.validate_btn.constant = False
-                self.param.trigger("validated")
+    # @param.depends("validate_btn", watch=True)
+    async def _validate(self, event):
+        self.disable_all_buttons()
+
+        await self.await_if_async(self.pre_validate())
+        is_valid = await self.await_if_async(self.validate())
+        self.validated = is_valid
+        if is_valid:
+            param.depends(
+                self.param.job_name,
+                self.param.environment_variables,
+                self.param.modules_to_load,
+                self.param.modules_to_unload,
+                watch=True,
+            )(self.un_validate)
+        else:
+            self.param.trigger("validated")
+
+        self.enable_all_buttons()
 
     async def un_validate(self, *events):
         if self.validated:
@@ -545,7 +575,6 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
 
     @property
     def job(self):
-
         if self._job is None:
             self._job = PbsJob(
                 script=self.pbs_script,
@@ -558,6 +587,16 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     @property
     def execution_block(self):
         return ""
+
+    def disable_all_buttons(self):
+        self.submit_btn.disabled = True
+        self.validate_btn.disabled = True
+        self.cancel_btn.disabled = True
+
+    def enable_all_buttons(self):
+        self.submit_btn.disabled = False
+        self.validate_btn.disabled = False
+        self.cancel_btn.disabled = False
 
     @param.depends("job_name", watch=True)
     def is_submitable(self, error_messages: list = None):
@@ -576,37 +615,31 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
                     alert_type="danger",
                 )
             )
-        errors_exist = len(self.error_messages) > 0
-        self.param.submit_btn.constant = self.param.validate_btn.constant = self.param.disable_validation.constant = (
-            errors_exist
-        )
+
+        if len(self.error_messages) > 0:
+            self.submit_btn.disabled = True
+            self.validate_btn.disabled = True
+            self.param.disable_validation = True
+        else:
+            self.submit_btn.disabled = False
+            self.validate_btn.disabled = False
+            self.param.disable_validation = False
+
         self.param.trigger("disable_validation")  # get buttons to reload
 
     @param.depends("disable_validation", "validated")
-    def action_button(self):
+    def build_action_button_row(self):
+        print('action_button_row')
         if self.disable_validation or self.validated:
-            button = "submit_btn"
-            button_type = "success"
+            return pn.Row(self.submit_btn, self.cancel_btn)
         else:
-            button = "validate_btn"
-            button_type = "primary"
-
-        action_btn = pn.widgets.Button.from_param(self.param[button], button_type=button_type, width=200)
-        cancel_btn = pn.widgets.Button.from_param(self.param.cancel_btn, button_type="danger", width=200)
-
-        code = f"{get_js_loading_code('btn')} other_btn.disabled=true;"  # noqa
-        action_btn.js_on_click(args={"btn": action_btn, "other_btn": cancel_btn}, code=code)
-        cancel_btn.js_on_click(
-            args={"other_btn": action_btn, "btn": cancel_btn},
-            code=code,
-        )
-        return pn.Row(action_btn, cancel_btn)
+            return pn.Row(self.validate_btn, self.cancel_btn)
 
     def submit_view(self):
         self.is_submitable()
         return pn.Column(
             self.view(),
-            self.action_button,
+            self.build_action_button_row,
             self.error_messages,
             name="Submit",
             sizing_mode="stretch_both",

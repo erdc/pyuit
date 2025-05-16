@@ -37,6 +37,7 @@ def robust(retries=1):
                     RuntimeError,
                     requests.exceptions.ConnectionError,
                     aiohttp.client_exceptions.ServerDisconnectedError,
+                    aiohttp.client_exceptions.ClientConnectorError,
                 ) as e:
                     if isinstance(e, RuntimeError) and "DP Route error" in str(e):
                         # "DP Route error" indicates failure of SSH Tunnel client on UIT Plus server.
@@ -50,6 +51,8 @@ def robust(retries=1):
                     ) and "Server disconnected" in str(e):
                         # Requests very rarely end early with this "aborted" error.
                         error_text = "Connection aborted"
+                    elif isinstance(e, aiohttp.client_exceptions.ClientConnectionError):
+                        error_text = "Client connection error in aiohttp"
                     else:
                         # Raise other RuntimeErrors and ConnectionErrors
                         raise
