@@ -1,5 +1,7 @@
 system,compute,gpu,bigmem,transfer,mla,highclock
-nautilus,128,128,128,1,128,32
-narwhal,128,128,128,1
-warhawk,128,128,128,1,128
 carpenter,192,128,192,1
+narwhal,128,128,128,1
+nautilus,128,128,128,1,128,32
+raider,128,128,128,1,128,32
+ruth,192,128,192,1,64,32
+warhawk,128,128,128,1,128
