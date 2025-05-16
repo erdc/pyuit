@@ -1,6 +1,7 @@
 system,scheduler,compute,gpu,bigmem,transfer,mla,highclock
+carpenter,pbs,192,128,192,1,,
+narwhal,pbs,128,128,128,1,,
 nautilus,slurm,128,128,128,1,128,32
-narwhal,pbs,128,128,128,1
-warhawk,pbs,128,128,128,1,128
-carpenter,pbs,192,128,192,1
 raider,slurm,128,128,128,1,128,32
+ruth,pbs,192,128,192,1,64,32
+warhawk,pbs,128,128,128,1,128
