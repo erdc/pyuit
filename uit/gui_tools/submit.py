@@ -121,8 +121,13 @@ class PbsScriptInputs(HpcBase):
         self.exec_dir_wg_box.visible = not self.exec_dir_wg_box.visible
 
     @staticmethod
-    def get_default(value, objects):
-        return value if value in objects else objects[0]
+    def get_default(value, objects, default=None):
+        """Verify that value exists in the objects list, otherwise return a default or the first item in the list"""
+        if value in objects:
+            return value
+        if default in objects:
+            return default
+        return objects[0]
 
     @param.depends("uit_client", watch=True)
     async def update_hpc_connection_dependent_defaults(self):
@@ -136,7 +141,7 @@ class PbsScriptInputs(HpcBase):
         self.hpc_subproject = self.get_default(self.hpc_subproject, subprojects)
         await self.populate_base_dir_selector()
         self.param.node_type.objects = list(NODE_TYPES[self.uit_client.system].keys())
-        self.node_type = self.get_default(self.node_type, self.param.node_type.objects)
+        self.node_type = self.get_default(self.node_type, self.param.node_type.objects, default="compute")
         self.param.queue.objects = await self.await_if_async(self.uit_client.get_queues())
         self.queue = self.get_default(self.queue, self.param.queue.objects)
         self.node_maxes = await self.await_if_async(
