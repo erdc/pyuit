@@ -267,7 +267,7 @@ class AsyncClient(Client):
                 data=data,
                 timeout=timeout,
             )
-        except asyncio.exceptions.TimeoutError as e:
+        except asyncio.exceptions.TimeoutError:
             if raise_on_error:
                 raise UITError("Request Timeout")
             else:
