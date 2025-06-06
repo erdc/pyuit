@@ -19,6 +19,10 @@ from ..job import PbsJob
 logger = logging.getLogger(__name__)
 
 
+class CustomTextInput(pn.widgets.TextInput):
+    value_input = param.String(doc="Heyo i'm a testin")
+
+
 class PbsScriptInputs(HpcBase):
     hpc_subproject = param.Selector(
         default=None,
@@ -457,11 +461,24 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     # TODO should this be here?  (see line 324)
     user_workspace = None
 
+    job_name_input = CustomTextInput(name='job_name_2')
+    job_name_text_input = pn.widgets.TextInput(value="", placeholder="input 2")
+
+    @pn.depends(job_name_input.param.value_input, watch=True)
+    async def update_job_name_text_input(self, event):
+        print(f"new job text_input: {event.new}")
+        if self.job_name != event.new:
+            self.validated = False
+            self.job_name = event.new
+            await self.un_validate()
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.validate_btn.on_click(self._validate)
         self.submit_btn.on_click(self.run_submit)
         self.submit_btn.visible = False
+
+        self.job_name_text_input.param.watch(self.update_job_name_text_input, 'value_input')
 
     def redirect_url(self) -> str:
         return "/"
@@ -643,6 +660,7 @@ class HpcSubmit(PbsScriptInputs, PbsScriptAdvancedInputs):
     def submit_view(self):
         self.is_submitable()
         return pn.Column(
+            self.job_name_text_input,
             self.view(),
             pn.Row(self.submit_btn, self.validate_btn, self.cancel_btn, self.loading_widget),
             self.error_messages,
