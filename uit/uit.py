@@ -297,6 +297,7 @@ class Client(param.Parameterized):
         exclude_login_nodes=(),
         retry_on_failure=None,
         num_retries=3,
+        timeout=70,
     ):
         """Connect this client to the UIT servers.
 
@@ -310,12 +311,13 @@ class Client(param.Parameterized):
                 False will only attempt one connection.
                 Default of None will automatically pick False if login_node is set, otherwise it will pick True.
             num_retries (int): Number of connection attempts. Requires retry_on_failure=True
+            timeout (int): Number of seconds to wait for the call() to the HPC
         """
         login_node, retry_on_failure = self.prepare_connect(system, login_node, exclude_login_nodes, retry_on_failure)
 
         try:
             # working_dir='.' ends up being the location for UIT+ scripts, not the user's home directory
-            self.call(":", working_dir=".", timeout=35)
+            self.call(":", working_dir=".", timeout=timeout)
         except UITError as e:
             self.connected = False
             msg = f"Error while connecting to node {login_node}: {e}"
@@ -332,6 +334,7 @@ class Client(param.Parameterized):
                     exclude_login_nodes=exclude_login_nodes,
                     retry_on_failure=retry_on_failure,
                     num_retries=num_retries,
+                    timeout=timeout,
                 )
             else:
                 raise MaxRetriesError(msg)
