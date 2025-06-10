@@ -1027,14 +1027,13 @@ class Client(param.Parameterized):
             if not isinstance(debug_stacktrace_allowlist, list):
                 debug_stacktrace_allowlist = []
         else:
-            debug_stacktrace_allowlist = ["uit"]
-        # This only shows the 'uit' directory by default. To change which directories are shown in the stacktrace,
+            debug_stacktrace_allowlist = []
+        # This is disabled by default. To enable the stacktrace and select which directories are shown,
         # modify the PyUIT yaml config file (default location is ~/.uit) with a list like this:
         # debug_stacktrace_allowlist:
         #   - uit
         #   - your_codebase_dir
 
-        # To disable the stacktrace, put "debug_stacktrace_allowlist:" in the config file with no list below it
         nice_trace = ""
         if debug_stacktrace_allowlist:
             stacktrace = traceback.extract_stack()
